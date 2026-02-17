@@ -1,0 +1,12 @@
+{
+  "manifest_version": 1,
+  "board": "dev_board_v1",
+  "version": "1.0",
+  "description": "Dev board — ESP32-WROOM",
+  "gpio_outputs": [
+    {"id": "relay_1", "gpio": 2, "active_high": true, "label": "Реле 1"}
+  ],
+  "onewire_buses": [
+    {"id": "ow_1", "gpio": 4, "label": "OneWire шина 1"}
+  ]
+}

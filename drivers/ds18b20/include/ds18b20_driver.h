@@ -1,0 +1,83 @@
+/**
+ * @file ds18b20_driver.h
+ * @brief DS18B20 temperature sensor driver implementing ISensorDriver
+ *
+ * Implementation:
+ *   - OneWire protocol via GPIO (bit-bang with critical sections)
+ *   - CRC8 scratchpad validation
+ *   - Retry (3 attempts with delay) on read
+ *   - Validation: range -55..+125C, rate of change < 1C/sec
+ *   - After 5 consecutive errors — is_healthy() returns false
+ *
+ * Lifecycle:
+ *   1. DriverManager calls configure() with role, GPIO, interval
+ *   2. DriverManager calls init()
+ *   3. Main loop calls update(dt_ms) every cycle
+ *   4. Business module calls read(value) to get latest temperature
+ */
+
+#pragma once
+
+#include "modesp/hal/driver_interfaces.h"
+#include "driver/gpio.h"
+#include "etl/string.h"
+
+class DS18B20Driver : public modesp::ISensorDriver {
+public:
+    DS18B20Driver() = default;
+
+    /// Configure before init (called by DriverManager)
+    void configure(const char* role, gpio_num_t gpio, uint32_t read_interval_ms = 1000);
+
+    // ── ISensorDriver interface ──
+    bool init() override;
+    void update(uint32_t dt_ms) override;
+    bool read(float& value) override;
+    bool is_healthy() const override;
+    const char* role() const override { return role_.c_str(); }
+    const char* type() const override { return "ds18b20"; }
+    uint32_t error_count() const override { return consecutive_errors_; }
+
+private:
+    // ── OneWire low-level ──
+    bool     onewire_reset();
+    void     onewire_write_byte(uint8_t data);
+    uint8_t  onewire_read_byte();
+    void     onewire_write_bit(uint8_t bit);
+    uint8_t  onewire_read_bit();
+
+    // ── DS18B20 commands ──
+    bool     start_conversion();
+    bool     read_scratchpad(uint8_t* buf, size_t len);
+    bool     read_temperature(float& temp_out);
+
+    // ── CRC8 (Dallas/Maxim) ──
+    static uint8_t crc8(const uint8_t* data, size_t len);
+
+    // ── Retry pattern ──
+    template<typename F>
+    bool retry(F operation, uint8_t max_attempts = 3, uint32_t delay_ms = 50);
+
+    // ── Validation ──
+    bool validate_reading(float value);
+
+    // ── State ──
+    etl::string<16> role_;
+    gpio_num_t gpio_              = GPIO_NUM_NC;
+    uint32_t read_interval_ms_    = 1000;
+    float    current_temp_        = 0.0f;
+    float    last_valid_temp_     = 0.0f;
+    bool     has_valid_reading_   = false;
+    uint32_t ms_since_read_       = 0;
+    uint32_t uptime_ms_           = 0;
+    uint32_t last_valid_reading_ms_ = 0;
+    uint8_t  consecutive_errors_  = 0;
+    bool     conversion_started_  = false;
+    bool     configured_          = false;
+
+    // Validation limits
+    static constexpr float MIN_VALID_TEMP  = -55.0f;
+    static constexpr float MAX_VALID_TEMP  = 125.0f;
+    static constexpr float MAX_RATE_PER_SEC = 1.0f;
+    static constexpr uint8_t MAX_CONSECUTIVE_ERRORS = 5;
+};

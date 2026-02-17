@@ -1,0 +1,309 @@
+# ModESP v4 — Дорожня карта розвитку
+
+> Останнє оновлення: 2026-02-17
+> Версія прошивки: 4.0.0
+> Платформа: ESP32-WROOM-32, ESP-IDF v5.5, C++17 + ETL
+
+---
+
+## Загальне бачення
+
+ModESP v4 — модульна платформа для промислових ESP32-контролерів
+холодильного обладнання. Замінює дорогі контролери Danfoss/Dixell
+дешевим ESP32 з професійною архітектурою, автогенерованим WebUI
+та стандартними протоколами (MQTT, Modbus).
+
+**Цільова аудиторія:** OEM виробники (UBC Group, Modern Expo),
+сервісні інженери, інтегратори холодильного обладнання.
+
+---
+
+## ✅ Завершені фази
+
+### Phase 1 — Ядро (завершено)
+- ModuleManager з пріоритетами та lifecycle
+- SharedState (thread-safe, zero-heap, etl::unordered_map<64>)
+- EventBus (etl::message_bus<24>, pub/sub)
+- Базові типи (StateKey<24>, StateValue variant)
+- App singleton з main loop
+
+### Phase 2 — Системні сервіси (завершено)
+- ErrorService — збір помилок, Safe Mode
+- WatchdogService — heartbeat модулів, auto-restart
+- LoggerService — ring buffer, рівні логування
+- SystemMonitor — RAM, uptime, boot reason
+- ConfigService — board.json + bindings.json з LittleFS
+- NVS Helper — persist критичних налаштувань
+
+### Phase 3 — HAL + Драйвери (завершено)
+- HAL абстракція GPIO
+- DriverManager — створення драйверів з bindings.json
+- DS18B20 драйвер (OneWire, retry, validation, CRC)
+- Relay драйвер (min on/off time protection)
+
+### Phase 4 — Thermostat модуль (завершено)
+- On/Off регулювання з гістерезисом
+- bind_drivers() — зв'язок з сенсорами та актуаторами
+- Публікація стану через SharedState
+
+### Phase 5a — WiFi + HTTP + WebSocket (завершено)
+- WiFiService — AP mode (ModESP-XXXX), credentials в NVS
+- HttpService — REST API (11 endpoints), LittleFS static files
+- WsService — real-time state broadcast, heartbeat PING/PONG
+- Повний API: /api/state, /api/ui, /api/settings, /api/modules...
+
+### Phase 5b — UI Generation Pipeline (завершено)
+- Manifest-driven architecture (module manifest.json → all artifacts)
+- Python генератор generate_ui.py (820 рядків, рефакторинг з 1216)
+- Артефакти: ui.json, index.html, state_meta.h, mqtt_topics.h, display_screens.h
+- Self-contained WebUI (22KB inline HTML/CSS/JS)
+- Auto-generated UI з widget types: gauge, slider, toggle, indicator...
+
+---
+
+## ✅ Phase 5c — Quality & Documentation (завершено)
+**Мета:** Стабілізація, тести, документація перед новими фічами.
+
+- [x] Bugfix: WsService double-init warning
+- [x] Рефакторинг: JS/CSS з Python strings → template файли
+- [x] Оновити next_prompt.md до актуального стану
+- [x] Доповнити manifest spec (Module + Bindings секції)
+- [x] manifest_version поле в усіх маніфестах
+- [x] Pytest suite для генератора (56 тестів, всі зелені)
+- [x] Рефакторинг generate_ui.py для testability
+
+**Результат:** `pytest tools/tests/ -v` — 56 passed (0.29s).
+Manifest spec покриває Board, Driver, Module, Bindings + Validation Summary.
+
+---
+
+## ✅ Phase 6 — MQTT + OTA (завершено)
+**Мета:** Віддалене управління та оновлення прошивки.
+
+- [x] MqttService (528 рядків): NVS config, esp_mqtt_client, LWT, publish/subscribe
+- [x] MQTT TLS: підключення до HiveMQ Cloud (mqtts://:8883, CA bundle)
+- [x] MQTT HTTP API: GET/POST /api/mqtt з CORS
+- [x] MQTT WebUI: сторінка конфігурації (статус + форма налаштувань)
+- [x] mqtt_topics.h + state_meta.h генеруються з маніфестів
+- [x] OTA upload: POST /api/ota (chunked 1KB), CRC validation
+- [x] OTA rollback: esp_ota_mark_app_valid на першому boot
+- [x] OTA WebUI: firmware_upload widget з progress bar
+- [x] Dual-partition: factory 1.5MB + ota_0 1.5MB
+- [x] SNTP: часовий пояс EET-2EEST (Україна)
+
+**Не реалізовано (перенесено):**
+- [ ] MQTT auto-discovery (Home Assistant)
+
+---
+
+## ✅ Phase 6.5 — Auto-persist settings (завершено)
+**Мета:** Автоматичне збереження налаштувань в NVS.
+
+**Auto-persist — РЕАЛІЗОВАНО:**
+- [x] PersistService: boot restore всіх persist:true ключів з NVS → SharedState
+- [x] SharedState.set() → persist callback ПОЗА mutex → dirty flag → debounce 5s → NVS flush
+- [x] state_meta.h: persist + default_val поля (генеруються з manifest)
+- [x] POST /api/settings: валідація через state_meta (writable check, min/max clamp)
+- [x] Модулі НЕ працюють з NVS напряму — thermostat читає з SharedState
+- [x] NVS key strategy: "p0", "p1", ... (індекс в STATE_META, max 15 chars safe)
+
+**DataLogger module (окремий модуль, перенесено на Phase 9+):**
+- [ ] Підписується через inputs на потрібні ключі
+- [ ] Записує з інтервалом в circular buffer на LittleFS
+- [ ] GET /api/log — віддає дані для графіків
+- [ ] Manifest-driven: що логувати описано в inputs модуля
+
+## 📋 Заплановані фази
+
+### Phase 7 — Svelte WebUI
+**Мета:** Професійний веб-інтерфейс замість inline HTML.
+**Пріоритет:** ВИСОКИЙ — UX критичний для комерціалізації.
+
+Повна переробка фронтенду з Vanilla JS на Svelte framework.
+Натхнення: IoTManager v4 (tile-based dashboard).
+
+- [ ] Створити Svelte проект в webui/
+- [ ] WebSocket store (reactive state management)
+- [ ] Tile-based dashboard layout (responsive CSS grid)
+- [ ] Компоненти віджетів:
+  - [ ] GaugeTile — температура з кольоровим індикатором
+  - [ ] SliderTile — уставка з повзунком (readwrite float)
+  - [ ] ToggleTile — on/off з перемикачем (readwrite bool)
+  - [ ] ChartTile — графік температури (Chart.js)
+  - [ ] StatusTile — текстовий статус (readonly string)
+  - [ ] IndicatorTile — LED-індикатор (readonly bool)
+  - [ ] NumberInputTile — числове введення з кнопками +/-
+- [ ] Кольори за рівнем (як IoTManager: синій→зелений→жовтий→червоний)
+- [ ] Іконки для типів даних (thermometer, water, power, timer...)
+- [ ] System pages: WiFi settings, Module status, About
+- [ ] Dark/Light theme
+- [ ] Build pipeline: npm build → gzip → data/www/build/
+- [ ] CMake інтеграція (auto-build Svelte перед idf.py build)
+- [ ] generate_ui.py спрощується: генерує ТІЛЬКИ ui.json
+
+**Структура:**
+```
+webui/
+├── src/
+│   ├── App.svelte
+│   ├── components/          # Tile widgets
+│   ├── stores/state.js      # WebSocket → Svelte store
+│   └── lib/websocket.js     # Auto-reconnect WS client
+├── package.json
+└── rollup.config.js
+```
+
+**Розмір bundle:** ~50-70KB gzipped (384KB partition = достатньо)
+**Залежності:** Phase 5c
+**Оцінка:** 4-5 сесій
+
+### Phase 8 — LCD/OLED Display
+**Мета:** Локальний інтерфейс без WiFi для сервісних інженерів.
+**Пріоритет:** СЕРЕДНІЙ — потрібний для standalone контролерів.
+
+- [ ] Display Service (абстракція SSD1306/SH1106/ST7920)
+- [ ] display_screens.h вже генерується — підключити до рендеру
+- [ ] Навігація: кнопки або енкодер
+- [ ] Екрани: Dashboard, Settings, Alarms, System Info
+- [ ] Menu builder з manifest display section
+
+**Залежності:** Phase 5c (display_screens.h)
+**Оцінка:** 3-4 сесії
+
+### Phase 9 — Alarm + Defrost модулі
+**Мета:** Промислова функціональність для холодильного обладнання.
+**Пріоритет:** ВИСОКИЙ для комерціалізації.
+
+**Архітектурні рішення (прийняті 2026-02-17):**
+- **Mutual exclusion:** модулі блокують один одного через inputs (SharedState ключі),
+  НЕ через блокування relay на рівні HAL. Defrost і thermostat — взаємовиключні:
+  `defrost.active=true` → thermostat не вмикає компресор (сам перевіряє через inputs).
+- **Timers:** кожен модуль керує своїми таймерами (millis + state machine в on_update()),
+  загальний timer service НЕ потрібний. Defrost = state machine з переходами
+  (idle→pre-drip→heating→post-drip→fan-delay→recovery).
+- **Auto-persist:** settings з `persist:true` зберігаються автоматично на рівні
+  фреймворку (SharedState/ConfigService → NVS). Модулі не працюють з NVS напряму.
+
+**Модулі:**
+- [ ] Alarm Module — high/low temperature alerts, sensor failure detection
+- [ ] Defrost Module — таймерна/адаптивна розморозка (state machine)
+- [ ] Door Module — контакт дверей, delay alarm
+- [ ] Fan Module — керування вентиляторами випарника
+- [ ] Notification: buzzer output, MQTT alert, WebUI popup
+
+**Prerequisite:** Auto-persist settings (Phase 6.5)
+
+**Залежності:** Phase 6 (MQTT для сповіщень), Phase 4 (thermostat)
+**Оцінка:** 3-4 сесії
+
+### Phase 10 — Multi-sensor + PID
+**Мета:** Підтримка складних конфігурацій обладнання.
+**Пріоритет:** СЕРЕДНІЙ.
+
+- [ ] Кілька DS18B20 на одній шині (address-based binding)
+- [ ] NTC сенсор (аналоговий, через ADC)
+- [ ] PID регулювання (замість on/off гістерезису)
+- [ ] Pressure sensor підтримка
+- [ ] Модуль Evaporator (fan + defrost + sensor group)
+
+**Залежності:** Phase 3 (HAL), Phase 9 (defrost)
+**Оцінка:** 3-4 сесії
+
+### Phase 11 — NTP + mDNS + Cloud
+**Мета:** Повноцінна мережева інтеграція.
+**Пріоритет:** СЕРЕДНІЙ.
+
+Вже реалізовано:
+- ✅ WiFi Station mode (підключення до роутера, credentials з NVS)
+- ✅ AP fallback якщо Station не вдалося
+- ✅ WiFi scan через /api/wifi/scan
+- ✅ SNTP (NTP) працює — TZ=EET-2EEST (Україна), синхронізація часу при boot
+
+Залишилось:
+- [ ] mDNS (modesp-xxxx.local)
+- [ ] Cloud connector (опціонально: MQTT broker → dashboard)
+
+**Залежності:** Phase 5a (WiFi AP), Phase 6 (MQTT)
+**Оцінка:** 2-3 сесії
+
+### Phase 12 — Modbus + Industrial Protocols
+**Мета:** Інтеграція з промисловими системами (BMS, SCADA).
+**Пріоритет:** НИЗЬКИЙ (для великих інсталяцій).
+
+- [ ] Modbus RTU (RS485) — slave mode
+- [ ] Modbus TCP — slave mode
+- [ ] Register map з manifest (auto-generated)
+- [ ] Integration з Danfoss AK-SM 800, Carel pCO
+
+**Залежності:** Phase 10 (multi-sensor)
+**Оцінка:** 3-4 сесії
+
+---
+
+## 🗓️ Візуальна дорожня карта
+
+```
+2026 Q1                    Q2                      Q3                  Q4
+──────────────────────────────────────────────────────────────────────────
+ ✅ Phase 1-5c             ✅ Phase 6     📋 Phase 7
+ (ядро, HAL, WiFi STA/AP,   MQTT + OTA     Svelte WebUI
+  HTTP, WebSocket,         ✅ Phase 6.5
+  UI Generation,            Auto-persist   📋 Phase 9     📋 Phase 8
+  tests, docs)                              Alarm/Defrost   LCD/OLED
+                                          
+                                            📋 Phase 10
+                                             Multi-sensor, PID
+──────────────────────────────────────────────────────────────────────────
+                                            2027 Q1
+                                            📋 Phase 11-12
+                                             NTP/mDNS, Modbus
+```
+
+---
+
+## 🎯 Milestones
+
+### M1: "Лабораторний прототип" ✅ ДОСЯГНУТО
+**Phases 1-5c завершені.**
+ESP32 з DS18B20 + реле, WiFi STA/AP, WebUI, REST API, WebSocket.
+56 тестів генератора зелені. Manifest standard задокументований.
+
+### M2: "Connected Controller" (Phase 6) ✅ ДОСЯГНУТО
+Стабільна прошивка з MQTT, OTA оновленням.
+Можна розгорнути на реальному обладнанні з віддаленим моніторингом.
+
+### M3: "Production Ready" (Phase 7 + 9)
+Професійний WebUI (Svelte tiles), alarm/defrost модулі.
+Готовий для демонстрації OEM виробникам (UBC, Modern Expo).
+
+### M4: "Industrial Grade" (Phase 10 + 11 + 12)
+Multi-sensor, PID, Modbus, Cloud.
+Повноцінна заміна Danfoss ERC/AK контролерів.
+
+---
+
+## 📝 Принципи розвитку
+
+1. **Manifest-first** — нова функціональність починається з manifest schema
+2. **Zero heap в hot path** — ETL замість STL, constexpr де можливо
+3. **Генератор як bridge** — Python зв'язує manifest з C++ та Web
+4. **Документація = частина продукту** — CLAUDE.md та docs/ оновлюються з кодом
+5. **Тести перед фічами** — Phase 5c (тести) перед Phase 6 (MQTT)
+
+---
+
+## Changelog
+- v7.0 (2026-02-17) — Phase 6.5 DONE: PersistService, SharedState persist callback, state_meta validation.
+  Auto-persist = framework-level NVS. DataLogger перенесено на Phase 9+.
+- v6.0 (2026-02-17) — MQTT TLS + SNTP підтверджені boot log. Phase 6.5 додано (auto-persist + DataLogger).
+  Архітектурні рішення: mutual exclusion через inputs, timers per-module, auto-persist framework-level.
+  Phase 9 оновлено: prerequisites, architectural decisions.
+- v5.0 (2026-02-17) — Phase 6 DONE. MQTT повністю реалізований (528 рядків C++), OTA працює.
+  MQTT WebUI page додана. Milestone M2 ДОСЯГНУТО. Наступний: Phase 7 (Svelte WebUI).
+- v4.0 (2026-02-17) — Синхронізовано з реальністю (boot log підтвердження).
+  WiFi STA, OTA partition, MQTT каркас позначені як частково реалізовані.
+  Phase 5c DONE. Milestone M1 ДОСЯГНУТО.
+- v3.0 (2026-02-16) — Повне перезаписування. Актуальний стан Phase 1-5b.
+  Додано Svelte WebUI (Phase 7), milestones, візуальну карту.
+- v2.0 — Phase 5a-5b додані
+- v1.0 — Початковий план (Phase 1-5)
