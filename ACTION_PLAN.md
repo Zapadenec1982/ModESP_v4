@@ -12,18 +12,22 @@
 **Phase 5c: "Стабілізація" — ЗАВЕРШЕНА.**
 **Phase 6: "MQTT + OTA" — ЗАВЕРШЕНА (MQTT повністю реалізований, OTA працює, WebUI сторінки додані).**
 
+**Phase 6.5: "Auto-persist settings" — ЗАВЕРШЕНА.**
+
 ### Що РЕАЛЬНО працює (підтверджено boot log 2026-02-17):
-- ✅ Ядро: 10 модулів, трифазний boot за 1.1с
+- ✅ Ядро: 11 модулів, трифазний boot за 1.2с
 - ✅ HAL + Drivers: DS18B20 (GPIO4), Relay (GPIO2), bindings з board.json
-- ✅ Thermostat: setpoint=-18°C, hysteresis=1.5°C, компресор перемикається (temp=20.2°C)
+- ✅ Thermostat: setpoint=-19.5°C (з NVS!), hysteresis=1.5°C, компресор перемикається
 - ✅ WiFi STA: підключення до роутера ASUS (192.168.1.32), AP як fallback
 - ✅ HTTP: 12 endpoints + OTA upload + static file handler (/* → /data/www/)
 - ✅ WebSocket: /ws real-time broadcast
 - ✅ **MQTT TLS: підключення до HiveMQ Cloud (mqtts://:8883), cert validated, subscribe cmd topics**
 - ✅ **SNTP: працює (TZ=EET-2EEST, український часовий пояс)**
+- ✅ **PersistService: auto-restore з NVS при boot, auto-save з debounce 5sec**
+- ✅ **POST /api/settings: валідація через state_meta (accepted/rejected)**
 - ✅ OTA partition: factory(1.5MB) + ota_0(1.5MB) розведені, rollback
 - ✅ LittleFS: board.json, bindings.json, ui.json, www/ — все монтується
-- ✅ Free heap після init: 177KB (з 240KB) — комфортно
+- ✅ Free heap після init: 176KB (з 240KB) — комфортно
 - ✅ 79 pytest тестів для генератора (всі зелені, включаючи inputs validation + persist)
 - ✅ HTMLGenerator видалений — WebUI статичний (data/www/), generate_ui.py: ~900 рядків, 4 артефакти
 - ✅ Driver manifests: ds18b20 (sensor) + relay (actuator) з валідацією
