@@ -918,24 +918,28 @@ class StateMetaGenerator:
             "",
         ]
 
-        # Only include readwrite keys (read-only don't need validation)
-        rw_entries = []
+        # Include readwrite keys + read-only keys with persist=true
+        # (readonly persist keys like defrost.interval_timer need NVS save/restore)
+        meta_entries = []
         for m in manifests:
             for key, info in m.get("state", {}).items():
-                if info.get("access") == "readwrite":
-                    rw_entries.append((key, info))
+                is_rw = info.get("access") == "readwrite"
+                is_persist = info.get("persist", False)
+                if is_rw or is_persist:
+                    meta_entries.append((key, info))
 
         lines.append("static constexpr StateMeta STATE_META[] = {")
-        if rw_entries:
-            for key, info in rw_entries:
+        if meta_entries:
+            for key, info in meta_entries:
                 stype = info.get("type", "float")
+                writable = "true" if info.get("access") == "readwrite" else "false"
                 persist = "true" if info.get("persist", False) else "false"
                 min_v = float(info.get("min", 0.0))
                 max_v = float(info.get("max", 0.0))
                 step_v = float(info.get("step", 1.0))
                 default_v = float(info.get("default", 0.0))
                 lines.append(
-                    f'    {{"{key}", "{stype}", true, {persist}, '
+                    f'    {{"{key}", "{stype}", {writable}, {persist}, '
                     f'{min_v}f, {max_v}f, {step_v}f, {default_v}f}},')
         else:
             # Empty array fallback — avoid zero-size array in C++
@@ -943,7 +947,7 @@ class StateMetaGenerator:
         lines.append("};")
         lines.append(
             f"static constexpr size_t STATE_META_COUNT = "
-            f"{max(len(rw_entries), 1) if not rw_entries else len(rw_entries)};")
+            f"{max(len(meta_entries), 1) if not meta_entries else len(meta_entries)};")
         lines.append("")
 
         # Lookup helper

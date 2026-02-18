@@ -16,6 +16,10 @@
 
 static const char* TAG = "Persist";
 
+// Compile-time перевірка: dirty_ масив повинен покривати всі STATE_META записи
+static_assert(gen::STATE_META_COUNT <= 48,
+    "STATE_META_COUNT перевищує MAX_PERSIST_KEYS! Збільшіть MAX_PERSIST_KEYS в persist_service.h");
+
 namespace modesp {
 
 PersistService::PersistService()
@@ -100,7 +104,7 @@ void PersistService::on_state_changed(const StateKey& key, const StateValue& val
     (void)value;
 
     // Шукаємо ключ в STATE_META з persist==true
-    for (size_t i = 0; i < gen::STATE_META_COUNT && i < MAX_PERSIST_KEYS; i++) {
+    for (size_t i = 0; i < gen::STATE_META_COUNT; i++) {
         const auto& meta = gen::STATE_META[i];
         if (!meta.persist) continue;
 
@@ -116,7 +120,7 @@ void PersistService::on_state_changed(const StateKey& key, const StateValue& val
 void PersistService::on_update(uint32_t dt_ms) {
     // Перевіряємо чи є dirty keys
     bool has_dirty = false;
-    for (size_t i = 0; i < gen::STATE_META_COUNT && i < MAX_PERSIST_KEYS; i++) {
+    for (size_t i = 0; i < gen::STATE_META_COUNT; i++) {
         if (dirty_[i]) {
             has_dirty = true;
             break;
@@ -137,7 +141,7 @@ void PersistService::flush_to_nvs() {
 
     int saved = 0;
 
-    for (size_t i = 0; i < gen::STATE_META_COUNT && i < MAX_PERSIST_KEYS; i++) {
+    for (size_t i = 0; i < gen::STATE_META_COUNT; i++) {
         if (!dirty_[i]) continue;
         dirty_[i] = false;
 

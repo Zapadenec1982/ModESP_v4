@@ -23,7 +23,7 @@
 namespace modesp {
 
 #ifndef MODESP_MAX_STATE_ENTRIES
-#define MODESP_MAX_STATE_ENTRIES 64
+#define MODESP_MAX_STATE_ENTRIES 96  // 69 module keys + system keys + запас
 #endif
 
 class SharedState {
