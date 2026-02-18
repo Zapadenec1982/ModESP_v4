@@ -93,7 +93,7 @@ board.json + bindings.json ─┘
 ### Zero Heap в Hot Path
 - НІКОЛИ: std::string, std::vector, new, malloc в on_update() / on_message()
 - ЗАВЖДИ: etl::string<N>, etl::vector<T,N>, etl::variant, etl::optional
-- SharedState: etl::unordered_map<StateKey, StateValue, 64>
+- SharedState: etl::unordered_map<StateKey, StateValue, 96>
 - StateKey = etl::string<24>, StateValue = etl::variant<int32_t, float, bool, etl::string<32>>
 
 ### ESP-IDF стиль
@@ -259,6 +259,9 @@ ModESP_v4/
 | `next_prompt.md` | Промпт для наступної сесії | В кінці поточної сесії |
 
 ## Changelog
+- 2026-02-18 — Fix defrost integration: project.json (додано defrost), generate_ui.py (readonly persist keys
+  включені в state_meta.h), MAX_PERSIST_KEYS 16→48, MODESP_MAX_STATE_ENTRIES 64→96 (69 module + system keys).
+  static_assert для STATE_META_COUNT. 33 entries in state_meta, 31 persist keys, 69 state keys total.
 - 2026-02-18 — Phase 9.4 DONE: Defrost module (modules/defrost/). 3 типи відтайки (natural/heater/hot-gas),
   7-фазна state machine (STABILIZE→VALVE_OPEN→ACTIVE→EQUALIZE→DRIP→FAD), 4 способи ініціації,
   demand defrost, consecutive timeouts, persist лічильник. 13 persist параметрів, 24 state keys.
