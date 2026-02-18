@@ -63,7 +63,21 @@ board.json + bindings.json ─┘
 - **Manual reset:** `protection.reset_alarms` = true → скидає всі аварії (WebUI/API)
 - **5 persist параметрів:** high_limit, low_limit, alarm_delay, door_delay, manual_reset
 - **protection.lockout = false** завжди (зарезервовано для Phase 10+)
-- Порядок update: Equipment(0) → **Protection(1)** → Thermostat(2)
+- Порядок update: Equipment(0) → **Protection(1)** → Thermostat(2) + Defrost(2)
+
+### Defrost (Phase 9.4)
+
+- **3 типи відтайки (dFT):** 0=природна (зупинка компресора), 1=електричний тен, 2=гарячий газ (7 фаз)
+- **State machine:** IDLE → [dFT=2: STABILIZE → VALVE_OPEN] → ACTIVE → [dFT=2: EQUALIZE] → DRIP → FAD → IDLE
+- **4 способи ініціації:** 0=таймер (dit годин), 1=demand (T_evap<dSS), 2=комбо, 3=вимкнено
+- **Режим лічильника (dct):** 1=реальний час, 2=час роботи компресора
+- **Завершення активної фази:** по T_evap>=dSt (основне) або по таймеру dEt (безпека)
+- **Consecutive timeouts:** лічильник послідовних завершень по таймеру (сигнал несправності)
+- **FAD phase:** компресор ON + вент. конд. ON, вент. вип. OFF; завершення по T_evap<FAT або таймеру FAd
+- **13 persist параметрів:** type, interval, counter_mode, initiation, end_temp, max_duration, demand_temp, drip_time, fan_delay, fad_temp, stabilize_time, valve_delay, equalize_time
+- **Persist лічильник:** defrost.interval_timer і defrost.defrost_count зберігаються в NVS
+- **Requests до EM:** defrost.req.compressor/heater/evap_fan/cond_fan/hg_valve
+- Порядок update: Equipment(0) → Protection(1) → Thermostat(2) + **Defrost(2)**
 
 ### Файли які МОЖНА редагувати
 - `modules/*/manifest.json` — опис модулів (UI, state, mqtt, display)
@@ -245,6 +259,10 @@ ModESP_v4/
 | `next_prompt.md` | Промпт для наступної сесії | В кінці поточної сесії |
 
 ## Changelog
+- 2026-02-18 — Phase 9.4 DONE: Defrost module (modules/defrost/). 3 типи відтайки (natural/heater/hot-gas),
+  7-фазна state machine (STABILIZE→VALVE_OPEN→ACTIVE→EQUALIZE→DRIP→FAD), 4 способи ініціації,
+  demand defrost, consecutive timeouts, persist лічильник. 13 persist параметрів, 24 state keys.
+  4 модулі: equipment+protection+thermostat+defrost.
 - 2026-02-18 — Phase 9.3 DONE: Protection module (modules/protection/). 5 alarm monitors
   (HAL, LAL, ERR1, ERR2, Door). Delayed alarms (dAd), defrost blocking, auto-clear + manual reset.
   5 persist параметрів, 14 state keys, 8 MQTT publish. 79 тестів зелені. 3 modules, 42 state keys.

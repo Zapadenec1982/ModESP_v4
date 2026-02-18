@@ -206,12 +206,13 @@
           - 5 persist params, 14 state keys, 8 MQTT publish
           - protection.lockout reserved (always false)
           
-  5.4 [ ] Defrost — цикл розморозки
+  5.4 [x] Defrost — цикл розморозки (DONE — 2026-02-18)
           - State machine з 7 фазами (spec_v3 §3.4)
-          - 3 типи: зупинка / тен / гарячий газ
+          - 3 типи: зупинка / тен / гарячий газ (повна послідовність 7 фаз для ГГ)
           - 4 ініціації: таймер / demand / комбінований / ручний
           - defrost.active блокує Thermostat через EM
-          - Лічильник відтайок в NVS (persist)
+          - Лічильник відтайок в NVS (persist), consecutive timeouts
+          - 13 persist параметрів, 24 state keys
 ```
 
 **Milestone M3: "Production Ready" — після Phase 7 + 9.**
@@ -232,7 +233,7 @@
 **Працюй тільки над ОДНИМ кроком одночасно.**
 
 ```
-  [✅ done]       [✅ done]      [✅ done]       [✅ done]        [✅ done]        [✅ done]       [✅ done]       [◀── ТУТ]
+  [✅ done]       [✅ done]      [✅ done]       [✅ done]        [✅ done]        [✅ done]       [✅ done]       [✅ done]
 Стабілізація  →  MQTT/OTA  → Auto-persist  →  Svelte UI  →  Equipment Mgr  →  Thermostat v2  →  Protection  →  Defrost
      ↓              ↓             ↓               ↓                ↓                ↓                ↓              ↓
   "працює       "можна       "налаштування    "красиво"       "арбітраж       "повна логіка    "аварії       "цикл
@@ -261,6 +262,9 @@
 - **docs/10_manifest_standard.md** → як писати маніфести
 
 ## Changelog
+- 2026-02-18 — Phase 9.4 DONE: Defrost module. State machine (IDLE→STABILIZE→VALVE_OPEN→ACTIVE→EQUALIZE→DRIP→FAD),
+  3 типи (natural/heater/hot-gas), 4 ініціації, demand defrost, consecutive timeouts, NVS persist counter.
+  13 persist параметрів, 24 state keys. 4 бізнес-модулі. Milestone M3 потребує тестування.
 - 2026-02-18 — Phase 9.3 DONE: Protection module. 5 alarm monitors (HAL, LAL, ERR1, ERR2, Door).
   dAd delayed alarms, defrost blocking, auto-clear + manual reset. 5 persist params, 14 state keys.
   Наступний: 5.4 Defrost.

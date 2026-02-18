@@ -44,6 +44,7 @@
 #include "equipment_module.h"
 #include "protection_module.h"
 #include "thermostat_module.h"
+#include "defrost_module.h"
 
 #include "esp_log.h"
 #include "esp_task_wdt.h"
@@ -85,6 +86,7 @@ static ProtectionModule        protection;
 
 // Business modules (NORMAL priority — work through SharedState)
 static ThermostatModule        thermostat;
+static DefrostModule           defrost;
 
 // ═══════════════════════════════════════════════════════════════
 // Entry point
@@ -192,6 +194,9 @@ extern "C" void app_main(void)
 
     // Thermostat — працює через SharedState, без прямого HAL доступу
     app.modules().register_module(thermostat);
+
+    // Defrost — цикл розморозки (NORMAL priority, паралельно з thermostat)
+    app.modules().register_module(defrost);
 
     ESP_LOGI(TAG, "Phase 2: Initializing WiFi + business modules...");
     app.modules().init_all(app.state());
