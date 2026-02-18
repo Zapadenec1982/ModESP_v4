@@ -44,8 +44,10 @@
 ### Що НЕ працює:
 - ❌ MQTT auto-discovery (Home Assistant) — не реалізовано
 - ❌ MQTT publish state при зміні — потрібно верифікувати
-- ❌ Alarm/Defrost модулі
-- ❌ WebUI примітивний (vanilla JS, ~30KB)
+- ✅ **Equipment Manager (Phase 9.1): арбітраж, інтерлоки, thermostat через req.*. 79 тестів зелені**
+- ✅ **Protection (Phase 9.3): 5 alarm monitors, dAd delay, defrost blocking, manual reset. 79 тестів зелені**
+- ❌ Defrost модуль (Phase 9.4)
+- ✅ **Svelte WebUI (Phase 7a): Dashboard + 14 widgets + sidebar/bottom tabs, 17KB gzipped**
 - ❌ LCD/OLED
 - ❌ mDNS (hostname.local)
 
@@ -98,11 +100,12 @@
 
 ## ✅ Phase 6.5 — Auto-persist settings (ЗАВЕРШЕНО)
 
-### Архітектурні рішення (прийняті 2026-02-17)
+### Архітектурні рішення (прийняті 2026-02-17, оновлені 2026-02-18)
 
 | Тема | Рішення | Обґрунтування |
 |------|---------|---------------|
-| **Module arbitration** | Convention через inputs (SharedState ключі). Модулі самі вирішують на основі domain logic | Взаємовиключні модулі (thermostat↔defrost) блокують ОДИН ОДНОГО, не relay. Enforcement на рівні HAL — передчасна оптимізація |
+| **Equipment Layer** | Єдиний Equipment Manager володіє всіма drivers. Модулі працюють через SharedState requests | Вирішує: relay ownership між модулями, інтерлоки в одному місці, rL1-rL4 конфігурація, protection lockout |
+| **Module arbitration** | EM арбітраж: Protection > Defrost > Thermostat. Інтерлоки hardcoded в EM | Модулі публікують req.*, EM вирішує. Гарантовано безпечна поведінка |
 | **Persist settings** | Auto-persist на рівні фреймворку (SharedState → NVS) | Кожен модуль потребує persist, дублювання NVS логіки неприпустиме |
 | **Timers** | Кожен модуль сам (millis + state machine в on_update) | Промислові таймери = domain state machine, загальний scheduler не дає користі |
 | **Data logging** | Окремий DataLogger module з inputs | Manifest-driven: що логувати описано в inputs. Не вбудований у фреймворк |
@@ -122,27 +125,93 @@
 
 ## Наступна задача: КРОК 4 — Svelte WebUI (Phase 7)
 
-### КРОК 4: Svelte WebUI (Phase 7)
+### КРОК 4: Svelte WebUI (Phase 7a — DONE)
 
 ```
-  1. [ ] Svelte проект (webui/), rollup, build pipeline
-  2. [ ] WebSocket store (reactive state)
-  3. [ ] Tile-based dashboard (CSS Grid, color zones з operational_range)
-  4. [ ] Widgets: GaugeTile, SliderTile, ToggleTile, ChartTile
-  5. [ ] System pages: WiFi, OTA, Module Status, About
-  6. [ ] Driver Settings page (service access level)
-  7. [x] Спростити generate_ui.py → HTMLGenerator видалений, WebUI статичний
+  1. [x] Svelte 4 проект (webui/), Rollup build pipeline (DONE — 2026-02-17)
+  2. [x] WebSocket store (reactive state, auto-reconnect) (DONE — 2026-02-17)
+  3. [x] Tile-based Dashboard (CSS Grid, color zones, компресор пульсація) (DONE — 2026-02-17)
+  4. [x] 14 widget components (value, slider, number_input, indicator, status_text,
+         toggle, text_input, password_input, button, firmware_upload, wifi_save,
+         mqtt_save, time_save, datetime_input) (DONE — 2026-02-17)
+  5. [x] Layout: sidebar (desktop) + bottom tabs (mobile) + Lucide SVG icons (DONE — 2026-02-17)
+  6. [x] DynamicPage: renders any page from ui.json (DONE — 2026-02-17)
+  7. [x] Build: 17KB gzipped (target <60KB) (DONE — 2026-02-17)
+  8. [x] Deploy script: npm run deploy → gzip → data/www/ (DONE — 2026-02-17)
+  9. [x] Спростити generate_ui.py → HTMLGenerator видалений, WebUI статичний
 ```
 
 ---
 
-### КРОК 5: Промислові модулі (Phase 9)
+### КРОК 5: Equipment Layer + Промислові модулі (Phase 9)
+
+**Архітектурне рішення (2026-02-18): Equipment Layer**
+
+Замість прямого доступу модулів до HAL/drivers — єдиний Equipment Manager (EM)
+володіє всіма сенсорами і актуаторами. Бізнес-модулі працюють ТІЛЬКИ через SharedState:
+публікують requests і читають стани.
 
 ```
-  1. [ ] Alarm Module (high/low temp alerts, HACCP logging)
-  2. [ ] Defrost Module (timer + temp termination, drip, fan delay)
-  3. [ ] Door Module (digital input, delay alarm)
-  Кожен модуль: manifest.json → генерація → C++ код → тести
+  Thermostat          Defrost           Protection
+      │                  │                  │
+      │ req.compressor   │ req.heater       │ lockout
+      ▼                  ▼                  ▼
+  ┌──────────────────────────────────────────────┐
+  │           Equipment Manager (EM)              │
+  │                                               │
+  │  Арбітраж: Protection > Defrost > Thermostat  │
+  │  Інтерлоки: тен↔компресор, клапан→компресор  │
+  │  Relay assignment: rL1-rL4 конфігурація       │
+  └──────────────────────────────────────────────┘
+      │           │           │           │
+      ▼           ▼           ▼           ▼
+    Relay1      Relay2      Relay3      Relay4
+    Sensor1     Sensor2     DI(door)    ...
+```
+
+**Потік даних:**
+1. EM.on_update(): застосовує relay requests з попереднього циклу
+2. EM.on_update(): читає сенсори → публікує equipment.air_temp, etc.
+3. Protection.on_update(): перевіряє аварії → публікує protection.lockout
+4. Thermostat.on_update(): читає temp → публікує thermostat.req.compressor
+5. Defrost.on_update(): state machine → публікує defrost.req.heater
+6. Наступний цикл: EM застосовує нові requests
+
+**Пріоритет арбітражу:** Protection LOCKOUT > Defrost active > Thermostat
+
+**Інтерлоки (hardcoded в EM):**
+- Тен і компресор НІКОЛИ одночасно
+- Клапан ГГ відкривається ДО компресора
+- Protection lockout = все вимкнено
+
+**Порядок реалізації:**
+```
+  5.1 [x] Equipment Manager — новий модуль, забирає HAL (DONE — 2026-02-18)
+          - Читає сенсори → SharedState
+          - Читає req.* → relay з арбітражем
+          - Рефакторинг Thermostat: req замість direct relay
+          - bindings.json: module="equipment"
+          
+  5.2 [x] Thermostat v2 — повна логіка зі spec_v3 (DONE — 2026-02-18)
+          - State machine: STARTUP → IDLE → COOLING → SAFETY_RUN
+          - Асиметричний диференціал (ON: T>=SP+rd, OFF: T<=SP)
+          - Вент. випарника (3 режими FAn), вент. конденсатора (затримка COd)
+          - Safety Run (ERR1: циклічний пуск при відмові датчика)
+          - 11 persist параметрів, 18 state keys, 79 тестів зелені
+          
+  5.3 [x] Protection — захист і аварії (DONE — 2026-02-18)
+          - 5 alarm monitors: HAL, LAL, ERR1, ERR2, Door
+          - Delayed alarms (dAd), defrost blocking for high temp
+          - Auto-clear + manual reset (protection.reset_alarms)
+          - 5 persist params, 14 state keys, 8 MQTT publish
+          - protection.lockout reserved (always false)
+          
+  5.4 [ ] Defrost — цикл розморозки
+          - State machine з 7 фазами (spec_v3 §3.4)
+          - 3 типи: зупинка / тен / гарячий газ
+          - 4 ініціації: таймер / demand / комбінований / ручний
+          - defrost.active блокує Thermostat через EM
+          - Лічильник відтайок в NVS (persist)
 ```
 
 **Milestone M3: "Production Ready" — після Phase 7 + 9.**
@@ -163,11 +232,11 @@
 **Працюй тільки над ОДНИМ кроком одночасно.**
 
 ```
-  [✅ done]       [✅ done]      [✅ done]        [◀── ТУТ]       [далі]
-Стабілізація  →  MQTT/OTA  → Auto-persist  →  Svelte UI  → Промислові модулі
-     ↓              ↓             ↓               ↓                ↓
-  "працює       "можна       "налаштування    "красиво"       "можна
-   надійно"      розгорнути"  зберігаються"                    продавати"
+  [✅ done]       [✅ done]      [✅ done]       [✅ done]        [✅ done]        [✅ done]       [✅ done]       [◀── ТУТ]
+Стабілізація  →  MQTT/OTA  → Auto-persist  →  Svelte UI  →  Equipment Mgr  →  Thermostat v2  →  Protection  →  Defrost
+     ↓              ↓             ↓               ↓                ↓                ↓                ↓              ↓
+  "працює       "можна       "налаштування    "красиво"       "арбітраж       "повна логіка    "аварії       "цикл
+   надійно"      розгорнути"  зберігаються"                    relay"           spec_v3"        та захист"   розморозки"
 ```
 
 ---
@@ -192,6 +261,22 @@
 - **docs/10_manifest_standard.md** → як писати маніфести
 
 ## Changelog
+- 2026-02-18 — Phase 9.3 DONE: Protection module. 5 alarm monitors (HAL, LAL, ERR1, ERR2, Door).
+  dAd delayed alarms, defrost blocking, auto-clear + manual reset. 5 persist params, 14 state keys.
+  Наступний: 5.4 Defrost.
+- 2026-02-18 — Phase 9.2 DONE: Thermostat v2 з повною логікою spec_v3. Асиметричний диференціал,
+  state machine, fan control, Safety Run. 11 persist параметрів, 18 state keys. Наступний: 5.3 Protection.
+- 2026-02-18 — Phase 9.1 DONE: Equipment Manager створений, Thermostat рефакторинг (req.* замість HAL).
+  generate_ui.py: cross-module widget keys. 79 тестів зелені. Наступний крок: 5.2 Thermostat v2.
+- 2026-02-18 — Phase 9.2 DONE: Thermostat v2 — повна логіка spec_v3. State machine
+  (STARTUP→IDLE→COOLING→SAFETY_RUN), asymmetric differential, evap fan 3 modes,
+  cond fan delay, Safety Run, 11 persist params. 476 рядків C++. Наступний: Protection.
+- 2026-02-18 — Phase 9.1 DONE: Equipment Manager — єдиний HAL owner. Арбітраж
+  (Protection>Defrost>Thermostat), інтерлоки. Thermostat рефакторений на req.*.
+  12 модулів, heap 176KB.
+- 2026-02-17 — Phase 7a DONE: Svelte WebUI scaffold + Dashboard + WebSocket. 14 widget components,
+  sidebar/bottom tabs, Lucide icons, dark theme. Bundle: 17KB gzipped (target <60KB).
+  Deploy: webui/ → npm run deploy → data/www/. Vanilla JS prototype залишено як fallback.
 - 2026-02-17 — Phase 6.5 DONE: PersistService (restore NVS→SharedState + debounce flush), SharedState persist
   callback, state_meta.h з persist+default_val, POST /api/settings валідація, thermostat без hardcode.
   79 тестів зелені. Наступний крок: Phase 7 (Svelte WebUI).

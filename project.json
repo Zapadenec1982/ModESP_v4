@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "description": "Холодильна камера — базова конфігурація",
   "modules": [
+    "equipment",
+    "protection",
     "thermostat"
   ],
   "system": {

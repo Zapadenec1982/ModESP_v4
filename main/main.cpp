@@ -1,6 +1,6 @@
 /**
  * @file main.cpp
- * @brief ModESP v4 — Phase 5a: WiFi + HTTP API + WebSocket
+ * @brief ModESP v4 — Phase 9.1: Equipment Layer
  *
  * Staged boot sequence:
  *   1. NVS init (required for WiFi credentials)
@@ -9,7 +9,7 @@
  *   4. Register WiFi service
  *   5. HAL initializes GPIO from BoardConfig
  *   6. DriverManager creates drivers from bindings
- *   7. Register business modules + bind_drivers -> init_all (phase 2)
+ *   7. Register EquipmentModule (binds drivers) + business modules -> init_all (phase 2)
  *   8. Inject dependencies, register HTTP + WS -> init_all (phase 3)
  *   9. Connect WS handler to HTTP server
  *  10. Main loop: drivers update -> modules update -> WDT reset
@@ -40,7 +40,9 @@
 #include "modesp/net/mqtt_service.h"
 #include "modesp/services/nvs_helper.h"
 
-// Business modules
+// Equipment Layer + Business modules
+#include "equipment_module.h"
+#include "protection_module.h"
 #include "thermostat_module.h"
 
 #include "esp_log.h"
@@ -75,7 +77,13 @@ static modesp::HttpService     http_service;
 static modesp::WsService       ws_service;
 static modesp::MqttService     mqtt_service;
 
-// Business modules (NORMAL priority)
+// Equipment Layer (CRITICAL priority — owns all HAL drivers)
+static EquipmentModule         equipment;
+
+// Protection (HIGH priority — alarm monitoring, runs before thermostat)
+static ProtectionModule        protection;
+
+// Business modules (NORMAL priority — work through SharedState)
 static ThermostatModule        thermostat;
 
 // ═══════════════════════════════════════════════════════════════
@@ -174,8 +182,15 @@ extern "C" void app_main(void)
              (int)driver_manager.sensor_count(),
              (int)driver_manager.actuator_count());
 
-    // ── Step 7: Register business modules + bind drivers ──
-    thermostat.bind_drivers(driver_manager);
+    // ── Step 7: Register Equipment Manager + business modules ──
+    // EM — єдиний модуль з доступом до HAL (CRITICAL priority)
+    equipment.bind_drivers(driver_manager);
+    app.modules().register_module(equipment);
+
+    // Protection — моніторинг аварій (HIGH priority, перед thermostat)
+    app.modules().register_module(protection);
+
+    // Thermostat — працює через SharedState, без прямого HAL доступу
     app.modules().register_module(thermostat);
 
     ESP_LOGI(TAG, "Phase 2: Initializing WiFi + business modules...");

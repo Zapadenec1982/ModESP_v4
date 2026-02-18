@@ -1,0 +1,121 @@
+{
+  "manifest_version": 1,
+  "module": "equipment",
+  "description": "Equipment Manager — HAL abstraction layer with arbitration",
+
+  "requires": [
+    {"role": "air_temp",    "type": "sensor",   "driver": "ds18b20"},
+    {"role": "evap_temp",   "type": "sensor",   "driver": "ds18b20", "optional": true},
+    {"role": "compressor",  "type": "actuator", "driver": "relay"},
+    {"role": "heater",      "type": "actuator", "driver": "relay", "optional": true},
+    {"role": "evap_fan",    "type": "actuator", "driver": "relay", "optional": true},
+    {"role": "cond_fan",    "type": "actuator", "driver": "relay", "optional": true},
+    {"role": "hg_valve",    "type": "actuator", "driver": "relay", "optional": true}
+  ],
+
+  "state": {
+    "equipment.air_temp":    {"type": "float", "access": "read", "unit": "°C", "description": "Температура камери"},
+    "equipment.evap_temp":   {"type": "float", "access": "read", "unit": "°C", "description": "Температура випарника"},
+    "equipment.sensor1_ok":  {"type": "bool",  "access": "read", "description": "Датчик камери справний"},
+    "equipment.sensor2_ok":  {"type": "bool",  "access": "read", "description": "Датчик випарника справний"},
+    "equipment.compressor":  {"type": "bool",  "access": "read", "description": "Фактичний стан компресора"},
+    "equipment.heater":      {"type": "bool",  "access": "read", "description": "Фактичний стан тена"},
+    "equipment.evap_fan":    {"type": "bool",  "access": "read", "description": "Фактичний стан вент. випарника"},
+    "equipment.cond_fan":    {"type": "bool",  "access": "read", "description": "Фактичний стан вент. конденсатора"},
+    "equipment.hg_valve":    {"type": "bool",  "access": "read", "description": "Фактичний стан клапана ГГ"},
+    "equipment.door_open":   {"type": "bool",  "access": "read", "description": "Стан дверей"}
+  },
+
+  "ui": {
+    "page": "Обладнання",
+    "page_id": "equipment",
+    "icon": "settings",
+    "order": 85,
+    "cards": [
+      {
+        "title": "Сенсори",
+        "widgets": [
+          {
+            "key": "equipment.air_temp",
+            "widget": "value"
+          },
+          {
+            "key": "equipment.evap_temp",
+            "widget": "value"
+          },
+          {
+            "key": "equipment.sensor1_ok",
+            "widget": "indicator",
+            "on_label": "OK",
+            "off_label": "Помилка",
+            "on_color": "#22c55e",
+            "off_color": "#ef4444"
+          },
+          {
+            "key": "equipment.sensor2_ok",
+            "widget": "indicator",
+            "on_label": "OK",
+            "off_label": "Немає",
+            "on_color": "#22c55e",
+            "off_color": "#64748b"
+          }
+        ]
+      },
+      {
+        "title": "Актуатори",
+        "widgets": [
+          {
+            "key": "equipment.compressor",
+            "widget": "indicator",
+            "on_label": "Працює",
+            "off_label": "Вимкнено",
+            "on_color": "#22c55e",
+            "off_color": "#64748b"
+          },
+          {
+            "key": "equipment.heater",
+            "widget": "indicator",
+            "on_label": "Працює",
+            "off_label": "Вимкнено",
+            "on_color": "#f59e0b",
+            "off_color": "#64748b"
+          },
+          {
+            "key": "equipment.evap_fan",
+            "widget": "indicator",
+            "on_label": "Працює",
+            "off_label": "Вимкнено",
+            "on_color": "#22c55e",
+            "off_color": "#64748b"
+          },
+          {
+            "key": "equipment.cond_fan",
+            "widget": "indicator",
+            "on_label": "Працює",
+            "off_label": "Вимкнено",
+            "on_color": "#22c55e",
+            "off_color": "#64748b"
+          }
+        ]
+      }
+    ]
+  },
+
+  "mqtt": {
+    "publish": [
+      "equipment.air_temp",
+      "equipment.evap_temp",
+      "equipment.compressor",
+      "equipment.heater",
+      "equipment.sensor1_ok"
+    ],
+    "subscribe": []
+  },
+
+  "display": {
+    "main_value": {
+      "key": "equipment.air_temp",
+      "format": "%.1f°C"
+    }
+  }
+}

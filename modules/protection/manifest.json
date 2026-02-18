@@ -1,0 +1,252 @@
+{
+  "manifest_version": 1,
+  "module": "protection",
+  "description": "Alarm monitoring and protection — high/low temp, sensor failure, door (spec_v3 §2.7)",
+
+  "inputs": {
+    "equipment.air_temp": {
+      "source_module": "equipment",
+      "type": "float",
+      "description": "Температура камери від Equipment Manager",
+      "optional": false
+    },
+    "equipment.sensor1_ok": {
+      "source_module": "equipment",
+      "type": "bool",
+      "description": "Здоров'я датчика камери",
+      "optional": false
+    },
+    "equipment.sensor2_ok": {
+      "source_module": "equipment",
+      "type": "bool",
+      "description": "Здоров'я датчика випарника",
+      "optional": true
+    },
+    "equipment.door_open": {
+      "source_module": "equipment",
+      "type": "bool",
+      "description": "Стан дверей камери",
+      "optional": true
+    },
+    "defrost.active": {
+      "source_module": "defrost",
+      "type": "bool",
+      "description": "Чи активна розморозка (блокує HAL alarm)",
+      "optional": true
+    }
+  },
+
+  "state": {
+    "protection.lockout": {
+      "type": "bool",
+      "access": "read",
+      "description": "Аварійна зупинка (зарезервовано, завжди false)"
+    },
+    "protection.alarm_active": {
+      "type": "bool",
+      "access": "read",
+      "description": "Є хоча б одна активна аварія"
+    },
+    "protection.alarm_code": {
+      "type": "string",
+      "access": "read",
+      "description": "Код найвищої аварії (high_temp, low_temp, err1, err2, door, none)"
+    },
+    "protection.high_temp_alarm": {
+      "type": "bool",
+      "access": "read",
+      "description": "Аварія верхньої температури (HAL)"
+    },
+    "protection.low_temp_alarm": {
+      "type": "bool",
+      "access": "read",
+      "description": "Аварія нижньої температури (LAL)"
+    },
+    "protection.sensor1_alarm": {
+      "type": "bool",
+      "access": "read",
+      "description": "ERR1 — обрив датчика камери"
+    },
+    "protection.sensor2_alarm": {
+      "type": "bool",
+      "access": "read",
+      "description": "ERR2 — обрив датчика випарника"
+    },
+    "protection.door_alarm": {
+      "type": "bool",
+      "access": "read",
+      "description": "Двері відкриті занадто довго"
+    },
+    "protection.high_limit": {
+      "type": "float",
+      "unit": "\u00b0C",
+      "access": "readwrite",
+      "min": -50.0,
+      "max": 99.0,
+      "step": 0.5,
+      "default": 12.0,
+      "persist": true,
+      "description": "Верхня межа температури (HAL)"
+    },
+    "protection.low_limit": {
+      "type": "float",
+      "unit": "\u00b0C",
+      "access": "readwrite",
+      "min": -99.0,
+      "max": 50.0,
+      "step": 0.5,
+      "default": -35.0,
+      "persist": true,
+      "description": "Нижня межа температури (LAL)"
+    },
+    "protection.alarm_delay": {
+      "type": "int",
+      "unit": "хв",
+      "access": "readwrite",
+      "min": 0,
+      "max": 120,
+      "step": 1,
+      "default": 30,
+      "persist": true,
+      "description": "Затримка спрацювання аварії (dAd)"
+    },
+    "protection.door_delay": {
+      "type": "int",
+      "unit": "хв",
+      "access": "readwrite",
+      "min": 0,
+      "max": 60,
+      "step": 1,
+      "default": 5,
+      "persist": true,
+      "description": "Затримка аварії відкритих дверей"
+    },
+    "protection.manual_reset": {
+      "type": "bool",
+      "access": "readwrite",
+      "default": false,
+      "persist": true,
+      "description": "Ручне скидання аварій (false=auto, true=manual)"
+    },
+    "protection.reset_alarms": {
+      "type": "bool",
+      "access": "readwrite",
+      "description": "Команда скидання аварій (write-only trigger)"
+    }
+  },
+
+  "ui": {
+    "page": "Захист",
+    "page_id": "protection",
+    "icon": "shield-alert",
+    "order": 3,
+    "cards": [
+      {
+        "title": "Стан аварій",
+        "widgets": [
+          {
+            "key": "protection.alarm_active",
+            "widget": "indicator",
+            "label": "Аварія",
+            "on_label": "АВАРІЯ",
+            "off_label": "Норма",
+            "on_color": "#ef4444",
+            "off_color": "#22c55e"
+          },
+          {
+            "key": "protection.alarm_code",
+            "widget": "status_text",
+            "label": "Код аварії"
+          },
+          {
+            "key": "protection.high_temp_alarm",
+            "widget": "indicator",
+            "label": "Висока T",
+            "on_color": "#ef4444"
+          },
+          {
+            "key": "protection.low_temp_alarm",
+            "widget": "indicator",
+            "label": "Низька T",
+            "on_color": "#3b82f6"
+          },
+          {
+            "key": "protection.sensor1_alarm",
+            "widget": "indicator",
+            "label": "Датчик 1 (ERR1)",
+            "on_color": "#f97316"
+          },
+          {
+            "key": "protection.sensor2_alarm",
+            "widget": "indicator",
+            "label": "Датчик 2 (ERR2)",
+            "on_color": "#f97316"
+          },
+          {
+            "key": "protection.door_alarm",
+            "widget": "indicator",
+            "label": "Двері",
+            "on_color": "#eab308"
+          }
+        ]
+      },
+      {
+        "title": "Налаштування",
+        "group": "settings",
+        "collapsible": true,
+        "widgets": [
+          {
+            "key": "protection.high_limit",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.low_limit",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.alarm_delay",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.door_delay",
+            "widget": "number_input"
+          }
+        ]
+      }
+    ]
+  },
+
+  "mqtt": {
+    "publish": [
+      "protection.lockout",
+      "protection.alarm_active",
+      "protection.alarm_code",
+      "protection.high_temp_alarm",
+      "protection.low_temp_alarm",
+      "protection.sensor1_alarm",
+      "protection.sensor2_alarm",
+      "protection.door_alarm"
+    ],
+    "subscribe": [
+      "protection.high_limit",
+      "protection.low_limit",
+      "protection.alarm_delay",
+      "protection.door_delay",
+      "protection.manual_reset",
+      "protection.reset_alarms"
+    ]
+  },
+
+  "display": {
+    "main_value": {
+      "key": "protection.alarm_code",
+      "format": "%s"
+    },
+    "menu_items": [
+      {"label": "HAL",  "key": "protection.high_limit"},
+      {"label": "LAL",  "key": "protection.low_limit"},
+      {"label": "dAd",  "key": "protection.alarm_delay"},
+      {"label": "Door", "key": "protection.door_delay"}
+    ]
+  }
+}

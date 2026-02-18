@@ -102,21 +102,25 @@ class ManifestValidator:
                             self.errors.append(
                                 f"[{name}] Readwrite key '{key}' missing '{prop}'")
 
-        # Validate UI widgets reference existing state keys
+        # Validate UI widgets reference existing state keys or inputs
+        inputs = manifest.get("inputs", {})
         ui = manifest.get("ui", {})
         for card in ui.get("cards", []):
             for w in card.get("widgets", []):
                 wkey = w.get("key", "")
                 wtype = w.get("widget", "")
 
-                # Check key exists in state
-                if wkey not in state:
+                # Check key exists in state or inputs (cross-module)
+                if wkey in state:
+                    state_type = state[wkey].get("type", "")
+                elif wkey in inputs:
+                    state_type = inputs[wkey].get("type", "")
+                else:
                     self.errors.append(
-                        f"[{name}] Widget key '{wkey}' not found in state")
+                        f"[{name}] Widget key '{wkey}' not found in state or inputs")
                     continue
 
                 # Check widget type compatibility
-                state_type = state[wkey].get("type", "")
                 compat = WIDGET_TYPE_COMPAT.get(wtype)
                 if compat and state_type not in compat:
                     self.errors.append(
@@ -501,6 +505,12 @@ class UIJsonGenerator:
 
     def generate(self, project, manifests, driver_manifests=None,
                  board=None, bindings=None):
+        # Глобальна карта всіх state keys з усіх модулів (для cross-module widget keys)
+        self._all_state = {}
+        for m in manifests:
+            for key, info in m.get("state", {}).items():
+                self._all_state[key] = info
+
         pages = []
 
         # System pages
@@ -580,7 +590,10 @@ class UIJsonGenerator:
     def _build_widget(self, w, manifest):
         """Build a widget dict with state metadata merged in."""
         widget = {"key": w["key"], "widget": w["widget"]}
+        # Шукаємо state info спочатку в поточному модулі, потім в глобальній карті
         state_info = manifest.get("state", {}).get(w["key"], {})
+        if not state_info and hasattr(self, '_all_state'):
+            state_info = self._all_state.get(w["key"], {})
 
         # Pull metadata from state definition
         if state_info.get("unit"):
@@ -917,10 +930,10 @@ class StateMetaGenerator:
             for key, info in rw_entries:
                 stype = info.get("type", "float")
                 persist = "true" if info.get("persist", False) else "false"
-                min_v = info.get("min", 0.0)
-                max_v = info.get("max", 0.0)
-                step_v = info.get("step", 1.0)
-                default_v = info.get("default", 0.0)
+                min_v = float(info.get("min", 0.0))
+                max_v = float(info.get("max", 0.0))
+                step_v = float(info.get("step", 1.0))
+                default_v = float(info.get("default", 0.0))
                 lines.append(
                     f'    {{"{key}", "{stype}", true, {persist}, '
                     f'{min_v}f, {max_v}f, {step_v}f, {default_v}f}},')

@@ -25,10 +25,45 @@ board.json + bindings.json ─┘
 - `generated/mqtt_topics.h` — MQTT topic arrays
 - `generated/display_screens.h` — LCD/OLED data
 
-### Статичні файли WebUI (можна редагувати вручну)
-- `data/www/index.html` — HTML shell (підключає /style.css + /app.js)
-- `data/www/app.js` — Runtime renderer (завантажує ui.json через GET /api/ui)
-- `data/www/style.css` — Стилі WebUI
+### Svelte WebUI (webui/ → data/www/)
+- `webui/src/` — Svelte 4 source code (App.svelte, stores, components, pages)
+- `webui/dist/` — Build output (bundle.js, bundle.css) — gitignored
+- `data/www/index.html` — SPA shell (підключає /bundle.css + /bundle.js)
+- `data/www/bundle.js.gz` — Svelte app gzipped (~14KB)
+- `data/www/bundle.css.gz` — Styles gzipped (~3KB)
+- Build: `cd webui && npm run build` → Deploy: `npm run deploy` → data/www/
+- **Старий vanilla JS (app.js, style.css) — залишено як fallback, не використовується**
+
+### Equipment Layer (Phase 9.1)
+- **EquipmentModule** (priority=CRITICAL) — єдиний модуль з доступом до HAL drivers
+- Читає сенсори → публікує `equipment.air_temp`, `equipment.sensor1_ok`, etc.
+- Читає requests від бізнес-модулів: `thermostat.req.compressor`, `defrost.req.*`, `protection.lockout`
+- Арбітраж: Protection LOCKOUT > Defrost active > Thermostat
+- Інтерлоки: тен↔компресор ніколи одночасно, тен↔клапан ГГ ніколи одночасно
+- Бізнес-модулі (Thermostat, Defrost, Protection) працюють ТІЛЬКИ через SharedState
+- `data/bindings.json` — всі drivers прив'язані до module "equipment"
+
+### Thermostat v2 (Phase 9.2)
+- **Асиметричний диференціал:** ON при T >= SP + differential, OFF при T <= SP
+- **State machine:** STARTUP → IDLE ↔ COOLING, SAFETY_RUN (при відмові датчика)
+- **Захист компресора:** min_on_time (cOt), min_off_time (cFt), startup_delay
+- **Safety Run:** циклічна робота (safety_run_on / safety_run_off) при sensor1_ok=false
+- **Вентилятор випарника:** 3 режими (постійно / з компресором / за T_evap з гістерезисом)
+- **Вентилятор конденсатора:** синхронно з компресором + затримка OFF (cond_fan_delay)
+- **11 persist параметрів** з spec_v3 (setpoint, differential, cFt, cOt, FAn, FST, COd тощо)
+- Requests: `thermostat.req.compressor`, `thermostat.req.evap_fan`, `thermostat.req.cond_fan`
+
+### Protection (Phase 9.3)
+
+- **5 незалежних моніторів аварій:** High Temp (HAL), Low Temp (LAL), Sensor1 (ERR1), Sensor2 (ERR2), Door
+- **Delayed alarms:** High/Low temp і Door з затримкою (dAd хвилини, door_delay хвилини)
+- **Instant alarms:** ERR1, ERR2 — без затримки
+- **Defrost blocking:** High Temp alarm блокується під час defrost.active (скидається pending)
+- **Auto-clear:** аварія знімається автоматично при поверненні в норму (якщо manual_reset=false)
+- **Manual reset:** `protection.reset_alarms` = true → скидає всі аварії (WebUI/API)
+- **5 persist параметрів:** high_limit, low_limit, alarm_delay, door_delay, manual_reset
+- **protection.lockout = false** завжди (зарезервовано для Phase 10+)
+- Порядок update: Equipment(0) → **Protection(1)** → Thermostat(2)
 
 ### Файли які МОЖНА редагувати
 - `modules/*/manifest.json` — опис модулів (UI, state, mqtt, display)
@@ -90,6 +125,12 @@ ModESP_v4/
 │       ├── manifest.json      # ⭐ Driver manifest (actuator, gpio_output, 2 settings)
 │       └── src/...            # GPIO relay with min on/off time protection
 ├── modules/
+│   ├── equipment/
+│   │   ├── manifest.json      # ⭐ Equipment Manager (HAL owner, arbitration)
+│   │   └── src/equipment_module.cpp
+│   ├── protection/
+│   │   ├── manifest.json      # ⭐ Alarm monitoring (5 monitors, dAd delay)
+│   │   └── src/protection_module.cpp
 │   └── thermostat/
 │       ├── manifest.json      # ⭐ Single Source of Truth для UI/state/mqtt
 │       └── src/thermostat_module.cpp
@@ -99,7 +140,12 @@ ModESP_v4/
 │   ├── board.json             # PCB pin assignment (gpio_outputs, onewire_buses)
 │   ├── bindings.json          # Runtime: role → driver → GPIO mapping (manifest_version: 1)
 │   ├── ui.json                # 🔄 Generated
-│   └── www/                   # Static WebUI (index.html, app.js, style.css)
+│   └── www/                   # Deployed WebUI (index.html, bundle.js.gz, bundle.css.gz)
+├── webui/                     # Svelte 4 WebUI source
+│   ├── src/                   # App.svelte, stores/, lib/, components/, pages/
+│   ├── scripts/deploy.js      # Gzip + copy to data/www/
+│   ├── package.json           # npm run build / npm run deploy
+│   └── rollup.config.js       # Rollup bundler config
 ├── generated/                 # 🔄 All generated C++ headers
 ├── docs/                      # Architecture docs (01-09)
 ├── project.json               # Active modules list
@@ -199,6 +245,19 @@ ModESP_v4/
 | `next_prompt.md` | Промпт для наступної сесії | В кінці поточної сесії |
 
 ## Changelog
+- 2026-02-18 — Phase 9.3 DONE: Protection module (modules/protection/). 5 alarm monitors
+  (HAL, LAL, ERR1, ERR2, Door). Delayed alarms (dAd), defrost blocking, auto-clear + manual reset.
+  5 persist параметрів, 14 state keys, 8 MQTT publish. 79 тестів зелені. 3 modules, 42 state keys.
+- 2026-02-18 — Phase 9.2 DONE: Thermostat v2 — повна логіка spec_v3. Асиметричний диференціал,
+  state machine (STARTUP→IDLE→COOLING→SAFETY_RUN), вент. випарника (3 режими FAn), вент. конденсатора
+  (затримка COd), Safety Run, 11 persist параметрів, 18 state keys. 79 тестів зелені.
+- 2026-02-18 — Phase 9.1 DONE: Equipment Manager (modules/equipment/). Єдиний власник HAL drivers.
+  Арбітраж: Protection > Defrost > Thermostat. Інтерлоки: тен↔компресор, тен↔клапан ГГ.
+  Thermostat рефакторинг: req.compressor замість direct relay, читає equipment.air_temp.
+  generate_ui.py: cross-module widget key resolution (inputs → global state map). 79 тестів зелені.
+- 2026-02-17 — Phase 7a DONE: Svelte WebUI (webui/). Svelte 4 + Rollup. 14 widget components,
+  Dashboard (tile-based, temp color zones, compressor pulse), Layout (sidebar + bottom tabs),
+  DynamicPage (renders any ui.json page). Bundle: 17KB gzipped. Deploy: npm run deploy → data/www/.
 - 2026-02-17 — Phase 6.5 DONE: PersistService (CRITICAL, Phase 1). SharedState persist callback (ПОЗА mutex).
   state_meta.h: persist+default_val. POST /api/settings: state_meta валідація (writable, min/max clamp).
   Thermostat: hardcoded config.setpoint замінено на SharedState read. 79 pytest тестів зелені.

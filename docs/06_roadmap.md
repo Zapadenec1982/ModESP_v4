@@ -1,6 +1,6 @@
 # ModESP v4 — Дорожня карта розвитку
 
-> Останнє оновлення: 2026-02-17
+> Останнє оновлення: 2026-02-18
 > Версія прошивки: 4.0.0
 > Платформа: ESP32-WROOM-32, ESP-IDF v5.5, C++17 + ETL
 
@@ -43,8 +43,8 @@ ModESP v4 — модульна платформа для промислових 
 
 ### Phase 4 — Thermostat модуль (завершено)
 - On/Off регулювання з гістерезисом
-- bind_drivers() — зв'язок з сенсорами та актуаторами
 - Публікація стану через SharedState
+- (Phase 9.1) Рефакторинг: працює через Equipment Manager, req.* замість direct HAL
 
 ### Phase 5a — WiFi + HTTP + WebSocket (завершено)
 - WiFiService — AP mode (ModESP-XXXX), credentials в NVS
@@ -113,49 +113,63 @@ Manifest spec покриває Board, Driver, Module, Bindings + Validation Summ
 - [ ] GET /api/log — віддає дані для графіків
 - [ ] Manifest-driven: що логувати описано в inputs модуля
 
-## 📋 Заплановані фази
-
-### Phase 7 — Svelte WebUI
+## ✅ Phase 7a — Svelte WebUI: Scaffold + Dashboard + WebSocket (завершено)
 **Мета:** Професійний веб-інтерфейс замість inline HTML.
-**Пріоритет:** ВИСОКИЙ — UX критичний для комерціалізації.
 
-Повна переробка фронтенду з Vanilla JS на Svelte framework.
-Натхнення: IoTManager v4 (tile-based dashboard).
-
-- [ ] Створити Svelte проект в webui/
-- [ ] WebSocket store (reactive state management)
-- [ ] Tile-based dashboard layout (responsive CSS grid)
-- [ ] Компоненти віджетів:
-  - [ ] GaugeTile — температура з кольоровим індикатором
-  - [ ] SliderTile — уставка з повзунком (readwrite float)
-  - [ ] ToggleTile — on/off з перемикачем (readwrite bool)
-  - [ ] ChartTile — графік температури (Chart.js)
-  - [ ] StatusTile — текстовий статус (readonly string)
-  - [ ] IndicatorTile — LED-індикатор (readonly bool)
-  - [ ] NumberInputTile — числове введення з кнопками +/-
-- [ ] Кольори за рівнем (як IoTManager: синій→зелений→жовтий→червоний)
-- [ ] Іконки для типів даних (thermometer, water, power, timer...)
-- [ ] System pages: WiFi settings, Module status, About
-- [ ] Dark/Light theme
-- [ ] Build pipeline: npm build → gzip → data/www/build/
-- [ ] CMake інтеграція (auto-build Svelte перед idf.py build)
-- [ ] generate_ui.py спрощується: генерує ТІЛЬКИ ui.json
+- [x] Svelte 4 проект в webui/, Rollup build pipeline
+- [x] WebSocket store (reactive state, auto-reconnect з backoff)
+- [x] UI config store (завантаження /api/ui)
+- [x] Tile-based Dashboard (CSS Grid, temperature color zones, compressor pulse animation)
+- [x] Layout: sidebar (desktop, collapsible on tablet) + bottom tabs (mobile)
+- [x] Lucide SVG icons (inline, no dependency)
+- [x] 14 widget components: value, slider, number_input, indicator, status_text,
+      toggle, text_input, password_input, button, firmware_upload, wifi_save,
+      mqtt_save, time_save, datetime_input
+- [x] DynamicPage: renders any page from ui.json dynamically
+- [x] Dark theme (промислове обладнання)
+- [x] Responsive: desktop (sidebar + 2-col grid), tablet (collapsed sidebar), mobile (bottom tabs + 1-col)
+- [x] Build pipeline: npm run build → gzip → npm run deploy → data/www/
+- [x] Bundle size: **17KB gzipped** (target <60KB)
 
 **Структура:**
 ```
 webui/
 ├── src/
-│   ├── App.svelte
-│   ├── components/          # Tile widgets
-│   ├── stores/state.js      # WebSocket → Svelte store
-│   └── lib/websocket.js     # Auto-reconnect WS client
+│   ├── App.svelte              # Router + layout shell
+│   ├── main.js                 # Entry point
+│   ├── stores/
+│   │   ├── state.js            # WebSocket → Svelte writable store
+│   │   └── ui.js               # UI config store (from /api/ui)
+│   ├── lib/
+│   │   ├── websocket.js        # Auto-reconnect WS client
+│   │   ├── api.js              # fetch wrappers (GET/POST/Upload)
+│   │   └── icons.js            # Inline Lucide SVG paths
+│   ├── components/
+│   │   ├── Layout.svelte       # Sidebar + header + content
+│   │   ├── Card.svelte         # Collapsible card container
+│   │   ├── Icon.svelte         # SVG icon component
+│   │   ├── WidgetRenderer.svelte # Widget type → component mapper
+│   │   └── widgets/            # 14 widget components
+│   └── pages/
+│       ├── Dashboard.svelte    # Tile-based dashboard
+│       └── DynamicPage.svelte  # Generic page renderer
+├── scripts/deploy.js           # Gzip + copy to data/www/
 ├── package.json
 └── rollup.config.js
 ```
 
-**Розмір bundle:** ~50-70KB gzipped (384KB partition = достатньо)
-**Залежності:** Phase 5c
-**Оцінка:** 4-5 сесій
+## 📋 Заплановані фази
+
+### Phase 7b-c — Svelte WebUI: Polish
+**Мета:** Графіки, анімації, PWA.
+**Пріоритет:** СЕРЕДНІЙ.
+
+- [ ] Графіки температури (Phase 7c)
+- [ ] Animations/transitions
+- [ ] Light theme toggle
+- [ ] i18n
+- [ ] PWA / Service Worker
+- [ ] CMake інтеграція (auto-build Svelte перед idf.py build)
 
 ### Phase 8 — LCD/OLED Display
 **Мета:** Локальний інтерфейс без WiFi для сервісних інженерів.
@@ -170,31 +184,53 @@ webui/
 **Залежності:** Phase 5c (display_screens.h)
 **Оцінка:** 3-4 сесії
 
-### Phase 9 — Alarm + Defrost модулі
-**Мета:** Промислова функціональність для холодильного обладнання.
-**Пріоритет:** ВИСОКИЙ для комерціалізації.
+### Phase 9 — Equipment Layer + Промислові модулі
+**Мета:** Промисловий контролер холодильного обладнання (за spec_v3).
+**Пріоритет:** НАЙВИЩИЙ для комерціалізації.
 
-**Архітектурні рішення (прийняті 2026-02-17):**
-- **Mutual exclusion:** модулі блокують один одного через inputs (SharedState ключі),
-  НЕ через блокування relay на рівні HAL. Defrost і thermostat — взаємовиключні:
-  `defrost.active=true` → thermostat не вмикає компресор (сам перевіряє через inputs).
-- **Timers:** кожен модуль керує своїми таймерами (millis + state machine в on_update()),
-  загальний timer service НЕ потрібний. Defrost = state machine з переходами
-  (idle→pre-drip→heating→post-drip→fan-delay→recovery).
-- **Auto-persist:** settings з `persist:true` зберігаються автоматично на рівні
-  фреймворку (SharedState/ConfigService → NVS). Модулі не працюють з NVS напряму.
+**Архітектурне рішення (2026-02-18): Equipment Layer**
 
-**Модулі:**
-- [ ] Alarm Module — high/low temperature alerts, sensor failure detection
-- [ ] Defrost Module — таймерна/адаптивна розморозка (state machine)
-- [ ] Door Module — контакт дверей, delay alarm
-- [ ] Fan Module — керування вентиляторами випарника
-- [ ] Notification: buzzer output, MQTT alert, WebUI popup
+Єдиний Equipment Manager (EM) володіє всіма drivers (сенсори, реле).
+Бізнес-модулі (Thermostat, Defrost, Protection) працюють ТІЛЬКИ через SharedState:
+читають стани обладнання, публікують requests. EM арбітрує requests
+з пріоритетами та інтерлоками, керує relay.
 
-**Prerequisite:** Auto-persist settings (Phase 6.5)
+```
+Protection > Defrost > Thermostat (пріоритет арбітражу)
+```
 
-**Залежності:** Phase 6 (MQTT для сповіщень), Phase 4 (thermostat)
-**Оцінка:** 3-4 сесії
+Інтерлоки (hardcoded в EM):
+- Тен і компресор НІКОЛИ одночасно (dFT=1)
+- Клапан ГГ відкривається ДО компресора (dFT=2)
+- Protection lockout = все вимкнено
+
+**Порядок реалізації:**
+- [x] **9.1 Equipment Manager** — новий модуль (priority=0), єдиний власник HAL. (DONE — 2026-02-18)
+  Читає сенсори → equipment.*, читає req.* → relay. Арбітраж, інтерлоки.
+  Thermostat рефакторинг (req.compressor замість direct relay).
+  bindings.json: module="equipment". Cross-module widget keys в generate_ui.py.
+  
+- [x] **9.2 Thermostat v2** — повна логіка зі spec_v3 (§2). (DONE — 2026-02-18)
+  State machine: STARTUP → IDLE → COOLING → SAFETY_RUN.
+  Асиметричний диференціал (ON: T>=SP+rd, OFF: T<=SP), вент. випарника (3 режими FAn),
+  вент. конденсатора (затримка COd), Safety Run, 11 persist параметрів, 18 state keys.
+  
+- [x] **9.3 Protection** — захист і аварії (spec_v3 §2.7 + розширення). (DONE — 2026-02-18)
+  5 alarm monitors: HAL, LAL, ERR1, ERR2, Door. Delayed alarms (dAd хв), defrost blocking.
+  Auto-clear + manual reset (protection.reset_alarms). 5 persist params, 14 state keys.
+  protection.lockout reserved (always false). Priority HIGH(1) — runs before Thermostat.
+  
+- [ ] **9.4 Defrost** — цикл розморозки (spec_v3 §3).
+  State machine з 7 фазами (стабілізація→клапан→відтайка→вирівнювання→дренаж→FAD→відновлення).
+  3 типи: зупинка (dFT=0) / тен (dFT=1) / гарячий газ (dFT=2).
+  4 ініціації: таймер (dit) / demand (dSS) / комбінований / ручний.
+  Завершення: по T_evap (dSt) або по таймеру безпеки (dEt).
+  Лічильник відтайок в NVS (persist). defrost.active → EM блокує Thermostat.
+
+**Базовий документ:** docs/controller_spec_v3.docx (10K chars, 19 таблиць параметрів)
+
+**Залежності:** Phase 6.5 (auto-persist), Phase 7a (WebUI для відображення)
+**Оцінка:** 6-8 сесій
 
 ### Phase 10 — Multi-sensor + PID
 **Мета:** Підтримка складних конфігурацій обладнання.
@@ -293,6 +329,14 @@ Multi-sensor, PID, Modbus, Cloud.
 ---
 
 ## Changelog
+- v11.0 (2026-02-18) — Phase 9.3 DONE: Protection module (5 alarm monitors, dAd delay, defrost blocking,
+  auto-clear + manual reset, 5 persist params, 14 state keys). 3 modules, 42 state keys total.
+- v10.0 (2026-02-18) — Phase 9.2 DONE: Thermostat v2 (asymmetric differential, state machine,
+  fan control, Safety Run, 11 persist params, 18 state keys). hysteresis→differential rename.
+- v9.0 (2026-02-18) — Phase 9.1 DONE: Equipment Manager (HAL owner, arbitration, interlocks).
+  Thermostat рефакторинг: req.* замість direct relay. Cross-module widget keys в генераторі.
+- v8.0 (2026-02-17) — Phase 7a DONE: Svelte WebUI (14 widgets, Dashboard, sidebar/tabs, 17KB gzipped).
+  Phase 7 розбито на 7a (scaffold, done) та 7b-c (charts, animations, PWA — pending).
 - v7.0 (2026-02-17) — Phase 6.5 DONE: PersistService, SharedState persist callback, state_meta validation.
   Auto-persist = framework-level NVS. DataLogger перенесено на Phase 9+.
 - v6.0 (2026-02-17) — MQTT TLS + SNTP підтверджені boot log. Phase 6.5 додано (auto-persist + DataLogger).
