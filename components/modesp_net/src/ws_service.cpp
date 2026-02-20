@@ -235,7 +235,7 @@ esp_err_t WsService::ws_handler(httpd_req_t* req) {
 void WsService::broadcast_state() {
     if (!server_ || !state_) return;
 
-    char buf[2048];
+    char buf[3072];  // ~80 keys × ~35 bytes/key (BUG-011 fix)
     WsSerCtx ctx = {buf, sizeof(buf), 0, true};
     ctx.pos += snprintf(buf, sizeof(buf), "{");
 

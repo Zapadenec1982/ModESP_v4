@@ -95,7 +95,7 @@ static void serialize_state_entry(const StateKey& key, const StateValue& value, 
 esp_err_t HttpService::handle_get_state(httpd_req_t* req) {
     auto* self = static_cast<HttpService*>(req->user_ctx);
 
-    char buf[2048];
+    char buf[3072];  // ~80 keys × ~35 bytes/key (BUG-011 fix)
     SerCtx ctx = {buf, sizeof(buf), 0, true};
     ctx.pos += snprintf(buf, sizeof(buf), "{");
 

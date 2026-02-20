@@ -31,7 +31,7 @@ constexpr const char* BUILD_DATE = __DATE__ " " __TIME__;
 // ═══════════════════════════════════════════════════════════════
 
 #ifndef MODESP_MAX_KEY_LENGTH
-#define MODESP_MAX_KEY_LENGTH 24
+#define MODESP_MAX_KEY_LENGTH 32   // Найдовший ключ: defrost.consecutive_timeouts (28 chars)
 #endif
 
 #ifndef MODESP_MAX_STRING_VALUE_LENGTH
