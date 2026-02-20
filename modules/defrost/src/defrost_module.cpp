@@ -1,0 +1,495 @@
+/**
+ * @file defrost_module.cpp
+ * @brief Defrost cycle — 7-phase state machine (spec_v3 §3)
+ *
+ * State machine:
+ *   IDLE → [dFT=2: STABILIZE → VALVE_OPEN →] ACTIVE
+ *        → [dFT=2: EQUALIZE →] DRIP → FAD → IDLE
+ *
+ * Relay states per phase — see enter_phase() comments.
+ * Equipment Manager applies arbitration and interlocks.
+ */
+
+#include "defrost_module.h"
+#include "esp_log.h"
+
+static const char* TAG = "Defrost";
+
+// ═══════════════════════════════════════════════════════════════
+// Constructor
+// ═══════════════════════════════════════════════════════════════
+
+DefrostModule::DefrostModule()
+    : BaseModule("defrost", modesp::ModulePriority::NORMAL)
+{}
+
+// ═══════════════════════════════════════════════════════════════
+// Helpers: читання з SharedState
+// ═══════════════════════════════════════════════════════════════
+
+float DefrostModule::read_float(const char* key, float def) {
+    auto v = state_get(key);
+    if (!v.has_value()) return def;
+    const auto* fp = etl::get_if<float>(&v.value());
+    return fp ? *fp : def;
+}
+
+bool DefrostModule::read_bool(const char* key, bool def) {
+    auto v = state_get(key);
+    if (!v.has_value()) return def;
+    const auto* bp = etl::get_if<bool>(&v.value());
+    return bp ? *bp : def;
+}
+
+int32_t DefrostModule::read_int(const char* key, int32_t def) {
+    auto v = state_get(key);
+    if (!v.has_value()) return def;
+    const auto* ip = etl::get_if<int32_t>(&v.value());
+    return ip ? *ip : def;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Sync settings з SharedState
+// ═══════════════════════════════════════════════════════════════
+
+void DefrostModule::sync_settings() {
+    defrost_type_  = read_int("defrost.type", 0);
+    counter_mode_  = read_int("defrost.counter_mode", 1);
+    initiation_    = read_int("defrost.initiation", 0);
+    end_temp_      = read_float("defrost.end_temp", end_temp_);
+    demand_temp_   = read_float("defrost.demand_temp", demand_temp_);
+    fad_temp_      = read_float("defrost.fad_temp", fad_temp_);
+
+    // Години → мілісекунди
+    interval_ms_ = static_cast<uint32_t>(read_int("defrost.interval", 8)) * 3600000;
+
+    // Хвилини → мілісекунди
+    max_duration_ms_ = static_cast<uint32_t>(read_int("defrost.max_duration", 30)) * 60000;
+
+    // Секунди → мілісекунди
+    drip_time_ms_   = static_cast<uint32_t>(read_int("defrost.drip_time", 120)) * 1000;
+    fan_delay_ms_   = static_cast<uint32_t>(read_int("defrost.fan_delay", 120)) * 1000;
+    stabilize_ms_   = static_cast<uint32_t>(read_int("defrost.stabilize_time", 30)) * 1000;
+    valve_delay_ms_ = static_cast<uint32_t>(read_int("defrost.valve_delay", 3)) * 1000;
+    equalize_ms_    = static_cast<uint32_t>(read_int("defrost.equalize_time", 90)) * 1000;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Phase name
+// ═══════════════════════════════════════════════════════════════
+
+const char* DefrostModule::phase_name() const {
+    switch (phase_) {
+        case Phase::IDLE:       return "idle";
+        case Phase::STABILIZE:  return "stabilize";
+        case Phase::VALVE_OPEN: return "valve_open";
+        case Phase::ACTIVE:     return "active";
+        case Phase::EQUALIZE:   return "equalize";
+        case Phase::DRIP:       return "drip";
+        case Phase::FAD:        return "fad";
+    }
+    return "unknown";
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Requests до Equipment Manager
+// ═══════════════════════════════════════════════════════════════
+
+void DefrostModule::set_requests(bool comp, bool heater, bool evap_fan,
+                                  bool cond_fan, bool hg_valve) {
+    if (req_comp_ != comp) {
+        req_comp_ = comp;
+        state_set("defrost.req.compressor", comp);
+    }
+    if (req_heater_ != heater) {
+        req_heater_ = heater;
+        state_set("defrost.req.heater", heater);
+    }
+    if (req_evap_ != evap_fan) {
+        req_evap_ = evap_fan;
+        state_set("defrost.req.evap_fan", evap_fan);
+    }
+    if (req_cond_ != cond_fan) {
+        req_cond_ = cond_fan;
+        state_set("defrost.req.cond_fan", cond_fan);
+    }
+    if (req_hg_ != hg_valve) {
+        req_hg_ = hg_valve;
+        state_set("defrost.req.hg_valve", hg_valve);
+    }
+}
+
+void DefrostModule::clear_requests() {
+    set_requests(false, false, false, false, false);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Enter phase — встановлення relay requests для кожної фази
+// ═══════════════════════════════════════════════════════════════
+
+void DefrostModule::enter_phase(Phase p) {
+    phase_ = p;
+    phase_timer_ms_ = 0;
+
+    state_set("defrost.active", p != Phase::IDLE);
+    state_set("defrost.phase", phase_name());
+
+    switch (p) {
+        case Phase::IDLE:
+            clear_requests();
+            state_set("defrost.state", "idle");
+            break;
+
+        case Phase::STABILIZE:
+            // dFT=2, Фаза 1: все OFF, тиск вирівнюється
+            set_requests(false, false, false, false, false);
+            state_set("defrost.state", "stabilize");
+            break;
+
+        case Phase::VALVE_OPEN:
+            // dFT=2, Фаза 2: тільки клапан ГГ ON
+            set_requests(false, false, false, false, true);
+            state_set("defrost.state", "valve_open");
+            break;
+
+        case Phase::ACTIVE:
+            // Використовуємо active_defrost_type_ — кешований при старті циклу (BUG-002 fix)
+            if (active_defrost_type_ == 0) {
+                // Природна: все OFF (компресор зупиняється)
+                set_requests(false, false, false, false, false);
+                state_set("defrost.state", "defrost_natural");
+            } else if (active_defrost_type_ == 1) {
+                // Тен: heater ON, решта OFF
+                set_requests(false, true, false, false, false);
+                state_set("defrost.state", "defrost_heater");
+            } else {
+                // ГГ: компресор ON + клапан ГГ ON
+                set_requests(true, false, false, false, true);
+                state_set("defrost.state", "defrost_hotgas");
+            }
+            break;
+
+        case Phase::EQUALIZE:
+            // dFT=2, Фаза 4: все OFF, тиск падає
+            set_requests(false, false, false, false, false);
+            state_set("defrost.state", "equalize");
+            break;
+
+        case Phase::DRIP:
+            // Все OFF, вода стікає
+            set_requests(false, false, false, false, false);
+            state_set("defrost.state", "drip");
+            break;
+
+        case Phase::FAD:
+            // Компресор ON, конд. вент. ON, вент. вип. OFF
+            set_requests(true, false, false, true, false);
+            state_set("defrost.state", "fad");
+            break;
+    }
+
+    ESP_LOGI(TAG, "Phase → %s", phase_name());
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Lifecycle: on_init
+// ═══════════════════════════════════════════════════════════════
+
+bool DefrostModule::on_init() {
+    sync_settings();
+
+    // Відновлюємо persist лічильники з SharedState (заповнені PersistService)
+    interval_timer_ms_ = static_cast<uint32_t>(read_int("defrost.interval_timer", 0)) * 1000;
+    defrost_count_ = read_int("defrost.defrost_count", 0);
+
+    // Початковий стан
+    state_set("defrost.active", false);
+    state_set("defrost.phase", "idle");
+    state_set("defrost.state", "idle");
+    state_set("defrost.phase_timer", static_cast<int32_t>(0));
+    state_set("defrost.interval_timer", static_cast<int32_t>(interval_timer_ms_ / 1000));
+    state_set("defrost.defrost_count", defrost_count_);
+    state_set("defrost.last_termination", "none");
+    state_set("defrost.consecutive_timeouts", static_cast<int32_t>(0));
+    state_set("defrost.manual_start", false);
+    state_set("defrost.req.compressor", false);
+    state_set("defrost.req.heater", false);
+    state_set("defrost.req.evap_fan", false);
+    state_set("defrost.req.cond_fan", false);
+    state_set("defrost.req.hg_valve", false);
+
+    const char* type_name = defrost_type_ == 0 ? "natural" :
+                            defrost_type_ == 1 ? "heater" : "hotgas";
+    const char* init_name = initiation_ == 0 ? "timer" :
+                            initiation_ == 1 ? "demand" :
+                            initiation_ == 2 ? "combo" : "disabled";
+    ESP_LOGI(TAG, "Initialized (type=%s, interval=%ldh, initiation=%s, counter=%s)",
+             type_name,
+             static_cast<long>(interval_ms_ / 3600000),
+             init_name,
+             counter_mode_ == 1 ? "realtime" : "compressor");
+    ESP_LOGI(TAG, "  end_temp=%.1f, max_duration=%ldmin, defrost_count=%ld",
+             end_temp_,
+             static_cast<long>(max_duration_ms_ / 60000),
+             static_cast<long>(defrost_count_));
+    return true;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Lifecycle: on_update — головний цикл
+// ═══════════════════════════════════════════════════════════════
+
+void DefrostModule::on_update(uint32_t dt_ms) {
+    sync_settings();
+
+    // Читаємо inputs
+    evap_temp_     = read_float("equipment.evap_temp");
+    sensor2_ok_    = read_bool("equipment.sensor2_ok");
+    compressor_on_ = read_bool("equipment.compressor");
+    bool lockout   = read_bool("protection.lockout");
+
+    // Protection lockout → abort defrost
+    if (lockout && phase_ != Phase::IDLE) {
+        ESP_LOGW(TAG, "Protection lockout — aborting defrost");
+        finish_defrost();
+        return;
+    }
+
+    // Phase dispatch
+    switch (phase_) {
+        case Phase::IDLE:
+            update_idle(dt_ms);
+            break;
+        case Phase::STABILIZE:
+            update_stabilize(dt_ms);
+            break;
+        case Phase::VALVE_OPEN:
+            update_valve_open(dt_ms);
+            break;
+        case Phase::ACTIVE:
+            update_active_phase(dt_ms);
+            break;
+        case Phase::EQUALIZE:
+            update_equalize(dt_ms);
+            break;
+        case Phase::DRIP:
+            update_drip(dt_ms);
+            break;
+        case Phase::FAD:
+            update_fad(dt_ms);
+            break;
+    }
+
+    publish_state();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// IDLE — перевірка ініціації
+// ═══════════════════════════════════════════════════════════════
+
+void DefrostModule::update_idle(uint32_t dt_ms) {
+    // Ручний запуск
+    if (read_bool("defrost.manual_start")) {
+        state_set("defrost.manual_start", false);
+        start_defrost("manual");
+        return;
+    }
+
+    // Ініціація вимкнена
+    if (initiation_ == 3) return;
+
+    // Оновлюємо interval timer
+    if (counter_mode_ == 1) {
+        // Реальний час — завжди тікає
+        interval_timer_ms_ += dt_ms;
+    } else if (counter_mode_ == 2) {
+        // Час компресора — тільки коли компресор ON
+        if (compressor_on_) {
+            interval_timer_ms_ += dt_ms;
+        }
+    }
+
+    // Перевіряємо triggers
+    bool timer_trigger  = (initiation_ == 0 || initiation_ == 2) && check_timer_trigger();
+    bool demand_trigger = (initiation_ == 1 || initiation_ == 2) && check_demand_trigger();
+
+    if (timer_trigger || demand_trigger) {
+        // Оптимізація: випарник чистий → скасовуємо
+        if (sensor2_ok_ && evap_temp_ > end_temp_) {
+            ESP_LOGI(TAG, "Defrost skipped — evap clean (%.1f > %.1f)",
+                     evap_temp_, end_temp_);
+            interval_timer_ms_ = 0;
+            return;
+        }
+        start_defrost(timer_trigger ? "timer" : "demand");
+    }
+}
+
+bool DefrostModule::check_timer_trigger() {
+    return interval_timer_ms_ >= interval_ms_;
+}
+
+bool DefrostModule::check_demand_trigger() {
+    // Потрібен датчик випарника
+    if (!sensor2_ok_) return false;
+    return evap_temp_ < demand_temp_;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Start defrost
+// ═══════════════════════════════════════════════════════════════
+
+void DefrostModule::start_defrost(const char* reason) {
+    // Кешуємо тип defrost на весь цикл — зміна через WebUI не впливає mid-cycle (BUG-002 fix)
+    active_defrost_type_ = defrost_type_;
+    ESP_LOGI(TAG, "Starting defrost (%s), type=%ld", reason, static_cast<long>(active_defrost_type_));
+    interval_timer_ms_ = 0;
+
+    if (active_defrost_type_ == 2) {
+        // Гарячий газ → починаємо зі стабілізації
+        enter_phase(Phase::STABILIZE);
+    } else {
+        // Природна або тен → одразу active
+        enter_phase(Phase::ACTIVE);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Phase handlers: dFT=2 специфічні фази
+// ═══════════════════════════════════════════════════════════════
+
+void DefrostModule::update_stabilize(uint32_t dt_ms) {
+    phase_timer_ms_ += dt_ms;
+    if (phase_timer_ms_ >= stabilize_ms_) {
+        enter_phase(Phase::VALVE_OPEN);
+    }
+}
+
+void DefrostModule::update_valve_open(uint32_t dt_ms) {
+    phase_timer_ms_ += dt_ms;
+    if (phase_timer_ms_ >= valve_delay_ms_) {
+        enter_phase(Phase::ACTIVE);
+    }
+}
+
+void DefrostModule::update_equalize(uint32_t dt_ms) {
+    phase_timer_ms_ += dt_ms;
+    if (phase_timer_ms_ >= equalize_ms_) {
+        enter_phase(Phase::DRIP);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ACTIVE — завершення по T_evap або таймеру безпеки
+// ═══════════════════════════════════════════════════════════════
+
+void DefrostModule::update_active_phase(uint32_t dt_ms) {
+    phase_timer_ms_ += dt_ms;
+
+    // Завершення по T_evap (основна)
+    if (sensor2_ok_ && evap_temp_ >= end_temp_) {
+        consecutive_timeouts_ = 0;
+        state_set("defrost.last_termination", "temp");
+        finish_active_phase("temp reached");
+        return;
+    }
+
+    // Завершення по таймеру безпеки (dEt)
+    if (phase_timer_ms_ >= max_duration_ms_) {
+        consecutive_timeouts_++;
+        state_set("defrost.last_termination", "timeout");
+        state_set("defrost.consecutive_timeouts", consecutive_timeouts_);
+        if (consecutive_timeouts_ >= 3) {
+            ESP_LOGW(TAG, "3 consecutive timeouts — possible heater/sensor failure!");
+        }
+        finish_active_phase("timeout");
+        return;
+    }
+}
+
+void DefrostModule::finish_active_phase(const char* reason) {
+    defrost_count_++;
+    state_set("defrost.defrost_count", defrost_count_);
+    ESP_LOGI(TAG, "Active defrost finished (%s), count=%ld",
+             reason, static_cast<long>(defrost_count_));
+
+    // Використовуємо active_defrost_type_ — кешований при старті циклу (BUG-002 fix)
+    if (active_defrost_type_ == 2) {
+        // ГГ → потрібно вирівнювання тиску
+        enter_phase(Phase::EQUALIZE);
+    } else {
+        // Природна/тен → одразу drip
+        enter_phase(Phase::DRIP);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DRIP — дренаж
+// ═══════════════════════════════════════════════════════════════
+
+void DefrostModule::update_drip(uint32_t dt_ms) {
+    phase_timer_ms_ += dt_ms;
+    if (phase_timer_ms_ >= drip_time_ms_) {
+        // Якщо fan_delay = 0 → пропускаємо FAD
+        if (fan_delay_ms_ == 0) {
+            finish_defrost();
+        } else {
+            enter_phase(Phase::FAD);
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FAD — Fan After Defrost
+// ═══════════════════════════════════════════════════════════════
+
+void DefrostModule::update_fad(uint32_t dt_ms) {
+    phase_timer_ms_ += dt_ms;
+
+    // Завершення по T_evap < FAT (якщо є датчик)
+    if (sensor2_ok_ && evap_temp_ < fad_temp_) {
+        ESP_LOGI(TAG, "FAD complete (T_evap=%.1f < FAT=%.1f)", evap_temp_, fad_temp_);
+        finish_defrost();
+        return;
+    }
+
+    // Завершення по таймеру FAd
+    if (phase_timer_ms_ >= fan_delay_ms_) {
+        ESP_LOGI(TAG, "FAD complete (timer %lu s)", fan_delay_ms_ / 1000);
+        finish_defrost();
+        return;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Finish defrost — повернення в IDLE
+// ═══════════════════════════════════════════════════════════════
+
+void DefrostModule::finish_defrost() {
+    ESP_LOGI(TAG, "Defrost cycle complete");
+    enter_phase(Phase::IDLE);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Публікація стану
+// ═══════════════════════════════════════════════════════════════
+
+void DefrostModule::publish_state() {
+    state_set("defrost.phase_timer", static_cast<int32_t>(phase_timer_ms_ / 1000));
+    state_set("defrost.interval_timer", static_cast<int32_t>(interval_timer_ms_ / 1000));
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Stop
+// ═══════════════════════════════════════════════════════════════
+
+void DefrostModule::on_stop() {
+    if (phase_ != Phase::IDLE) {
+        ESP_LOGW(TAG, "Stopping during active defrost — aborting");
+    }
+    clear_requests();
+    state_set("defrost.active", false);
+    state_set("defrost.phase", "idle");
+    state_set("defrost.state", "stopped");
+    ESP_LOGI(TAG, "Defrost stopped");
+}
