@@ -99,8 +99,8 @@ void EquipmentModule::on_update(uint32_t dt_ms) {
 }
 
 void EquipmentModule::on_message(const etl::imessage& msg) {
-    // Safe mode — все вимкнути
-    if (msg.get_message_id() == 1) {  // SYSTEM_SAFE_MODE
+    // Safe mode — все вимкнути (NEW-001 fix: було 1, а SYSTEM_SAFE_MODE = 7)
+    if (msg.get_message_id() == modesp::msg_id::SYSTEM_SAFE_MODE) {
         out_ = {};
         apply_outputs();
         publish_state();
