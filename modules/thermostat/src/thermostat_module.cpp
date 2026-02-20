@@ -227,12 +227,13 @@ void ThermostatModule::on_update(uint32_t dt_ms) {
         return;
     }
 
-    // 6. Defrost active — thermostat не керує (крім FAD)
+    // 6. Defrost active — thermostat не керує (крім FAD і COd затримки)
     if (defrost_active_ && !defrost_fad_) {
         // Defrost модуль керує через EM
         request_compressor(false);
         request_evap_fan(false);
-        request_cond_fan(false);
+        // Конд. вентилятор — дозволяємо COd затримку відпрацювати (BUG-004 fix)
+        update_cond_fan(dt_ms);
         return;
     }
 
@@ -399,12 +400,8 @@ void ThermostatModule::update_evap_fan() {
 // ═══════════════════════════════════════════════════════════════
 
 void ThermostatModule::update_cond_fan(uint32_t dt_ms) {
-    // При defrost — вимкнений (окрім FAD, але FAD обробляється раніше)
-    if (defrost_active_ && !defrost_fad_) {
-        request_cond_fan(false);
-        cond_fan_delay_active_ = false;
-        return;
-    }
+    // BUG-004 fix: при defrost — не вимикаємо одразу, дозволяємо COd delay відпрацювати.
+    // compressor_on_ == false при defrost → delay логіка нижче спрацює автоматично.
 
     if (compressor_on_) {
         // Компресор ON → конд. вент. ON
