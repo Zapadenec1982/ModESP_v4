@@ -12,7 +12,8 @@
     {"role": "evap_fan",       "type": "actuator", "driver": "relay",         "label": "Вент. випарника",      "optional": true},
     {"role": "cond_fan",       "type": "actuator", "driver": "relay",         "label": "Вент. конденсатора",   "optional": true},
     {"role": "hg_valve",       "type": "actuator", "driver": "relay",         "label": "Клапан гарячого газу", "optional": true},
-    {"role": "door_contact",   "type": "sensor",   "driver": "digital_input", "label": "Контакт дверей",       "optional": true}
+    {"role": "door_contact",   "type": "sensor",   "driver": "digital_input", "label": "Контакт дверей",       "optional": true},
+    {"role": "night_input",    "type": "sensor",   "driver": "digital_input", "label": "Вхід нічного режиму",  "optional": true}
   ],
 
   "state": {
@@ -25,7 +26,8 @@
     "equipment.evap_fan":    {"type": "bool",  "access": "read", "description": "Фактичний стан вент. випарника"},
     "equipment.cond_fan":    {"type": "bool",  "access": "read", "description": "Фактичний стан вент. конденсатора"},
     "equipment.hg_valve":    {"type": "bool",  "access": "read", "description": "Фактичний стан клапана ГГ"},
-    "equipment.door_open":   {"type": "bool",  "access": "read", "description": "Стан дверей"}
+    "equipment.door_open":   {"type": "bool",  "access": "read", "description": "Стан дверей"},
+    "equipment.night_input": {"type": "bool",  "access": "read", "description": "Дискретний вхід нічного режиму"}
   },
 
 

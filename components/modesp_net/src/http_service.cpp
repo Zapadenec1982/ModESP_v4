@@ -7,6 +7,7 @@
 #include "modesp/shared_state.h"
 #include "modesp/module_manager.h"
 #include "modesp/services/config_service.h"
+#include "modesp/services/persist_service.h"
 #include "modesp/net/wifi_service.h"
 #include "modesp/types.h"
 
@@ -123,7 +124,7 @@ static void serialize_state_entry(const StateKey& key, const StateValue& value, 
 esp_err_t HttpService::handle_get_state(httpd_req_t* req) {
     auto* self = static_cast<HttpService*>(req->user_ctx);
 
-    char buf[3072];  // ~80 keys × ~35 bytes/key (BUG-011 fix)
+    char buf[4096];  // AUDIT-021: ~87 ключів × ~35 bytes/key, запас до ~115
     SerCtx ctx = {buf, sizeof(buf), 0, true};
     ctx.pos += snprintf(buf, sizeof(buf), "{");
 
@@ -627,9 +628,15 @@ esp_err_t HttpService::handle_post_wifi_ap(httpd_req_t* req) {
 }
 
 esp_err_t HttpService::handle_post_restart(httpd_req_t* req) {
+    auto* self = static_cast<HttpService*>(req->user_ctx);
     set_cors_headers(req);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, "{\"ok\":true,\"msg\":\"Restarting...\"}");
+
+    // BUG-014: flush pending NVS writes before restart
+    if (self->persist_) {
+        self->persist_->flush_now();
+    }
 
     // Delay to allow response to be sent
     vTaskDelay(pdMS_TO_TICKS(500));
@@ -1019,6 +1026,7 @@ bool HttpService::start_server() {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
     config.max_uri_handlers = 40;
+    config.max_open_sockets = 4;   // lwIP has only 10 sockets globally; leave room for WiFi/DNS/SNTP
     config.stack_size = 8192;
 
     // WebSocket connections are long-lived. The default recv_wait_timeout

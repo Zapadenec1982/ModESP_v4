@@ -24,47 +24,11 @@ DefrostModule::DefrostModule()
 {}
 
 // ═══════════════════════════════════════════════════════════════
-// Helpers: читання з SharedState
-// ═══════════════════════════════════════════════════════════════
-
-float DefrostModule::read_float(const char* key, float def) {
-    auto v = state_get(key);
-    if (!v.has_value()) return def;
-    const auto* fp = etl::get_if<float>(&v.value());
-    return fp ? *fp : def;
-}
-
-bool DefrostModule::read_bool(const char* key, bool def) {
-    auto v = state_get(key);
-    if (!v.has_value()) return def;
-    const auto* bp = etl::get_if<bool>(&v.value());
-    return bp ? *bp : def;
-}
-
-int32_t DefrostModule::read_int(const char* key, int32_t def) {
-    auto v = state_get(key);
-    if (!v.has_value()) return def;
-    const auto* ip = etl::get_if<int32_t>(&v.value());
-    return ip ? *ip : def;
-}
-
-// ═══════════════════════════════════════════════════════════════
 // Sync settings з SharedState
 // ═══════════════════════════════════════════════════════════════
 
 void DefrostModule::sync_settings() {
     defrost_type_  = read_int("defrost.type", 0);
-    // Feature guard: невалідний тип → fallback
-    if (defrost_type_ == 1 && !has_feature("defrost_electric")) {
-        ESP_LOGW(TAG, "Defrost type=1 but no heater → fallback to 0");
-        defrost_type_ = 0;
-        state_set("defrost.type", static_cast<int32_t>(0));
-    }
-    if (defrost_type_ == 2 && !has_feature("defrost_hot_gas")) {
-        ESP_LOGW(TAG, "Defrost type=2 but no hg_valve → fallback to 0");
-        defrost_type_ = 0;
-        state_set("defrost.type", static_cast<int32_t>(0));
-    }
     counter_mode_  = read_int("defrost.counter_mode", 1);
     initiation_    = read_int("defrost.initiation", 0);
     end_temp_      = read_float("defrost.end_temp", end_temp_);
@@ -77,12 +41,14 @@ void DefrostModule::sync_settings() {
     // Хвилини → мілісекунди
     max_duration_ms_ = static_cast<uint32_t>(read_int("defrost.max_duration", 30)) * 60000;
 
+    // Хвилини → мілісекунди
+    drip_time_ms_   = static_cast<uint32_t>(read_int("defrost.drip_time", 2)) * 60000;
+    fan_delay_ms_   = static_cast<uint32_t>(read_int("defrost.fan_delay", 2)) * 60000;
+    stabilize_ms_   = static_cast<uint32_t>(read_int("defrost.stabilize_time", 1)) * 60000;
+    equalize_ms_    = static_cast<uint32_t>(read_int("defrost.equalize_time", 2)) * 60000;
+
     // Секунди → мілісекунди
-    drip_time_ms_   = static_cast<uint32_t>(read_int("defrost.drip_time", 120)) * 1000;
-    fan_delay_ms_   = static_cast<uint32_t>(read_int("defrost.fan_delay", 120)) * 1000;
-    stabilize_ms_   = static_cast<uint32_t>(read_int("defrost.stabilize_time", 30)) * 1000;
     valve_delay_ms_ = static_cast<uint32_t>(read_int("defrost.valve_delay", 3)) * 1000;
-    equalize_ms_    = static_cast<uint32_t>(read_int("defrost.equalize_time", 90)) * 1000;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -139,6 +105,7 @@ void DefrostModule::clear_requests() {
 // ═══════════════════════════════════════════════════════════════
 
 void DefrostModule::enter_phase(Phase p) {
+    if (phase_ == p) return;  // BUG-006: re-entry guard
     phase_ = p;
     phase_timer_ms_ = 0;
 
@@ -152,14 +119,15 @@ void DefrostModule::enter_phase(Phase p) {
             break;
 
         case Phase::STABILIZE:
-            // dFT=2, Фаза 1: все OFF, тиск вирівнюється
-            set_requests(false, false, false, false, false);
+            // dFT=2, Фаза 1: компресор ON + конд.вент ON, вип.вент OFF
+            // Тиск стабілізується перед відкриттям клапана ГГ
+            set_requests(true, false, false, true, false);
             state_set("defrost.state", "stabilize");
             break;
 
         case Phase::VALVE_OPEN:
-            // dFT=2, Фаза 2: тільки клапан ГГ ON
-            set_requests(false, false, false, false, true);
+            // dFT=2, Фаза 2: компресор ON + конд.вент ON + клапан ГГ ON
+            set_requests(true, false, false, true, true);
             state_set("defrost.state", "valve_open");
             break;
 
@@ -224,6 +192,7 @@ bool DefrostModule::on_init() {
     state_set("defrost.consecutive_timeouts", static_cast<int32_t>(0));
     state_set("defrost.heater_alarm", false);
     state_set("defrost.manual_start", false);
+    state_set("defrost.manual_stop", false);
     state_set("defrost.req.compressor", false);
     state_set("defrost.req.heater", false);
     state_set("defrost.req.evap_fan", false);
@@ -269,6 +238,16 @@ void DefrostModule::on_update(uint32_t dt_ms) {
         ESP_LOGW(TAG, "Protection lockout — aborting defrost");
         finish_defrost();
         return;
+    }
+
+    // Ручна зупинка розморозки
+    if (read_bool("defrost.manual_stop")) {
+        state_set("defrost.manual_stop", false);
+        if (phase_ != Phase::IDLE) {
+            ESP_LOGI(TAG, "Manual stop — aborting defrost");
+            finish_defrost();
+            return;
+        }
     }
 
     // Phase dispatch
@@ -346,7 +325,6 @@ bool DefrostModule::check_timer_trigger() {
 }
 
 bool DefrostModule::check_demand_trigger() {
-    if (!has_feature("defrost_by_sensor")) return false;
     // Потрібен датчик випарника
     if (!sensor2_ok_) return false;
     // Мінімальний інтервал — не запускати defrost одразу після попереднього (BUG-008 fix)
@@ -406,7 +384,7 @@ void DefrostModule::update_active_phase(uint32_t dt_ms) {
     phase_timer_ms_ += dt_ms;
 
     // Завершення по T_evap (основна)
-    if (has_feature("defrost_by_sensor") && sensor2_ok_ && evap_temp_ >= end_temp_) {
+    if (sensor2_ok_ && evap_temp_ >= end_temp_) {
         consecutive_timeouts_ = 0;
         state_set("defrost.heater_alarm", false);
         state_set("defrost.last_termination", "temp");
@@ -498,7 +476,11 @@ void DefrostModule::finish_defrost() {
 
 void DefrostModule::publish_state() {
     state_set("defrost.phase_timer", static_cast<int32_t>(phase_timer_ms_ / 1000));
-    state_set("defrost.interval_timer", static_cast<int32_t>(interval_timer_ms_ / 1000));
+    // Зворотній відлік: скільки залишилось до наступної розморозки
+    int32_t remaining = (interval_ms_ > interval_timer_ms_)
+        ? static_cast<int32_t>((interval_ms_ - interval_timer_ms_) / 1000)
+        : 0;
+    state_set("defrost.interval_timer", remaining);
 }
 
 // ═══════════════════════════════════════════════════════════════

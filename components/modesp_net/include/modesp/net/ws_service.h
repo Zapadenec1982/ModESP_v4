@@ -13,6 +13,7 @@
 
 #include "modesp/base_module.h"
 #include "esp_http_server.h"
+#include "freertos/semphr.h"
 
 namespace modesp {
 
@@ -36,6 +37,10 @@ private:
     // Connected clients (3 slots to handle brief overlap during reconnects)
     static constexpr size_t MAX_WS_CLIENTS = 3;
     int client_fds_[MAX_WS_CLIENTS] = {-1, -1, -1};
+
+    // BUG-021: mutex для client_fds_ (доступ з main loop + httpd потоків)
+    StaticSemaphore_t clients_mutex_buf_;
+    SemaphoreHandle_t clients_mutex_ = nullptr;
 
     // Delta detection
     uint32_t last_state_version_ = 0;

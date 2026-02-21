@@ -26,31 +26,6 @@ ProtectionModule::ProtectionModule()
 {}
 
 // ═══════════════════════════════════════════════════════════════
-// Helpers: читання з SharedState
-// ═══════════════════════════════════════════════════════════════
-
-float ProtectionModule::read_float(const char* key, float def) {
-    auto v = state_get(key);
-    if (!v.has_value()) return def;
-    const auto* fp = etl::get_if<float>(&v.value());
-    return fp ? *fp : def;
-}
-
-bool ProtectionModule::read_bool(const char* key, bool def) {
-    auto v = state_get(key);
-    if (!v.has_value()) return def;
-    const auto* bp = etl::get_if<bool>(&v.value());
-    return bp ? *bp : def;
-}
-
-int32_t ProtectionModule::read_int(const char* key, int32_t def) {
-    auto v = state_get(key);
-    if (!v.has_value()) return def;
-    const auto* ip = etl::get_if<int32_t>(&v.value());
-    return ip ? *ip : def;
-}
-
-// ═══════════════════════════════════════════════════════════════
 // Sync settings з SharedState (WebUI/API може їх змінити)
 // ═══════════════════════════════════════════════════════════════
 
@@ -63,6 +38,10 @@ void ProtectionModule::sync_settings() {
     door_delay_ms_  = static_cast<uint32_t>(read_int("protection.door_delay", 5)) * 60000;
 
     manual_reset_ = read_bool("protection.manual_reset", manual_reset_);
+
+    // Хвилини → мілісекунди (затримка аварії високої T після відтайки)
+    post_defrost_delay_ms_ = static_cast<uint32_t>(
+        read_int("protection.post_defrost_delay", 30)) * 60000;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -119,11 +98,37 @@ void ProtectionModule::on_update(uint32_t dt_ms) {
         }
     }
 
-    // 3. Перевіряємо команду скидання аварій
+    // 3. Post-defrost suppression — блокуємо HAL alarm після відтайки
+    if (defrost && !was_defrost_active_) {
+        // Початок відтайки
+        post_defrost_suppression_ = false;
+        post_defrost_timer_ms_ = 0;
+    }
+    if (!defrost && was_defrost_active_) {
+        // Кінець відтайки → починаємо suppress timer
+        post_defrost_suppression_ = true;
+        post_defrost_timer_ms_ = 0;
+        ESP_LOGI(TAG, "Post-defrost suppression started (%lu min)",
+                 post_defrost_delay_ms_ / 60000);
+    }
+    was_defrost_active_ = defrost;
+
+    if (post_defrost_suppression_) {
+        post_defrost_timer_ms_ += dt_ms;
+        if (post_defrost_timer_ms_ >= post_defrost_delay_ms_) {
+            post_defrost_suppression_ = false;
+            ESP_LOGI(TAG, "Post-defrost suppression ended");
+        }
+    }
+
+    // Сумарний suppress для HAL alarm: heating-фази відтайки АБО post-defrost
+    bool suppress_high = defrost_heating || post_defrost_suppression_;
+
+    // 3a. Перевіряємо команду скидання аварій
     check_reset_command();
 
     // 4. Оновлюємо монітори
-    update_high_temp(air_temp, sensor1_ok, defrost_heating, dt_ms);
+    update_high_temp(air_temp, sensor1_ok, suppress_high, dt_ms);
     update_low_temp(air_temp, sensor1_ok, dt_ms);
     update_sensor_alarm(sensor1_, sensor1_ok, "SENSOR1 (ERR1)");
     update_sensor_alarm(sensor2_, sensor2_ok, "SENSOR2 (ERR2)");

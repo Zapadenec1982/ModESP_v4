@@ -31,7 +31,7 @@
     "defrost.active": {
       "source_module": "defrost",
       "type": "bool",
-      "description": "Чи активна розморозка (блокує HAL alarm)",
+      "description": "Чи активна розморозка (блокує аварію високої температури)",
       "optional": true
     }
   },
@@ -43,7 +43,8 @@
       "always_active": true,
       "controls_settings": [
         "protection.high_limit", "protection.low_limit",
-        "protection.alarm_delay", "protection.manual_reset"
+        "protection.alarm_delay", "protection.manual_reset",
+        "protection.post_defrost_delay"
       ]
     },
     "door_protection": {
@@ -72,22 +73,22 @@
     "protection.high_temp_alarm": {
       "type": "bool",
       "access": "read",
-      "description": "Аварія верхньої температури (HAL)"
+      "description": "Аварія верхньої температури"
     },
     "protection.low_temp_alarm": {
       "type": "bool",
       "access": "read",
-      "description": "Аварія нижньої температури (LAL)"
+      "description": "Аварія нижньої температури"
     },
     "protection.sensor1_alarm": {
       "type": "bool",
       "access": "read",
-      "description": "ERR1 — обрив датчика камери"
+      "description": "Обрив датчика камери"
     },
     "protection.sensor2_alarm": {
       "type": "bool",
       "access": "read",
-      "description": "ERR2 — обрив датчика випарника"
+      "description": "Обрив датчика випарника"
     },
     "protection.door_alarm": {
       "type": "bool",
@@ -103,7 +104,7 @@
       "step": 0.5,
       "default": 12.0,
       "persist": true,
-      "description": "Верхня межа температури (HAL)"
+      "description": "Верхня межа температури"
     },
     "protection.low_limit": {
       "type": "float",
@@ -114,7 +115,7 @@
       "step": 0.5,
       "default": -35.0,
       "persist": true,
-      "description": "Нижня межа температури (LAL)"
+      "description": "Нижня межа температури"
     },
     "protection.alarm_delay": {
       "type": "int",
@@ -125,7 +126,7 @@
       "step": 1,
       "default": 30,
       "persist": true,
-      "description": "Затримка спрацювання аварії (dAd)"
+      "description": "Затримка спрацювання аварії"
     },
     "protection.door_delay": {
       "type": "int",
@@ -144,6 +145,17 @@
       "default": false,
       "persist": true,
       "description": "Ручне скидання аварій (false=auto, true=manual)"
+    },
+    "protection.post_defrost_delay": {
+      "type": "int",
+      "unit": "хв",
+      "access": "readwrite",
+      "min": 0,
+      "max": 120,
+      "step": 5,
+      "default": 30,
+      "persist": true,
+      "description": "Затримка аварії високої T після відтайки"
     },
     "protection.reset_alarms": {
       "type": "bool",
@@ -190,13 +202,13 @@
           {
             "key": "protection.sensor1_alarm",
             "widget": "indicator",
-            "label": "Датчик 1 (ERR1)",
+            "label": "Датчик камери",
             "on_color": "#f97316"
           },
           {
             "key": "protection.sensor2_alarm",
             "widget": "indicator",
-            "label": "Датчик 2 (ERR2)",
+            "label": "Датчик випарника",
             "on_color": "#f97316"
           },
           {
@@ -204,6 +216,11 @@
             "widget": "indicator",
             "label": "Двері",
             "on_color": "#eab308"
+          },
+          {
+            "key": "protection.reset_alarms",
+            "widget": "button",
+            "label": "Скинути аварії"
           }
         ]
       },
@@ -226,6 +243,10 @@
           },
           {
             "key": "protection.door_delay",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.post_defrost_delay",
             "widget": "number_input"
           }
         ]
@@ -250,6 +271,7 @@
       "protection.alarm_delay",
       "protection.door_delay",
       "protection.manual_reset",
+      "protection.post_defrost_delay",
       "protection.reset_alarms"
     ]
   },
@@ -260,10 +282,10 @@
       "format": "%s"
     },
     "menu_items": [
-      {"label": "HAL",  "key": "protection.high_limit"},
-      {"label": "LAL",  "key": "protection.low_limit"},
-      {"label": "dAd",  "key": "protection.alarm_delay"},
-      {"label": "Door", "key": "protection.door_delay"}
+      {"label": "Верхня межа",  "key": "protection.high_limit"},
+      {"label": "Нижня межа",  "key": "protection.low_limit"},
+      {"label": "Затримка",    "key": "protection.alarm_delay"},
+      {"label": "Двері",       "key": "protection.door_delay"}
     ]
   }
 }

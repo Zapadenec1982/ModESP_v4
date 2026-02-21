@@ -79,6 +79,26 @@ protected:
     etl::optional<StateValue> state_get(const StateKey& key) const;
     etl::optional<StateValue> state_get(const char* key) const;
 
+    // BUG-013: типізовані reader-и (замість дублювання в кожному модулі)
+    float read_float(const char* key, float def = 0.0f) const {
+        auto v = state_get(key);
+        if (!v.has_value()) return def;
+        const auto* fp = etl::get_if<float>(&v.value());
+        return fp ? *fp : def;
+    }
+    bool read_bool(const char* key, bool def = false) const {
+        auto v = state_get(key);
+        if (!v.has_value()) return def;
+        const auto* bp = etl::get_if<bool>(&v.value());
+        return bp ? *bp : def;
+    }
+    int32_t read_int(const char* key, int32_t def = 0) const {
+        auto v = state_get(key);
+        if (!v.has_value()) return def;
+        const auto* ip = etl::get_if<int32_t>(&v.value());
+        return ip ? *ip : def;
+    }
+
     // Перевірити чи feature активна (з features_config.h)
     bool has_feature(const char* feature_name) const {
         return modesp::gen::is_feature_active(name(), feature_name);

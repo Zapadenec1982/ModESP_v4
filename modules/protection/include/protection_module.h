@@ -47,10 +47,7 @@ public:
     void on_stop() override;
 
 private:
-    // Helpers: читання з SharedState
-    float   read_float(const char* key, float def = 0.0f);
-    bool    read_bool(const char* key, bool def = false);
-    int32_t read_int(const char* key, int32_t def = 0);
+    // Helpers
     void    sync_settings();
 
     // Структура для одного монітора аварій
@@ -80,6 +77,12 @@ private:
     uint32_t alarm_delay_ms_  = 1800000;   // 30 хв (dAd)
     uint32_t door_delay_ms_   = 300000;    // 5 хв
     bool     manual_reset_    = false;
+
+    // Post-defrost suppression (HAL alarm)
+    bool     was_defrost_active_       = false;
+    bool     post_defrost_suppression_ = false;
+    uint32_t post_defrost_timer_ms_    = 0;
+    uint32_t post_defrost_delay_ms_    = 1800000;  // 30 хв default
 
     // Кешований код аварії
     const char* alarm_code_ = "none";

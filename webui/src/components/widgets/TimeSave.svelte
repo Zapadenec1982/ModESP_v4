@@ -12,6 +12,7 @@
       const d = await apiGet('/api/time');
       setStateKey('system.time', d.time || '--:--:--');
       setStateKey('system.date', d.date || '--.--.----');
+      setStateKey('time.ntp_enabled', !!d.ntp_enabled);
       setTimeout(() => {
         setInput('time.timezone', d.timezone || '');
         // Set datetime-local value
@@ -26,12 +27,14 @@
   });
 
   function setInput(key, val) {
-    const el = document.querySelector(`[data-widget-key="${key}"] input`);
+    const el = document.querySelector(`[data-widget-key="${key}"] input`)
+            || document.querySelector(`[data-widget-key="${key}"] select`);
     if (el) el.value = val;
   }
 
   function getInput(key) {
-    const el = document.querySelector(`[data-widget-key="${key}"] input`);
+    const el = document.querySelector(`[data-widget-key="${key}"] input`)
+            || document.querySelector(`[data-widget-key="${key}"] select`);
     return el?.value ?? '';
   }
 

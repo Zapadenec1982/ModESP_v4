@@ -29,6 +29,7 @@ class SharedState;
 class ConfigService;
 class ModuleManager;
 class WiFiService;
+class PersistService;
 
 class HttpService : public BaseModule {
 public:
@@ -42,6 +43,7 @@ public:
     void set_config(ConfigService* config) { config_ = config; }
     void set_modules(ModuleManager* modules) { modules_ = modules; }
     void set_wifi(WiFiService* wifi) { wifi_ = wifi; }
+    void set_persist(PersistService* persist) { persist_ = persist; }
 
     // Server handle (needed by WsService)
     httpd_handle_t server() const { return server_; }
@@ -57,6 +59,7 @@ private:
     ConfigService* config_ = nullptr;
     ModuleManager* modules_ = nullptr;
     WiFiService* wifi_ = nullptr;
+    PersistService* persist_ = nullptr;
 
     bool start_server();
     void register_api_handlers();

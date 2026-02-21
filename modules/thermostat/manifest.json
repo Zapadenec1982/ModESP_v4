@@ -51,6 +51,12 @@
       "type": "bool",
       "description": "Аварійна зупинка від Protection",
       "optional": true
+    },
+    "equipment.night_input": {
+      "source_module": "equipment",
+      "type": "bool",
+      "description": "Дискретний вхід нічного режиму",
+      "optional": true
     }
   },
 
@@ -80,6 +86,26 @@
       "description": "Керування вентилятором конденсатора",
       "requires_roles": ["cond_fan"],
       "controls_settings": ["thermostat.cond_fan_delay"]
+    },
+    "night_setback": {
+      "description": "Нічний режим зі зміщенням уставки",
+      "requires_roles": [],
+      "always_active": true,
+      "controls_settings": [
+        "thermostat.night_setback", "thermostat.night_mode",
+        "thermostat.night_start", "thermostat.night_end"
+      ]
+    },
+    "night_di": {
+      "description": "Нічний режим через дискретний вхід",
+      "requires_roles": ["night_input"],
+      "controls_settings": []
+    },
+    "display_defrost": {
+      "description": "Відображення температури під час відтайки",
+      "requires_roles": [],
+      "always_active": true,
+      "controls_settings": ["thermostat.display_defrost"]
     }
   },
 
@@ -90,6 +116,15 @@
         "0": {"always": true},
         "1": {"always": true},
         "2": {"requires_feature": "fan_temp_control"}
+      }
+    },
+    "thermostat.night_mode": {
+      "type": "enum_filter",
+      "values": {
+        "0": {"always": true},
+        "1": {"always": true},
+        "2": {"requires_feature": "night_di"},
+        "3": {"always": true}
       }
     }
   },
@@ -132,7 +167,7 @@
       "step": 1,
       "default": 180,
       "persist": true,
-      "description": "Мін. час паузи компресора (cFt)"
+      "description": "Мін. час паузи компресора"
     },
     "thermostat.min_on_time": {
       "type": "int",
@@ -143,7 +178,7 @@
       "step": 1,
       "default": 120,
       "persist": true,
-      "description": "Мін. час роботи компресора (cOt)"
+      "description": "Мін. час роботи компресора"
     },
     "thermostat.startup_delay": {
       "type": "int",
@@ -166,7 +201,7 @@
         {"value": 1, "label": "З компресором"},
         {"value": 2, "label": "За температурою випарника"}
       ],
-      "description": "Режим вент. випарника (FAn)"
+      "description": "Режим вент. випарника"
     },
     "thermostat.fan_stop_temp": {
       "type": "float",
@@ -177,7 +212,7 @@
       "step": 0.5,
       "default": -25.0,
       "persist": true,
-      "description": "T зупинки вент. випарника (FST, для FAn=2)"
+      "description": "T зупинки вент. випарника (для режиму 2)"
     },
     "thermostat.fan_stop_hyst": {
       "type": "float",
@@ -188,7 +223,7 @@
       "step": 0.5,
       "default": 2.0,
       "persist": true,
-      "description": "Гістерезис FST (для FAn=2)"
+      "description": "Гістерезис T зупинки вент. (для режиму 2)"
     },
     "thermostat.cond_fan_delay": {
       "type": "int",
@@ -199,7 +234,7 @@
       "step": 1,
       "default": 30,
       "persist": true,
-      "description": "Затримка вимк. вент. конденсатора (COd)"
+      "description": "Затримка вимк. вент. конденсатора"
     },
     "thermostat.safety_run_on": {
       "type": "int",
@@ -255,6 +290,81 @@
       "unit": "с",
       "access": "read",
       "description": "Час простою компресора"
+    },
+    "thermostat.night_setback": {
+      "type": "float",
+      "unit": "\u00b0C",
+      "access": "readwrite",
+      "min": 0.0,
+      "max": 10.0,
+      "step": 0.5,
+      "default": 3.0,
+      "persist": true,
+      "description": "Зміщення уставки вночі"
+    },
+    "thermostat.night_mode": {
+      "type": "int",
+      "access": "readwrite",
+      "default": 0,
+      "persist": true,
+      "options": [
+        {"value": 0, "label": "Вимкнено"},
+        {"value": 1, "label": "За розкладом"},
+        {"value": 2, "label": "Через DI"},
+        {"value": 3, "label": "Вручну"}
+      ],
+      "description": "Активація нічного режиму"
+    },
+    "thermostat.night_start": {
+      "type": "int",
+      "unit": "год",
+      "access": "readwrite",
+      "min": 0,
+      "max": 23,
+      "step": 1,
+      "default": 22,
+      "persist": true,
+      "description": "Година початку нічного режиму"
+    },
+    "thermostat.night_end": {
+      "type": "int",
+      "unit": "год",
+      "access": "readwrite",
+      "min": 0,
+      "max": 23,
+      "step": 1,
+      "default": 6,
+      "persist": true,
+      "description": "Година закінчення нічного режиму"
+    },
+    "thermostat.night_active": {
+      "type": "bool",
+      "access": "readwrite",
+      "description": "Нічний режим активний"
+    },
+    "thermostat.effective_setpoint": {
+      "type": "float",
+      "unit": "\u00b0C",
+      "access": "read",
+      "description": "Ефективна уставка (з урахуванням нічного зміщення)"
+    },
+    "thermostat.display_temp": {
+      "type": "float",
+      "unit": "\u00b0C",
+      "access": "read",
+      "description": "Температура для відображення (може бути заморожена під час відтайки)"
+    },
+    "thermostat.display_defrost": {
+      "type": "int",
+      "access": "readwrite",
+      "default": 1,
+      "persist": true,
+      "options": [
+        {"value": 0, "label": "Реальна T"},
+        {"value": 1, "label": "Заморожена T"},
+        {"value": 2, "label": "Показати -d-"}
+      ],
+      "description": "Що показувати на дисплеї під час відтайки"
     }
   },
 
@@ -375,6 +485,40 @@
             "widget": "number_input"
           }
         ]
+      },
+      {
+        "title": "Нічний режим",
+        "group": "settings",
+        "collapsible": true,
+        "widgets": [
+          {
+            "key": "thermostat.night_mode",
+            "widget": "select"
+          },
+          {
+            "key": "thermostat.night_setback",
+            "widget": "number_input"
+          },
+          {
+            "key": "thermostat.night_start",
+            "widget": "number_input"
+          },
+          {
+            "key": "thermostat.night_end",
+            "widget": "number_input"
+          }
+        ]
+      },
+      {
+        "title": "Дисплей",
+        "group": "settings",
+        "collapsible": true,
+        "widgets": [
+          {
+            "key": "thermostat.display_defrost",
+            "widget": "select"
+          }
+        ]
       }
     ]
   },
@@ -387,7 +531,10 @@
       "thermostat.req.cond_fan",
       "thermostat.state",
       "thermostat.comp_on_time",
-      "thermostat.comp_off_time"
+      "thermostat.comp_off_time",
+      "thermostat.night_active",
+      "thermostat.effective_setpoint",
+      "thermostat.display_temp"
     ],
     "subscribe": [
       "thermostat.setpoint",
@@ -400,7 +547,13 @@
       "thermostat.fan_stop_hyst",
       "thermostat.cond_fan_delay",
       "thermostat.safety_run_on",
-      "thermostat.safety_run_off"
+      "thermostat.safety_run_off",
+      "thermostat.night_setback",
+      "thermostat.night_mode",
+      "thermostat.night_start",
+      "thermostat.night_end",
+      "thermostat.night_active",
+      "thermostat.display_defrost"
     ]
   },
 
@@ -412,8 +565,9 @@
     "menu_items": [
       {"label": "Уставка",      "key": "thermostat.setpoint"},
       {"label": "Диференціал",  "key": "thermostat.differential"},
-      {"label": "Пауза cFt",   "key": "thermostat.min_off_time"},
-      {"label": "Робота cOt",   "key": "thermostat.min_on_time"}
+      {"label": "Мін. пауза",  "key": "thermostat.min_off_time"},
+      {"label": "Мін. робота", "key": "thermostat.min_on_time"},
+      {"label": "Зміщення",   "key": "thermostat.night_setback"}
     ]
   }
 }

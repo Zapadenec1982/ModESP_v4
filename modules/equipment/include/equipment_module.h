@@ -75,6 +75,9 @@ private:
     modesp::IActuatorDriver* cond_fan_   = nullptr;  // Опціональний
     modesp::IActuatorDriver* hg_valve_   = nullptr;  // Опціональний
 
+    // === Дискретні входи ===
+    modesp::ISensorDriver* night_sensor_ = nullptr;  // Опціональний
+
     // === Внутрішня логіка ===
     void read_sensors();
     void read_requests();

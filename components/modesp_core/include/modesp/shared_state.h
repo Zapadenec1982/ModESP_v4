@@ -23,7 +23,7 @@
 namespace modesp {
 
 #ifndef MODESP_MAX_STATE_ENTRIES
-#define MODESP_MAX_STATE_ENTRIES 96
+#define MODESP_MAX_STATE_ENTRIES 128
 #endif
 
 class SharedState {
@@ -62,6 +62,9 @@ public:
     // Used by WsService to detect state changes without full comparison.
     uint32_t version() const;
 
+    // BUG-018: лічильник відмов set() для діагностики
+    uint32_t set_failures() const { return set_failures_; }
+
     // ── Persist callback ──
     // Викликається ПІСЛЯ set() якщо значення змінилось.
     // PersistService реєструє callback для збереження в NVS.
@@ -72,6 +75,7 @@ private:
     Map map_;
     mutable SemaphoreHandle_t mutex_;
     uint32_t version_ = 0;
+    uint32_t set_failures_ = 0;  // BUG-018
     PersistCallback persist_cb_ = nullptr;
     void* persist_user_data_ = nullptr;
 };

@@ -160,7 +160,8 @@ class TestFeatureResolver:
                 continue
             for feat_name, active in features.items():
                 # hg_valve не в bindings_full (немає relay_5)
-                if feat_name == "defrost_hot_gas":
+                # night_input не в bindings_full (немає din для night)
+                if feat_name in ("defrost_hot_gas", "night_di"):
                     continue
                 assert active is True, f"{mod_name}.{feat_name} should be active"
 
@@ -172,42 +173,15 @@ class TestFeatureResolver:
 class TestConstraintsResolver:
     """Тести фільтрації options за constraints."""
 
-    def test_defrost_type_minimal(self, equipment, defrost):
-        """Без heater/hg_valve → тільки [0: 'За часом']."""
+    def test_defrost_no_constraints(self, equipment, defrost):
+        """Defrost constraints removed — all options always visible."""
         bindings = load_fixture("bindings_minimal.json")
         resolver = FeatureResolver(bindings, equipment)
         active = resolver.resolve_module(defrost)
         constraints = resolver.resolve_constraints(defrost, active)
-        values = [o["value"] for o in constraints["defrost.type"]]
-        assert values == [0]
-
-    def test_defrost_type_with_heater(self, equipment, defrost):
-        """З heater → [0, 1]."""
-        bindings = load_fixture("bindings_full.json")
-        resolver = FeatureResolver(bindings, equipment)
-        active = resolver.resolve_module(defrost)
-        constraints = resolver.resolve_constraints(defrost, active)
-        values = [o["value"] for o in constraints["defrost.type"]]
-        assert 0 in values
-        assert 1 in values
-
-    def test_defrost_initiation_minimal(self, equipment, defrost):
-        """Без evap_temp → [0: 'За таймером', 3: 'Вимкнено']."""
-        bindings = load_fixture("bindings_minimal.json")
-        resolver = FeatureResolver(bindings, equipment)
-        active = resolver.resolve_module(defrost)
-        constraints = resolver.resolve_constraints(defrost, active)
-        values = [o["value"] for o in constraints["defrost.initiation"]]
-        assert values == [0, 3]
-
-    def test_defrost_initiation_with_sensor(self, equipment, defrost):
-        """З evap_temp → всі 4 варіанти."""
-        bindings = load_fixture("bindings_with_evap.json")
-        resolver = FeatureResolver(bindings, equipment)
-        active = resolver.resolve_module(defrost)
-        constraints = resolver.resolve_constraints(defrost, active)
-        values = [o["value"] for o in constraints["defrost.initiation"]]
-        assert values == [0, 1, 2, 3]
+        # No constraint filtering — options come from state definition directly
+        assert "defrost.type" not in constraints
+        assert "defrost.initiation" not in constraints
 
     def test_fan_mode_without_evap_temp(self, equipment, thermostat):
         """evap_fan без evap_temp → mode 0,1 доступні, mode 2 ні."""
@@ -276,8 +250,8 @@ class TestSelectWidgets:
                         return
         pytest.fail("defrost.type select widget not found")
 
-    def test_constraints_filter_options(self, all_manifests, project, equipment):
-        """Constraints прибирають недоступні варіанти з options."""
+    def test_defrost_type_all_options_visible(self, all_manifests, project, equipment):
+        """Defrost type shows all 3 options regardless of bindings."""
         bindings = load_fixture("bindings_minimal.json")
         ui = self._generate_ui(all_manifests, project, bindings, equipment)
         for page in ui["pages"]:
@@ -285,8 +259,7 @@ class TestSelectWidgets:
                 for w in card.get("widgets", []):
                     if w.get("key") == "defrost.type" and w.get("widget") == "select":
                         values = [o["value"] for o in w["options"]]
-                        # Мінімальні bindings → тільки type=0
-                        assert values == [0]
+                        assert values == [0, 1, 2]
                         return
         pytest.fail("defrost.type select widget not found")
 

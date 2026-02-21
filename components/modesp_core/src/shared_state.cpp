@@ -23,12 +23,17 @@ SharedState::~SharedState() {
 
 bool SharedState::set(const StateKey& key, const StateValue& value) {
     if (xSemaphoreTake(mutex_, pdMS_TO_TICKS(100)) != pdTRUE) {
-        ESP_LOGW(TAG, "Mutex timeout on set(%s)", key.c_str());
+        set_failures_++;  // BUG-018
+        ESP_LOGE(TAG, "Mutex timeout on set('%s') [failures=%lu]",
+                 key.c_str(), (unsigned long)set_failures_);
         return false;
     }
 
     if (map_.full() && !map_.count(key)) {
-        ESP_LOGW(TAG, "State full, cannot add key: %s", key.c_str());
+        set_failures_++;  // BUG-018
+        ESP_LOGE(TAG, "STATE MAP FULL (%d/%d) — cannot add '%s' [failures=%lu]",
+                 (int)map_.size(), MODESP_MAX_STATE_ENTRIES,
+                 key.c_str(), (unsigned long)set_failures_);
         xSemaphoreGive(mutex_);
         return false;
     }

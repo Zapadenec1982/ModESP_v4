@@ -73,47 +73,68 @@ static void ws_serialize_entry(const StateKey& key, const StateValue& value, voi
     }
 }
 
-// ── Client management ───────────────────────────────────────────
+// ── Client management (BUG-021: all access under clients_mutex_) ──
 
 void WsService::add_client(int fd) {
+    if (!clients_mutex_) return;
+    xSemaphoreTake(clients_mutex_, portMAX_DELAY);
+
     // If fd is already tracked — this is a reconnect on the same fd number.
-    // httpd reuses fd numbers, so the old session is already gone.
     for (size_t i = 0; i < MAX_WS_CLIENTS; i++) {
         if (client_fds_[i] == fd) {
+            xSemaphoreGive(clients_mutex_);
             ESP_LOGI(TAG, "Client reconnected (fd=%d, slot=%d)", fd, (int)i);
-            return;  // Slot is valid — keep it
+            return;
         }
     }
 
-    // Clean up any stale fds before assigning a new slot
-    cleanup_dead_clients();
+    // Clean up stale fds (mutex already held)
+    if (server_) {
+        for (size_t i = 0; i < MAX_WS_CLIENTS; i++) {
+            int f = client_fds_[i];
+            if (f != -1 && !is_ws_client(f)) {
+                ESP_LOGI(TAG, "Removing stale client fd=%d (slot=%d)", f, (int)i);
+                client_fds_[i] = -1;
+            }
+        }
+    }
 
     for (size_t i = 0; i < MAX_WS_CLIENTS; i++) {
         if (client_fds_[i] == -1) {
             client_fds_[i] = fd;
+            xSemaphoreGive(clients_mutex_);
             ESP_LOGI(TAG, "Client connected (fd=%d, slot=%d)", fd, (int)i);
             return;
         }
     }
+    xSemaphoreGive(clients_mutex_);
     ESP_LOGW(TAG, "Max WS clients reached, rejecting fd=%d", fd);
 }
 
 bool WsService::remove_client(int fd) {
+    if (!clients_mutex_) return false;
+    xSemaphoreTake(clients_mutex_, portMAX_DELAY);
     for (size_t i = 0; i < MAX_WS_CLIENTS; i++) {
         if (client_fds_[i] == fd) {
             client_fds_[i] = -1;
+            xSemaphoreGive(clients_mutex_);
             ESP_LOGI(TAG, "Client disconnected (fd=%d, slot=%d)", fd, (int)i);
             return true;
         }
     }
-    return false;  // fd was not tracked (already removed)
+    xSemaphoreGive(clients_mutex_);
+    return false;
 }
 
 bool WsService::has_client(int fd) const {
+    if (!clients_mutex_) return false;
+    xSemaphoreTake(clients_mutex_, portMAX_DELAY);
+    bool found = false;
     for (size_t i = 0; i < MAX_WS_CLIENTS; i++) {
-        if (client_fds_[i] == fd) return true;
+        if (client_fds_[i] == fd) { found = true; break; }
     }
-    return false;
+    xSemaphoreGive(clients_mutex_);
+    return found;
 }
 
 bool WsService::is_ws_client(int fd) const {
@@ -122,17 +143,17 @@ bool WsService::is_ws_client(int fd) const {
 }
 
 void WsService::cleanup_dead_clients() {
-    if (!server_) return;
-
+    if (!server_ || !clients_mutex_) return;
+    xSemaphoreTake(clients_mutex_, portMAX_DELAY);
     for (size_t i = 0; i < MAX_WS_CLIENTS; i++) {
         int fd = client_fds_[i];
         if (fd == -1) continue;
-
         if (!is_ws_client(fd)) {
             ESP_LOGI(TAG, "Removing stale client fd=%d (slot=%d)", fd, (int)i);
             client_fds_[i] = -1;
         }
     }
+    xSemaphoreGive(clients_mutex_);
 }
 
 // Called by httpd when session ctx is freed (TCP RST, timeout, etc.)
@@ -256,7 +277,7 @@ esp_err_t WsService::ws_handler(httpd_req_t* req) {
 void WsService::broadcast_state() {
     if (!server_ || !state_) return;
 
-    char buf[3072];  // ~80 keys × ~35 bytes/key (BUG-011 fix)
+    char buf[4096];  // AUDIT-021: ~87 ключів × ~35 bytes/key, запас до ~115
     WsSerCtx ctx = {buf, sizeof(buf), 0, true};
     ctx.pos += snprintf(buf, sizeof(buf), "{");
 
@@ -315,63 +336,82 @@ void WsService::async_send_cb(void* arg) {
 }
 
 void WsService::send_to_all(const char* data, size_t len) {
-    for (size_t i = 0; i < MAX_WS_CLIENTS; i++) {
-        int fd = client_fds_[i];
-        if (fd == -1) continue;
-
-        // Verify fd is still a live WebSocket before queueing
-        if (!is_ws_client(fd)) {
-            ESP_LOGD(TAG, "fd=%d no longer WS, removing (slot=%d)", fd, (int)i);
-            client_fds_[i] = -1;
-            continue;
+    // BUG-021: snapshot fds під mutex, queue work поза mutex
+    int fds[MAX_WS_CLIENTS];
+    if (clients_mutex_) {
+        xSemaphoreTake(clients_mutex_, portMAX_DELAY);
+        for (size_t i = 0; i < MAX_WS_CLIENTS; i++) {
+            int fd = client_fds_[i];
+            if (fd != -1 && !is_ws_client(fd)) {
+                ESP_LOGD(TAG, "fd=%d no longer WS, removing (slot=%d)", fd, (int)i);
+                client_fds_[i] = -1;
+                fd = -1;
+            }
+            fds[i] = fd;
         }
+        xSemaphoreGive(clients_mutex_);
+    } else {
+        memcpy(fds, client_fds_, sizeof(fds));
+    }
 
-        // Allocate context with payload copy (freed in async_send_cb)
+    for (size_t i = 0; i < MAX_WS_CLIENTS; i++) {
+        if (fds[i] == -1) continue;
+
         auto* ctx = static_cast<AsyncSendCtx*>(
             malloc(sizeof(AsyncSendCtx) + len));
         if (!ctx) {
-            ESP_LOGW(TAG, "No memory for async send to fd=%d", fd);
+            ESP_LOGW(TAG, "No memory for async send to fd=%d", fds[i]);
             continue;
         }
         ctx->server = server_;
         ctx->self   = this;
-        ctx->fd     = fd;
+        ctx->fd     = fds[i];
         ctx->type   = HTTPD_WS_TYPE_TEXT;
         ctx->len    = len;
         memcpy(ctx->data, data, len);
 
         if (httpd_queue_work(server_, async_send_cb, ctx) != ESP_OK) {
-            ESP_LOGW(TAG, "Queue full for fd=%d, removing", fd);
+            ESP_LOGW(TAG, "Queue full for fd=%d, removing", fds[i]);
             free(ctx);
-            client_fds_[i] = -1;
+            remove_client(fds[i]);
         }
     }
 }
 
 void WsService::send_ping_to_all() {
-    for (size_t i = 0; i < MAX_WS_CLIENTS; i++) {
-        int fd = client_fds_[i];
-        if (fd == -1) continue;
-
-        if (!is_ws_client(fd)) {
-            client_fds_[i] = -1;
-            continue;
+    // BUG-021: snapshot fds під mutex
+    int fds[MAX_WS_CLIENTS];
+    if (clients_mutex_) {
+        xSemaphoreTake(clients_mutex_, portMAX_DELAY);
+        for (size_t i = 0; i < MAX_WS_CLIENTS; i++) {
+            int fd = client_fds_[i];
+            if (fd != -1 && !is_ws_client(fd)) {
+                client_fds_[i] = -1;
+                fd = -1;
+            }
+            fds[i] = fd;
         }
+        xSemaphoreGive(clients_mutex_);
+    } else {
+        memcpy(fds, client_fds_, sizeof(fds));
+    }
 
-        // PING has no payload — minimal allocation
+    for (size_t i = 0; i < MAX_WS_CLIENTS; i++) {
+        if (fds[i] == -1) continue;
+
         auto* ctx = static_cast<AsyncSendCtx*>(
             malloc(sizeof(AsyncSendCtx)));
         if (!ctx) continue;
         ctx->server = server_;
         ctx->self   = this;
-        ctx->fd     = fd;
+        ctx->fd     = fds[i];
         ctx->type   = HTTPD_WS_TYPE_PING;
         ctx->len    = 0;
 
         if (httpd_queue_work(server_, async_send_cb, ctx) != ESP_OK) {
-            ESP_LOGW(TAG, "Ping queue full for fd=%d", fd);
+            ESP_LOGW(TAG, "Ping queue full for fd=%d", fds[i]);
             free(ctx);
-            client_fds_[i] = -1;
+            remove_client(fds[i]);
         }
     }
 }
@@ -425,6 +465,9 @@ void WsService::set_http_server(httpd_handle_t server) {
 // ── Lifecycle ───────────────────────────────────────────────────
 
 bool WsService::on_init() {
+    // BUG-021: створити mutex для client_fds_
+    clients_mutex_ = xSemaphoreCreateMutexStatic(&clients_mutex_buf_);
+
     ESP_LOGI(TAG, "WS service init (waiting for HTTP server handle)");
     // WS handler буде зареєстрований коли set_http_server() буде
     // викликаний з main.cpp після старту HttpService.

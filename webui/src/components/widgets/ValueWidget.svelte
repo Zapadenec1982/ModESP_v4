@@ -2,11 +2,22 @@
   export let config;
   export let value;
 
+  function fmtDuration(sec) {
+    if (typeof sec !== 'number' || sec < 0) return '—';
+    const s = Math.floor(sec);
+    const h = String(Math.floor(s / 3600)).padStart(2, '0');
+    const m = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+    const ss = String(s % 60).padStart(2, '0');
+    return `${h}:${m}:${ss}`;
+  }
+
   $: display = value === undefined || value === null
     ? '—'
-    : typeof value === 'number'
-      ? (Number.isInteger(value) ? value : value.toFixed(1))
-      : String(value);
+    : config.format === 'duration'
+      ? fmtDuration(value)
+      : typeof value === 'number'
+        ? (Number.isInteger(value) ? value : value.toFixed(1))
+        : String(value);
 </script>
 
 <div class="widget-row">

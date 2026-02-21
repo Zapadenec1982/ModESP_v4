@@ -191,6 +191,12 @@ void PersistService::on_update(uint32_t dt_ms) {
     debounce_timer_ = 0;
 }
 
+// BUG-014: примусовий запис — викликається перед restart
+void PersistService::flush_now() {
+    flush_to_nvs();
+    debounce_timer_ = 0;
+}
+
 void PersistService::flush_to_nvs() {
     if (!ext_state_) return;
 

@@ -30,6 +30,9 @@ public:
     /// Ін'єкція залежності — SharedState
     void set_state(SharedState* state) { ext_state_ = state; }
 
+    /// BUG-014: примусовий запис dirty keys в NVS (перед restart)
+    void flush_now();
+
 private:
     static constexpr const char* NVS_NAMESPACE = "persist";
     static constexpr uint32_t DEBOUNCE_MS = 5000;  // 5 секунд debounce

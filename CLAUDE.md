@@ -44,28 +44,33 @@ board.json + bindings.json ─┘
   Захищає компресор незалежно від джерела запиту (thermostat/defrost)
 - Публікує **фактичний** стан реле через `get_state()` (не бажаний `out_`)
 - Relay `min_switch_ms` = 0 для всіх реле крім compressor (180s) — heater/fan/valve перемикаються миттєво
+- **Night input:** опціональний дискретний вхід для нічного режиму → `equipment.night_input`
 - Бізнес-модулі (Thermostat, Defrost, Protection) працюють ТІЛЬКИ через SharedState
 - `data/bindings.json` — всі drivers прив'язані до module "equipment"
 
-### Thermostat v2 (Phase 9.2)
-- **Асиметричний диференціал:** ON при T >= SP + differential, OFF при T <= SP
+### Thermostat v2 (Phase 9.2 + 11a)
+
+- **Асиметричний диференціал:** ON при T >= effective_SP + differential, OFF при T <= effective_SP
 - **State machine:** STARTUP → IDLE ↔ COOLING, SAFETY_RUN (при відмові датчика)
 - **Захист компресора:** min_on_time (cOt), min_off_time (cFt), startup_delay
 - **Safety Run:** циклічна робота (safety_run_on / safety_run_off) при sensor1_ok=false
 - **Вентилятор випарника:** 3 режими (постійно / з компресором / за T_evap з гістерезисом)
 - **Вентилятор конденсатора:** синхронно з компресором + затримка OFF (cond_fan_delay)
-- **11 persist параметрів** з spec_v3 (setpoint, differential, cFt, cOt, FAn, FST, COd тощо)
+- **Night Setback:** 4 режими (0=off, 1=schedule SNTP, 2=DI, 3=manual), effective_sp = setpoint + night_setback
+- **Display during defrost:** 3 режими (0=real T, 1=frozen T, 2="-d-" symbol) → `thermostat.display_temp`
+- **16 persist параметрів** (11 base + night_setback, night_mode, night_start, night_end, display_defrost)
 - Requests: `thermostat.req.compressor`, `thermostat.req.evap_fan`, `thermostat.req.cond_fan`
 
-### Protection (Phase 9.3)
+### Protection (Phase 9.3 + 11a)
 
-- **5 незалежних моніторів аварій:** High Temp (HAL), Low Temp (LAL), Sensor1 (ERR1), Sensor2 (ERR2), Door
-- **Delayed alarms:** High/Low temp і Door з затримкою (dAd хвилини, door_delay хвилини)
-- **Instant alarms:** ERR1, ERR2 — без затримки
-- **Defrost blocking:** High Temp alarm блокується під час defrost.active (скидається pending)
+- **5 незалежних моніторів аварій:** High Temp, Low Temp, Sensor1, Sensor2, Door
+- **Delayed alarms:** High/Low temp і Door з затримкою (alarm_delay хвилини, door_delay хвилини)
+- **Instant alarms:** Sensor1, Sensor2 — без затримки
+- **Defrost blocking:** High Temp alarm блокується під час heating-фаз defrost (скидається pending)
+- **Post-defrost suppression:** High Temp alarm блокується на post_defrost_delay хвилин після відтайки
 - **Auto-clear:** аварія знімається автоматично при поверненні в норму (якщо manual_reset=false)
 - **Manual reset:** `protection.reset_alarms` = true → скидає всі аварії (WebUI/API)
-- **5 persist параметрів:** high_limit, low_limit, alarm_delay, door_delay, manual_reset
+- **6 persist параметрів:** high_limit, low_limit, alarm_delay, door_delay, manual_reset, post_defrost_delay
 - **protection.lockout = false** завжди (зарезервовано для Phase 10+)
 - Порядок update: Equipment(0) → **Protection(1)** → Thermostat(2)
 
@@ -110,7 +115,7 @@ board.json + bindings.json ─┘
 ### Zero Heap в Hot Path
 - НІКОЛИ: std::string, std::vector, new, malloc в on_update() / on_message()
 - ЗАВЖДИ: etl::string<N>, etl::vector<T,N>, etl::variant, etl::optional
-- SharedState: etl::unordered_map<StateKey, StateValue, 96> (MODESP_MAX_STATE_ENTRIES)
+- SharedState: etl::unordered_map<StateKey, StateValue, 128> (MODESP_MAX_STATE_ENTRIES)
 - StateKey = etl::string<32>, StateValue = etl::variant<int32_t, float, bool, etl::string<32>>
 
 ### ESP-IDF стиль
@@ -207,7 +212,7 @@ ModESP_v4/
 ## Ключові компоненти
 
 ### SharedState — центральне сховище
-- etl::unordered_map<StateKey, StateValue, 96> (MODESP_MAX_STATE_ENTRIES)
+- etl::unordered_map<StateKey, StateValue, 128> (MODESP_MAX_STATE_ENTRIES)
 - Thread-safe (FreeRTOS mutex)
 - version_ counter інкрементується на кожен set() — WsService порівнює версії
 - for_each() з callback під mutex для серіалізації
@@ -297,6 +302,11 @@ ModESP_v4/
 | `next_prompt.md` | Промпт для наступної сесії | В кінці поточної сесії |
 
 ## Changelog
+- 2026-02-21 — Phase 11a DONE: Night Setback (4 modes, SNTP schedule, DI, manual),
+  Post-defrost alarm suppression (0-120 min timer), Display during defrost (real/frozen/-d-).
+  Equipment: night_input role + digital input binding. Thermostat: effective_setpoint, display_temp,
+  is_night_active(). Protection: post_defrost_delay, suppress_high flag. Dashboard: display_temp + NIGHT badge.
+  80 state keys (was 70), 39 STATE_META, 33 MQTT pub, 38 MQTT sub, 13 menu items. 206 tests green.
 - 2026-02-20 — Phase 10.5 DONE: Features System + Select Widgets. Manifests: features/constraints/options
   in thermostat/defrost/protection. Generator: FeatureResolver, select widgets, disabled+reason,
   FeaturesConfigGenerator → features_config.h (5th artifact). C++: has_feature() in BaseModule,

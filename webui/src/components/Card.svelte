@@ -4,7 +4,7 @@
   export let title = '';
   export let collapsible = false;
 
-  let collapsed = false;
+  let collapsed = collapsible;
 
   function toggle() {
     if (collapsible) collapsed = !collapsed;

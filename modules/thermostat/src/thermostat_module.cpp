@@ -19,6 +19,7 @@
 #include "thermostat_module.h"
 #include "modesp/driver_messages.h"
 #include "esp_log.h"
+#include <ctime>
 
 static const char* TAG = "Thermostat";
 
@@ -29,31 +30,6 @@ static const char* TAG = "Thermostat";
 ThermostatModule::ThermostatModule()
     : BaseModule("thermostat", modesp::ModulePriority::NORMAL)
 {}
-
-// ═══════════════════════════════════════════════════════════════
-// Helpers: читання з SharedState
-// ═══════════════════════════════════════════════════════════════
-
-float ThermostatModule::read_float(const char* key, float def) {
-    auto v = state_get(key);
-    if (!v.has_value()) return def;
-    const auto* fp = etl::get_if<float>(&v.value());
-    return fp ? *fp : def;
-}
-
-bool ThermostatModule::read_bool(const char* key, bool def) {
-    auto v = state_get(key);
-    if (!v.has_value()) return def;
-    const auto* bp = etl::get_if<bool>(&v.value());
-    return bp ? *bp : def;
-}
-
-int32_t ThermostatModule::read_int(const char* key, int32_t def) {
-    auto v = state_get(key);
-    if (!v.has_value()) return def;
-    const auto* ip = etl::get_if<int32_t>(&v.value());
-    return ip ? *ip : def;
-}
 
 // ═══════════════════════════════════════════════════════════════
 // Sync settings з SharedState (WebUI/API може їх змінити)
@@ -75,6 +51,48 @@ void ThermostatModule::sync_settings() {
     // Хвилини → мілісекунди
     safety_on_ms_  = static_cast<uint32_t>(read_int("thermostat.safety_run_on", 20)) * 60000;
     safety_off_ms_ = static_cast<uint32_t>(read_int("thermostat.safety_run_off", 10)) * 60000;
+
+    // Нічний режим
+    night_setback_   = read_float("thermostat.night_setback", night_setback_);
+    night_mode_      = read_int("thermostat.night_mode", 0);
+    night_start_     = read_int("thermostat.night_start", 22);
+    night_end_       = read_int("thermostat.night_end", 6);
+
+    // Дисплей під час відтайки
+    display_defrost_ = read_int("thermostat.display_defrost", 1);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Night setback — визначення активності нічного режиму
+// ═══════════════════════════════════════════════════════════════
+
+bool ThermostatModule::is_night_active() {
+    switch (night_mode_) {
+        case 0: return false;  // Вимкнено
+        case 1: {
+            // За розкладом
+            time_t now = time(nullptr);
+            struct tm t;
+            localtime_r(&now, &t);
+            int hour = t.tm_hour;
+            if (night_start_ > night_end_) {
+                // Перетин через опівніч: наприклад 22..6
+                return hour >= night_start_ || hour < night_end_;
+            } else {
+                // Без перетину: наприклад 2..8
+                return hour >= night_start_ && hour < night_end_;
+            }
+        }
+        case 2:
+            // Через дискретний вхід
+            if (!has_feature("night_di")) return false;
+            return read_bool("equipment.night_input");
+        case 3:
+            // Вручну — через SharedState
+            return read_bool("thermostat.night_active");
+        default:
+            return false;
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -175,6 +193,9 @@ bool ThermostatModule::on_init() {
     state_set("thermostat.state", "startup");
     state_set("thermostat.comp_on_time", static_cast<int32_t>(0));
     state_set("thermostat.comp_off_time", static_cast<int32_t>(0));
+    state_set("thermostat.night_active", false);
+    state_set("thermostat.effective_setpoint", setpoint_);
+    state_set("thermostat.display_temp", 0.0f);
 
     ESP_LOGI(TAG, "Initialized (setpoint=%.1f°C, differential=%.1f°C, state=startup)",
              setpoint_, differential_);
@@ -210,6 +231,17 @@ void ThermostatModule::on_update(uint32_t dt_ms) {
         state_set("thermostat.temperature", current_temp_);
     }
 
+    // 3a. Нічний режим — обчислюємо effective_setpoint
+    bool was_night = night_active_;
+    night_active_ = is_night_active();
+    effective_sp_ = setpoint_ + (night_active_ ? night_setback_ : 0.0f);
+    if (night_active_ != was_night) {
+        state_set("thermostat.night_active", night_active_);
+        ESP_LOGI(TAG, "Night mode %s (effective SP=%.1f°C)",
+                 night_active_ ? "ON" : "OFF", effective_sp_);
+    }
+    state_set("thermostat.effective_setpoint", effective_sp_);
+
     // ═══ Defrost pause ═══
     // Під час відтайки термостат повністю зупиняється:
     // - EM арбітрує: defrost.req.* має пріоритет
@@ -220,22 +252,38 @@ void ThermostatModule::on_update(uint32_t dt_ms) {
             request_compressor(false);
             request_evap_fan(false);
             request_cond_fan(false);
-            ESP_LOGI(TAG, "Defrost active — paused");
+            // Фіксуємо T для display_defrost mode=1 (заморожена T)
+            frozen_temp_ = current_temp_;
+            ESP_LOGI(TAG, "Defrost active — paused (frozen_temp=%.1f°C)", frozen_temp_);
+        }
+        // Дисплей під час відтайки
+        switch (display_defrost_) {
+            case 0:  state_set("thermostat.display_temp", current_temp_); break;
+            case 1:  state_set("thermostat.display_temp", frozen_temp_);  break;
+            default: state_set("thermostat.display_temp", -999.0f);       break;
         }
         was_defrost_active_ = true;
         publish_outputs();
         return;
     }
 
-    // Defrost щойно завершився — скидаємо таймери
+    // Defrost щойно завершився — скидаємо таймери і стан
     if (was_defrost_active_) {
         was_defrost_active_ = false;
         comp_off_time_ms_ = 0;
         comp_on_time_ms_ = 0;
         cond_fan_delay_active_ = false;
         cond_fan_off_timer_ms_ = 0;
-        ESP_LOGI(TAG, "Defrost ended — resumed (timers reset)");
+        // Примусово в IDLE — щоб state machine заново оцінив і увійшов
+        // в COOLING через enter_state() з request_compressor(true)
+        state_ = State::IDLE;
+        state_timer_ms_ = 0;
+        state_set("thermostat.state", "idle");
+        ESP_LOGI(TAG, "Defrost ended — state→idle, timers reset");
     }
+
+    // Нормальна робота — display_temp = поточна температура
+    state_set("thermostat.display_temp", current_temp_);
 
     // 4. Оновлюємо таймери по ФАКТИЧНОМУ стану компресора (BUG-009 fix)
     state_timer_ms_ += dt_ms;
@@ -300,8 +348,8 @@ void ThermostatModule::on_update(uint32_t dt_ms) {
 void ThermostatModule::update_regulation(uint32_t dt_ms) {
     (void)dt_ms;
 
-    float upper = setpoint_ + differential_;  // Поріг увімкнення
-    float lower = setpoint_;                  // Поріг вимкнення
+    float upper = effective_sp_ + differential_;  // Поріг увімкнення
+    float lower = effective_sp_;                  // Поріг вимкнення
 
     if (state_ == State::IDLE) {
         // Умови запуску (ВСІ одночасно)

@@ -92,9 +92,6 @@ private:
     void clear_requests();
 
     // Helpers
-    float   read_float(const char* key, float def = 0.0f);
-    bool    read_bool(const char* key, bool def = false);
-    int32_t read_int(const char* key, int32_t def = 0);
     void    sync_settings();
     void    publish_state();
 

@@ -51,6 +51,10 @@ void EquipmentModule::bind_drivers(modesp::DriverManager& dm) {
     if (evap_fan_)    ESP_LOGI(TAG, "Evaporator fan bound");
     if (cond_fan_)    ESP_LOGI(TAG, "Condenser fan bound");
     if (hg_valve_)    ESP_LOGI(TAG, "Hot gas valve bound");
+
+    // Дискретні входи
+    night_sensor_ = dm.find_sensor("night_input");
+    if (night_sensor_) ESP_LOGI(TAG, "Night input bound");
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -78,6 +82,7 @@ bool EquipmentModule::on_init() {
     state_set("equipment.cond_fan", false);
     state_set("equipment.hg_valve", false);
     state_set("equipment.door_open", false);
+    state_set("equipment.night_input", false);
 
     ESP_LOGI(TAG, "Initialized (air_sensor=%s, compressor=%s)",
              sensor_air_ ? "OK" : "MISSING",
@@ -150,6 +155,13 @@ void EquipmentModule::read_sensors() {
         }
         state_set("equipment.sensor2_ok", sensor_evap_->is_healthy());
     }
+
+    // Дискретний вхід нічного режиму (опціональний)
+    if (night_sensor_) {
+        float val = 0.0f;
+        night_sensor_->read(val);
+        state_set("equipment.night_input", val > 0.5f);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -208,23 +220,10 @@ void EquipmentModule::apply_arbitration() {
         out_.hg_valve   = false;   // Тільки defrost може ввімкнути
     }
 
-    // === ІНТЕРЛОКИ (hardcoded, неможливо обійти) ===
-
-    // 1. Тен і компресор НІКОЛИ одночасно
-    if (out_.heater && out_.compressor) {
-        out_.compressor = false;
-        ESP_LOGW(TAG, "INTERLOCK: heater+compressor → compressor OFF");
-    }
-
-    // 2. Тен і клапан ГГ НІКОЛИ одночасно
-    if (out_.heater && out_.hg_valve) {
-        out_.hg_valve = false;
-        ESP_LOGW(TAG, "INTERLOCK: heater+hg_valve → hg_valve OFF");
-    }
-
     // === AUDIT-003: Compressor anti-short-cycle (output-level) ===
     // Захищає компресор незалежно від джерела запиту (thermostat/defrost).
     // Працює на фактичному стані реле, а не на запитах бізнес-модулів.
+    // ВАЖЛИВО: виконується ДО інтерлоків, щоб інтерлоки мали фінальне слово.
     if (out_.compressor != comp_actual_) {
         if (out_.compressor) {
             // Запит на ввімкнення — перевіряємо min OFF time
@@ -241,6 +240,21 @@ void EquipmentModule::apply_arbitration() {
                          comp_since_ms_, COMP_MIN_ON_MS);
             }
         }
+    }
+
+    // === ІНТЕРЛОКИ (hardcoded, неможливо обійти) ===
+    // Виконуються ОСТАННІМИ — мають найвищий пріоритет після protection lockout.
+
+    // 1. Тен і компресор НІКОЛИ одночасно
+    if (out_.heater && out_.compressor) {
+        out_.compressor = false;
+        ESP_LOGW(TAG, "INTERLOCK: heater+compressor → compressor OFF");
+    }
+
+    // 2. Тен і клапан ГГ НІКОЛИ одночасно
+    if (out_.heater && out_.hg_valve) {
+        out_.hg_valve = false;
+        ESP_LOGW(TAG, "INTERLOCK: heater+hg_valve → hg_valve OFF");
     }
 }
 

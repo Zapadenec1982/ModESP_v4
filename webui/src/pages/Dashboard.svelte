@@ -3,6 +3,7 @@
   import { stateMeta } from '../stores/ui.js';
   import SliderWidget from '../components/widgets/SliderWidget.svelte';
 
+  $: displayTemp = $state['thermostat.display_temp'];
   $: temperature = $state['thermostat.temperature'];
   $: setpoint = $state['thermostat.setpoint'];
   $: compressor = $state['equipment.compressor'];
@@ -13,9 +14,12 @@
   $: defrostPhase = $state['defrost.phase'];
   $: alarmActive = $state['protection.alarm_active'];
   $: alarmCode = $state['protection.alarm_code'];
+  $: nightActive = $state['thermostat.night_active'];
+  $: showDefrostSymbol = typeof displayTemp === 'number' && displayTemp <= -900;
 
   $: sp = typeof setpoint === 'number' ? setpoint : -18;
-  $: tempColor = getTemperatureColor(temperature, sp);
+  $: shownTemp = showDefrostSymbol ? null : (typeof displayTemp === 'number' ? displayTemp : temperature);
+  $: tempColor = getTemperatureColor(shownTemp, sp);
 
   function getTemperatureColor(temp, sp) {
     if (typeof temp !== 'number') return 'var(--fg-muted)';
@@ -41,12 +45,14 @@
   <!-- Main status card -->
   <div class="tile tile-main" class:alarm-border={alarmActive}>
     <div class="temp-value" style="color: {tempColor}">
-      {#if typeof temperature === 'number'}
-        {temperature.toFixed(1)}
+      {#if showDefrostSymbol}
+        -d-
+      {:else if typeof shownTemp === 'number'}
+        {shownTemp.toFixed(1)}
       {:else}
         —
       {/if}
-      <span class="temp-unit">°C</span>
+      <span class="temp-unit">{showDefrostSymbol ? '' : '°C'}</span>
     </div>
 
     <div class="status-row">
@@ -86,16 +92,20 @@
       <!-- Divider -->
       <div class="status-divider"></div>
 
-      <!-- State badge -->
-      <div class="state-label" style="color: {stateColors[thermoState] || 'var(--fg-muted)'}">
-        {stateLabels[thermoState] || thermoState || '—'}
-      </div>
-
-      <!-- Defrost -->
+      <!-- State badge: defrost overrides thermostat -->
       {#if defrostActive}
         <div class="state-label defrost-label">
           DEFROST
         </div>
+      {:else}
+        <div class="state-label" style="color: {stateColors[thermoState] || 'var(--fg-muted)'}">
+          {stateLabels[thermoState] || thermoState || '—'}
+        </div>
+      {/if}
+
+      <!-- Night mode badge -->
+      {#if nightActive}
+        <div class="state-label night-label">NIGHT</div>
       {/if}
     </div>
 
@@ -232,6 +242,10 @@
 
   .defrost-label {
     color: #ef4444;
+  }
+
+  .night-label {
+    color: #8b5cf6;
   }
 
   /* Alarm banner */

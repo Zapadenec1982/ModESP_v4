@@ -16,6 +16,8 @@
   import SelectWidget from './widgets/SelectWidget.svelte';
   import WifiScan from './widgets/WifiScan.svelte';
   import ApSave from './widgets/ApSave.svelte';
+  import TimezoneSelect from './widgets/TimezoneSelect.svelte';
+  import DefrostToggle from './widgets/DefrostToggle.svelte';
 
   export let widget;
   export let value;
@@ -37,7 +39,9 @@
     datetime_input: DatetimeInput,
     select: SelectWidget,
     wifi_scan: WifiScan,
-    ap_save: ApSave
+    ap_save: ApSave,
+    timezone_select: TimezoneSelect,
+    defrost_toggle: DefrostToggle
   };
 
   $: component = widgetMap[widget.widget] || ValueWidget;

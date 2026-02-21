@@ -71,11 +71,9 @@ private:
     void update_cond_fan(uint32_t dt_ms);
     void update_safety_run(uint32_t dt_ms);
 
-    // Helpers: read from SharedState
-    float read_float(const char* key, float def = 0.0f);
-    bool  read_bool(const char* key, bool def = false);
-    int32_t read_int(const char* key, int32_t def = 0);
+    // Helpers
     void sync_settings();
+    bool is_night_active();
 
     // Requests до Equipment Manager
     void request_compressor(bool on);
@@ -97,6 +95,18 @@ private:
     uint32_t cond_fan_delay_ms_ = 30000;  // COd (мс)
     uint32_t safety_on_ms_    = 1200000;  // 20 хв
     uint32_t safety_off_ms_   = 600000;   // 10 хв
+
+    // === Night setback ===
+    float    night_setback_    = 3.0f;     // °C зміщення
+    int32_t  night_mode_       = 0;        // 0=off, 1=schedule, 2=DI, 3=manual
+    int32_t  night_start_      = 22;       // година початку
+    int32_t  night_end_        = 6;        // година завершення
+    bool     night_active_     = false;
+    float    effective_sp_     = 4.0f;     // setpoint + night_setback (коли active)
+
+    // === Display during defrost ===
+    int32_t  display_defrost_  = 1;        // 0=real, 1=frozen, 2="-d-"
+    float    frozen_temp_      = 0.0f;     // T зафіксована на початку відтайки
 
     // === Runtime state ===
     float current_temp_    = 0.0f;

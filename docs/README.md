@@ -18,6 +18,7 @@
 | `02_core.md` | ModuleManager, SharedState, EventBus, types.h | Стабільний |
 | `03_services.md` | Error, Watchdog, Logger, Config, NVS, PersistService | Стабільний |
 | `04_best_practices.md` | Правила коду: пам'ять, потоки, помилки, іменування | Стабільний |
+| `05_cooling_defrost.md` | Thermostat + Defrost: state machines, фази, параметри | Оновлюється |
 | `06_roadmap.md` | Фази 1-13, milestones, часові рамки | Оновлюється |
 | `10_manifest_standard.md` | Стандарт маніфестів: Board, Driver, Module, Bindings | Оновлюється |
 
