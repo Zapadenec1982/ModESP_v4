@@ -299,19 +299,41 @@ bool WiFiService::start_ap() {
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
 
-    // Generate SSID from MAC: ModESP-XXXX
+    // Спочатку генеруємо дефолтний SSID з MAC
     uint8_t mac[6];
     esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
-    char ap_ssid[32];
+    char ap_ssid[33];
     snprintf(ap_ssid, sizeof(ap_ssid), "ModESP-%02X%02X", mac[4], mac[5]);
+
+    char ap_pass[65] = {};
+    int32_t ap_channel = 1;
+
+    // Читаємо кастомну конфігурацію AP з NVS (якщо є)
+    char custom_ssid[33] = {};
+    if (nvs_helper::read_str("wifi", "ap_ssid", custom_ssid, sizeof(custom_ssid))
+        && custom_ssid[0] != '\0') {
+        strncpy(ap_ssid, custom_ssid, sizeof(ap_ssid) - 1);
+        ap_ssid[sizeof(ap_ssid) - 1] = '\0';
+    }
+    nvs_helper::read_str("wifi", "ap_pass", ap_pass, sizeof(ap_pass));
+    nvs_helper::read_i32("wifi", "ap_chan", ap_channel);
+    if (ap_channel < 1 || ap_channel > 13) ap_channel = 1;
 
     wifi_config_t wifi_config = {};
     strncpy(reinterpret_cast<char*>(wifi_config.ap.ssid),
             ap_ssid, sizeof(wifi_config.ap.ssid) - 1);
     wifi_config.ap.ssid_len = static_cast<uint8_t>(strlen(ap_ssid));
-    wifi_config.ap.channel = 1;
+    wifi_config.ap.channel = static_cast<uint8_t>(ap_channel);
     wifi_config.ap.max_connection = 2;
-    wifi_config.ap.authmode = WIFI_AUTH_OPEN;
+
+    // Пароль >= 8 символів → WPA2, інакше відкрита мережа
+    if (strlen(ap_pass) >= 8) {
+        strncpy(reinterpret_cast<char*>(wifi_config.ap.password),
+                ap_pass, sizeof(wifi_config.ap.password) - 1);
+        wifi_config.ap.authmode = WIFI_AUTH_WPA2_PSK;
+    } else {
+        wifi_config.ap.authmode = WIFI_AUTH_OPEN;
+    }
 
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
@@ -326,7 +348,8 @@ bool WiFiService::start_ap() {
     state_set("wifi.ip", ip_str_);
     state_set("wifi.connected", false);
 
-    ESP_LOGI(TAG, "AP mode started: %s (open, no password)", ap_ssid);
+    ESP_LOGI(TAG, "AP mode started: %s ch=%ld %s", ap_ssid, (long)ap_channel,
+             wifi_config.ap.authmode == WIFI_AUTH_WPA2_PSK ? "WPA2" : "open");
     return true;
 }
 

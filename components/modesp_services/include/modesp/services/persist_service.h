@@ -6,7 +6,10 @@
  * При boot — відновлює збережені значення з NVS в SharedState.
  * При зміні — записує в NVS з debounce (5 секунд).
  *
- * NVS key strategy: "p0", "p1", ... (індекс в STATE_META).
+ * NVS key strategy (BUG-012 fix): стабільний хеш від імені ключа
+ * (djb2 → "s" + 7 hex chars). Позиційні ключі "p0".."p32" мігруються
+ * автоматично при першому boot після оновлення.
+ *
  * NVS namespace: "persist".
  */
 
@@ -44,8 +47,11 @@ private:
     /// Записати dirty keys в NVS
     void flush_to_nvs();
 
-    /// NVS key для індексу: "p0", "p1", ...
-    static void make_nvs_key(size_t index, char* out, size_t out_size);
+    /// BUG-012: стабільний NVS ключ на основі djb2 хешу імені state key
+    static void make_nvs_key(const char* state_key, char* out, size_t out_size);
+
+    /// Legacy: позиційний ключ "p0", "p1"... (для міграції)
+    static void make_legacy_nvs_key(size_t index, char* out, size_t out_size);
 
     /// Persist callback — викликається з SharedState::set()
     static void on_state_changed(const StateKey& key, const StateValue& value, void* user_data);

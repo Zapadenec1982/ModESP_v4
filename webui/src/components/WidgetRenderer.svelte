@@ -13,6 +13,9 @@
   import MqttSave from './widgets/MqttSave.svelte';
   import TimeSave from './widgets/TimeSave.svelte';
   import DatetimeInput from './widgets/DatetimeInput.svelte';
+  import SelectWidget from './widgets/SelectWidget.svelte';
+  import WifiScan from './widgets/WifiScan.svelte';
+  import ApSave from './widgets/ApSave.svelte';
 
   export let widget;
   export let value;
@@ -31,7 +34,10 @@
     wifi_save: WifiSave,
     mqtt_save: MqttSave,
     time_save: TimeSave,
-    datetime_input: DatetimeInput
+    datetime_input: DatetimeInput,
+    select: SelectWidget,
+    wifi_scan: WifiScan,
+    ap_save: ApSave
   };
 
   $: component = widgetMap[widget.widget] || ValueWidget;

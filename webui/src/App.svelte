@@ -6,6 +6,7 @@
   import Layout from './components/Layout.svelte';
   import Dashboard from './pages/Dashboard.svelte';
   import DynamicPage from './pages/DynamicPage.svelte';
+  import BindingsEditor from './pages/BindingsEditor.svelte';
 
   let currentPage = 'dashboard';
 
@@ -41,6 +42,8 @@
   <Layout bind:currentPage>
     {#if currentPage === 'dashboard'}
       <Dashboard />
+    {:else if currentPage === 'bindings'}
+      <BindingsEditor />
     {:else}
       <DynamicPage pageId={currentPage} />
     {/if}

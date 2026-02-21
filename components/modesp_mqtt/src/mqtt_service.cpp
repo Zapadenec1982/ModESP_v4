@@ -222,6 +222,8 @@ void MqttService::reconnect() {
     if (enabled_ && broker_[0] != '\0') {
         state_set("mqtt.status", "connecting");
         start_client();
+    } else if (!enabled_) {
+        state_set("mqtt.status", "disabled");
     }
 }
 
@@ -247,12 +249,13 @@ void MqttService::mqtt_event_handler(void* args, esp_event_base_t base,
 
             // Subscribe to command topics
             for (size_t i = 0; i < gen::MQTT_SUBSCRIBE_COUNT; i++) {
+                if (!self->connected_) break;  // З'єднання втрачено під час підписки
                 char sub_topic[80];
                 snprintf(sub_topic, sizeof(sub_topic), "%s/cmd/%s",
                          self->prefix_, gen::MQTT_SUBSCRIBE[i]);
                 esp_mqtt_client_subscribe(self->client_, sub_topic, 0);
-                ESP_LOGI(TAG, "Subscribed: %s", sub_topic);
             }
+            ESP_LOGI(TAG, "Subscribed to %d command topics", (int)gen::MQTT_SUBSCRIBE_COUNT);
             break;
         }
 
@@ -524,21 +527,25 @@ esp_err_t MqttService::handle_post_mqtt(httpd_req_t* req) {
         const char* key = buf + tokens[i].start;
         const char* val = buf + tokens[i + 1].start;
 
-        if (strcmp(key, "broker") == 0) {
+        // Приймаємо як "broker" так і "mqtt.broker" (WebUI toggle/save)
+        const char* k = key;
+        if (strncmp(k, "mqtt.", 5) == 0) k += 5;  // Відрізаємо префікс
+
+        if (strcmp(k, "broker") == 0) {
             strncpy(new_broker, val, sizeof(new_broker) - 1);
             new_broker[sizeof(new_broker) - 1] = '\0';
-        } else if (strcmp(key, "port") == 0) {
+        } else if (strcmp(k, "port") == 0) {
             new_port = static_cast<uint16_t>(atoi(val));
-        } else if (strcmp(key, "user") == 0) {
+        } else if (strcmp(k, "user") == 0) {
             strncpy(new_user, val, sizeof(new_user) - 1);
             new_user[sizeof(new_user) - 1] = '\0';
-        } else if (strcmp(key, "password") == 0) {
+        } else if (strcmp(k, "password") == 0) {
             strncpy(new_pass, val, sizeof(new_pass) - 1);
             new_pass[sizeof(new_pass) - 1] = '\0';
-        } else if (strcmp(key, "prefix") == 0) {
+        } else if (strcmp(k, "prefix") == 0) {
             strncpy(new_prefix, val, sizeof(new_prefix) - 1);
             new_prefix[sizeof(new_prefix) - 1] = '\0';
-        } else if (strcmp(key, "enabled") == 0) {
+        } else if (strcmp(k, "enabled") == 0) {
             new_enabled = (val[0] == 't' || val[0] == '1');
         }
     }

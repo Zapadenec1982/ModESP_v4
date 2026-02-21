@@ -7,10 +7,15 @@
 
   async function onClick() {
     if (config.confirm && !confirm(config.confirm)) return;
-    if (!config.api_endpoint) return;
     loading = true;
     try {
-      await apiPost(config.api_endpoint, {});
+      if (config.api_endpoint) {
+        // Прямий API виклик (restart, ota тощо)
+        await apiPost(config.api_endpoint, {});
+      } else if (config.key) {
+        // AUDIT-005: state key toggle через /api/settings (manual defrost, reset alarms)
+        await apiPost('/api/settings', { [config.key]: true });
+      }
     } catch (e) {
       alert('Error: ' + e.message);
     } finally {

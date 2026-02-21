@@ -155,7 +155,10 @@ IActuatorDriver* DriverManager::create_actuator(const Binding& binding, HAL& hal
         }
 
         auto& drv = relay_pool[relay_count++];
-        drv.configure(binding.role.c_str(), gpio_res->gpio, gpio_res->active_high, 180000);
+        // min_switch_ms = 0 для всіх реле. Захист компресора від коротких циклів
+        // реалізовано на рівні EquipmentModule (COMP_MIN_OFF_MS / COMP_MIN_ON_MS)
+        // з асиметричними таймерами (180с OFF, 120с ON).
+        drv.configure(binding.role.c_str(), gpio_res->gpio, gpio_res->active_high, 0);
         return &drv;
     }
 

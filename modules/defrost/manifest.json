@@ -1,0 +1,465 @@
+{
+  "manifest_version": 1,
+  "module": "defrost",
+  "description": "Defrost cycle — 7-phase state machine, 3 types, 4 initiation methods (spec_v3 §3)",
+
+  "inputs": {
+    "equipment.evap_temp": {
+      "source_module": "equipment",
+      "type": "float",
+      "description": "Температура випарника (для termination та demand)",
+      "optional": true
+    },
+    "equipment.sensor2_ok": {
+      "source_module": "equipment",
+      "type": "bool",
+      "description": "Здоров'я датчика випарника",
+      "optional": true
+    },
+    "equipment.compressor": {
+      "source_module": "equipment",
+      "type": "bool",
+      "description": "Фактичний стан компресора (для dct=2 лічильника)",
+      "optional": false
+    },
+    "protection.lockout": {
+      "source_module": "protection",
+      "type": "bool",
+      "description": "Аварійна зупинка від Protection",
+      "optional": true
+    }
+  },
+
+  "features": {
+    "defrost_timer": {
+      "description": "Розморозка зупинкою компресора по таймеру",
+      "requires_roles": [],
+      "always_active": true,
+      "controls_settings": [
+        "defrost.interval", "defrost.counter_mode",
+        "defrost.max_duration", "defrost.drip_time", "defrost.fan_delay"
+      ]
+    },
+    "defrost_by_sensor": {
+      "description": "Завершення розморозки по датчику випарника",
+      "requires_roles": ["evap_temp"],
+      "controls_settings": [
+        "defrost.end_temp", "defrost.fad_temp",
+        "defrost.initiation", "defrost.demand_temp"
+      ]
+    },
+    "defrost_electric": {
+      "description": "Розморозка електричним теном",
+      "requires_roles": ["heater"],
+      "controls_settings": []
+    },
+    "defrost_hot_gas": {
+      "description": "Розморозка гарячим газом",
+      "requires_roles": ["hg_valve"],
+      "controls_settings": [
+        "defrost.stabilize_time", "defrost.valve_delay", "defrost.equalize_time"
+      ]
+    }
+  },
+
+  "constraints": {
+    "defrost.type": {
+      "type": "enum_filter",
+      "values": {
+        "0": {"always": true},
+        "1": {"requires_feature": "defrost_electric"},
+        "2": {"requires_feature": "defrost_hot_gas"}
+      }
+    },
+    "defrost.initiation": {
+      "type": "enum_filter",
+      "values": {
+        "0": {"always": true},
+        "1": {"requires_feature": "defrost_by_sensor"},
+        "2": {"requires_feature": "defrost_by_sensor"},
+        "3": {"always": true}
+      }
+    }
+  },
+
+  "state": {
+    "defrost.active": {
+      "type": "bool",
+      "access": "read",
+      "description": "Головний сигнал: відтайка активна"
+    },
+    "defrost.phase": {
+      "type": "string",
+      "access": "read",
+      "enum": ["idle", "stabilize", "valve_open", "active", "equalize", "drip", "fad"],
+      "description": "Поточна фаза відтайки"
+    },
+    "defrost.state": {
+      "type": "string",
+      "access": "read",
+      "description": "Людино-читабельний стан для UI"
+    },
+    "defrost.phase_timer": {
+      "type": "int",
+      "unit": "с",
+      "access": "read",
+      "description": "Секунди в поточній фазі"
+    },
+    "defrost.interval_timer": {
+      "type": "int",
+      "unit": "с",
+      "access": "read",
+      "description": "Секунди до наступної відтайки (скидається при ребуті)"
+    },
+    "defrost.defrost_count": {
+      "type": "int",
+      "unit": "",
+      "access": "read",
+      "description": "Кількість виконаних відтайок (скидається при ребуті)"
+    },
+    "defrost.last_termination": {
+      "type": "string",
+      "access": "read",
+      "description": "Причина останнього завершення (temp/timeout)"
+    },
+    "defrost.consecutive_timeouts": {
+      "type": "int",
+      "access": "read",
+      "description": "Послідовні завершення по таймеру"
+    },
+    "defrost.req.compressor": {
+      "type": "bool",
+      "access": "read",
+      "description": "Запит на компресор (до Equipment Manager)"
+    },
+    "defrost.req.heater": {
+      "type": "bool",
+      "access": "read",
+      "description": "Запит на тен (до Equipment Manager)"
+    },
+    "defrost.req.evap_fan": {
+      "type": "bool",
+      "access": "read",
+      "description": "Запит на вент. випарника (до Equipment Manager)"
+    },
+    "defrost.req.cond_fan": {
+      "type": "bool",
+      "access": "read",
+      "description": "Запит на вент. конденсатора (до Equipment Manager)"
+    },
+    "defrost.req.hg_valve": {
+      "type": "bool",
+      "access": "read",
+      "description": "Запит на клапан ГГ (до Equipment Manager)"
+    },
+    "defrost.manual_start": {
+      "type": "bool",
+      "access": "readwrite",
+      "description": "Ручний запуск розморозки (trigger)"
+    },
+    "defrost.type": {
+      "type": "int",
+      "access": "readwrite",
+      "default": 0,
+      "persist": true,
+      "options": [
+        {"value": 0, "label": "За часом (зупинка компресора)"},
+        {"value": 1, "label": "Електрична (тен)"},
+        {"value": 2, "label": "Гарячий газ"}
+      ],
+      "description": "Тип відтайки (dFT)"
+    },
+    "defrost.interval": {
+      "type": "int",
+      "unit": "год",
+      "access": "readwrite",
+      "min": 1,
+      "max": 99,
+      "step": 1,
+      "default": 8,
+      "persist": true,
+      "description": "Інтервал між відтайками (dit)"
+    },
+    "defrost.counter_mode": {
+      "type": "int",
+      "access": "readwrite",
+      "default": 1,
+      "persist": true,
+      "options": [
+        {"value": 1, "label": "Реальний час"},
+        {"value": 2, "label": "Час роботи компресора"}
+      ],
+      "description": "Режим лічильника інтервалу (dct)"
+    },
+    "defrost.initiation": {
+      "type": "int",
+      "access": "readwrite",
+      "default": 0,
+      "persist": true,
+      "options": [
+        {"value": 0, "label": "За таймером"},
+        {"value": 1, "label": "За температурою випарника"},
+        {"value": 2, "label": "Комбінований"},
+        {"value": 3, "label": "Вимкнено"}
+      ],
+      "description": "Ініціація розморозки"
+    },
+    "defrost.end_temp": {
+      "type": "float",
+      "unit": "\u00b0C",
+      "access": "readwrite",
+      "min": -5.0,
+      "max": 30.0,
+      "step": 0.5,
+      "default": 8.0,
+      "persist": true,
+      "description": "T завершення відтайки (dSt)"
+    },
+    "defrost.max_duration": {
+      "type": "int",
+      "unit": "хв",
+      "access": "readwrite",
+      "min": 5,
+      "max": 120,
+      "step": 1,
+      "default": 30,
+      "persist": true,
+      "description": "Макс. тривалість активної фази (dEt)"
+    },
+    "defrost.demand_temp": {
+      "type": "float",
+      "unit": "\u00b0C",
+      "access": "readwrite",
+      "min": -40.0,
+      "max": 0.0,
+      "step": 0.5,
+      "default": -25.0,
+      "persist": true,
+      "description": "Поріг demand відтайки (dSS)"
+    },
+    "defrost.drip_time": {
+      "type": "int",
+      "unit": "с",
+      "access": "readwrite",
+      "min": 0,
+      "max": 600,
+      "step": 1,
+      "default": 120,
+      "persist": true,
+      "description": "Час дренажу (dPt)"
+    },
+    "defrost.fan_delay": {
+      "type": "int",
+      "unit": "с",
+      "access": "readwrite",
+      "min": 0,
+      "max": 600,
+      "step": 1,
+      "default": 120,
+      "persist": true,
+      "description": "Затримка вент. після відтайки (FAd)"
+    },
+    "defrost.fad_temp": {
+      "type": "float",
+      "unit": "\u00b0C",
+      "access": "readwrite",
+      "min": -40.0,
+      "max": 10.0,
+      "step": 0.5,
+      "default": -5.0,
+      "persist": true,
+      "description": "T завершення FAD (FAT)"
+    },
+    "defrost.stabilize_time": {
+      "type": "int",
+      "unit": "с",
+      "access": "readwrite",
+      "min": 0,
+      "max": 120,
+      "step": 1,
+      "default": 30,
+      "persist": true,
+      "description": "Час стабілізації тиску (dFT=2, Фаза 1)"
+    },
+    "defrost.valve_delay": {
+      "type": "int",
+      "unit": "с",
+      "access": "readwrite",
+      "min": 1,
+      "max": 30,
+      "step": 1,
+      "default": 3,
+      "persist": true,
+      "description": "Затримка клапана ГГ (dFT=2, Фаза 2)"
+    },
+    "defrost.equalize_time": {
+      "type": "int",
+      "unit": "с",
+      "access": "readwrite",
+      "min": 0,
+      "max": 300,
+      "step": 1,
+      "default": 90,
+      "persist": true,
+      "description": "Час вирівнювання тиску (dFT=2, Фаза 4)"
+    }
+  },
+
+  "ui": {
+    "page": "Розморозка",
+    "page_id": "defrost",
+    "icon": "flame",
+    "order": 2,
+    "cards": [
+      {
+        "title": "Стан",
+        "widgets": [
+          {
+            "key": "defrost.state",
+            "widget": "status_text"
+          },
+          {
+            "key": "defrost.phase",
+            "widget": "status_text",
+            "label": "Фаза"
+          },
+          {
+            "key": "defrost.phase_timer",
+            "widget": "value",
+            "label": "Час фази"
+          },
+          {
+            "key": "defrost.interval_timer",
+            "widget": "value",
+            "label": "До наступної"
+          },
+          {
+            "key": "defrost.defrost_count",
+            "widget": "value",
+            "label": "Відтайок"
+          }
+        ]
+      },
+      {
+        "title": "Ручне управління",
+        "widgets": [
+          {
+            "key": "defrost.manual_start",
+            "widget": "button",
+            "label": "Запустити розморозку"
+          }
+        ]
+      },
+      {
+        "title": "Налаштування",
+        "group": "settings",
+        "collapsible": true,
+        "widgets": [
+          {
+            "key": "defrost.type",
+            "widget": "select"
+          },
+          {
+            "key": "defrost.interval",
+            "widget": "number_input"
+          },
+          {
+            "key": "defrost.counter_mode",
+            "widget": "select"
+          },
+          {
+            "key": "defrost.initiation",
+            "widget": "select"
+          },
+          {
+            "key": "defrost.end_temp",
+            "widget": "number_input"
+          },
+          {
+            "key": "defrost.max_duration",
+            "widget": "number_input"
+          },
+          {
+            "key": "defrost.demand_temp",
+            "widget": "number_input"
+          },
+          {
+            "key": "defrost.drip_time",
+            "widget": "number_input"
+          },
+          {
+            "key": "defrost.fan_delay",
+            "widget": "number_input"
+          },
+          {
+            "key": "defrost.fad_temp",
+            "widget": "number_input"
+          }
+        ]
+      },
+      {
+        "title": "Гарячий газ (dFT=2)",
+        "group": "settings",
+        "collapsible": true,
+        "widgets": [
+          {
+            "key": "defrost.stabilize_time",
+            "widget": "number_input"
+          },
+          {
+            "key": "defrost.valve_delay",
+            "widget": "number_input"
+          },
+          {
+            "key": "defrost.equalize_time",
+            "widget": "number_input"
+          }
+        ]
+      }
+    ]
+  },
+
+  "mqtt": {
+    "publish": [
+      "defrost.active",
+      "defrost.phase",
+      "defrost.state",
+      "defrost.phase_timer",
+      "defrost.interval_timer",
+      "defrost.defrost_count",
+      "defrost.last_termination",
+      "defrost.consecutive_timeouts",
+      "defrost.req.compressor",
+      "defrost.req.heater"
+    ],
+    "subscribe": [
+      "defrost.type",
+      "defrost.interval",
+      "defrost.counter_mode",
+      "defrost.initiation",
+      "defrost.end_temp",
+      "defrost.max_duration",
+      "defrost.demand_temp",
+      "defrost.drip_time",
+      "defrost.fan_delay",
+      "defrost.fad_temp",
+      "defrost.stabilize_time",
+      "defrost.valve_delay",
+      "defrost.equalize_time",
+      "defrost.manual_start"
+    ]
+  },
+
+  "display": {
+    "main_value": {
+      "key": "defrost.state",
+      "format": "%s"
+    },
+    "menu_items": [
+      {"label": "Тип dFT",       "key": "defrost.type"},
+      {"label": "Інтервал dit",   "key": "defrost.interval"},
+      {"label": "T завершення",   "key": "defrost.end_temp"},
+      {"label": "Макс. час dEt",  "key": "defrost.max_duration"}
+    ]
+  }
+}

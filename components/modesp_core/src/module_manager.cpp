@@ -80,8 +80,18 @@ bool ModuleManager::init_all(SharedState& state) {
         }
     }
 
-    ESP_LOGI(TAG, "All modules initialized");
-    return true;
+    // Перевіряємо чи CRITICAL модулі пройшли init (BUG-024 fix)
+    bool critical_ok = true;
+    for (auto* module : modules_) {
+        if (module->priority() == ModulePriority::CRITICAL &&
+            module->state_ == BaseModule::State::ERROR) {
+            ESP_LOGE(TAG, "CRITICAL module '%s' failed init!", module->name());
+            critical_ok = false;
+        }
+    }
+
+    ESP_LOGI(TAG, "All modules initialized%s", critical_ok ? "" : " (with CRITICAL failures!)");
+    return critical_ok;
 }
 
 void ModuleManager::update_all(uint32_t dt_ms) {

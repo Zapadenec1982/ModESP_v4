@@ -6,6 +6,7 @@ idf_component_register(
         "src/app.cpp"
     INCLUDE_DIRS
         "include"
+        "${CMAKE_SOURCE_DIR}/generated"
     REQUIRES
         marcel-cd__etlcpp
     PRIV_REQUIRES

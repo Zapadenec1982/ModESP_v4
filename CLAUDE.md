@@ -24,6 +24,7 @@ board.json + bindings.json ─┘
 - `generated/state_meta.h` — constexpr metadata
 - `generated/mqtt_topics.h` — MQTT topic arrays
 - `generated/display_screens.h` — LCD/OLED data
+- `generated/features_config.h` — constexpr feature flags (active/inactive per module)
 
 ### Svelte WebUI (webui/ → data/www/)
 - `webui/src/` — Svelte 4 source code (App.svelte, stores, components, pages)
@@ -32,7 +33,6 @@ board.json + bindings.json ─┘
 - `data/www/bundle.js.gz` — Svelte app gzipped (~14KB)
 - `data/www/bundle.css.gz` — Styles gzipped (~3KB)
 - Build: `cd webui && npm run build` → Deploy: `npm run deploy` → data/www/
-- **Старий vanilla JS (app.js, style.css) — залишено як fallback, не використовується**
 
 ### Equipment Layer (Phase 9.1)
 - **EquipmentModule** (priority=CRITICAL) — єдиний модуль з доступом до HAL drivers
@@ -40,6 +40,10 @@ board.json + bindings.json ─┘
 - Читає requests від бізнес-модулів: `thermostat.req.compressor`, `defrost.req.*`, `protection.lockout`
 - Арбітраж: Protection LOCKOUT > Defrost active > Thermostat
 - Інтерлоки: тен↔компресор ніколи одночасно, тен↔клапан ГГ ніколи одночасно
+- **Compressor anti-short-cycle (output-level):** COMP_MIN_OFF_MS=180s, COMP_MIN_ON_MS=120s
+  Захищає компресор незалежно від джерела запиту (thermostat/defrost)
+- Публікує **фактичний** стан реле через `get_state()` (не бажаний `out_`)
+- Relay `min_switch_ms` = 0 для всіх реле крім compressor (180s) — heater/fan/valve перемикаються миттєво
 - Бізнес-модулі (Thermostat, Defrost, Protection) працюють ТІЛЬКИ через SharedState
 - `data/bindings.json` — всі drivers прив'язані до module "equipment"
 
@@ -65,12 +69,39 @@ board.json + bindings.json ─┘
 - **protection.lockout = false** завжди (зарезервовано для Phase 10+)
 - Порядок update: Equipment(0) → **Protection(1)** → Thermostat(2)
 
+### Defrost (Phase 9.4)
+
+- **7-фазна state machine:** IDLE → [STABILIZE → VALVE_OPEN →] ACTIVE → [EQUALIZE →] DRIP → FAD → IDLE
+- **3 типи відтайки (dFT):** 0=природна (зупинка), 1=тен, 2=гарячий газ (7 фаз)
+- **4 ініціації:** таймер (dit з dct=1 реальний/dct=2 компресор), demand (T_evap<dSS), комбінований, ручний
+- **Завершення:** по T_evap >= dSt (основна), по таймеру безпеки dEt, consecutive timeout counter
+- **Оптимізація:** skip defrost якщо T_evap > dSt (випарник чистий)
+- **FAD:** Fan After Defrost — компресор+конд.вент ON, вент.вип OFF, завершення по FAT або таймеру FAd
+- **13 persist параметрів** + 2 runtime persist (interval_timer, defrost_count)
+- **NVS persistence:** interval_timer і defrost_count зберігаються через PersistService
+- Requests: `defrost.req.compressor`, `defrost.req.heater`, `defrost.req.evap_fan`, `defrost.req.cond_fan`, `defrost.req.hg_valve`
+- EM арбітрує: defrost.active=true → defrost.req.* має пріоритет над thermostat.req.*
+- Порядок update: Equipment(0) → Protection(1) → **Thermostat(2) + Defrost(2)**
+
+### Features System (Phase 10.5)
+
+- **Manifest-driven feature flags:** кожен модуль оголошує `features` з `requires_roles`
+- **FeatureResolver** (Python): перевіряє `bindings.json` → визначає active/inactive features
+- **Select widgets:** state keys з `options` (value+label) замість min/max/step для enum settings
+- **Constraints (enum_filter):** фільтрація доступних options залежно від active features
+- **disabled + disabled_reason:** widgets для неактивних features показуються як disabled в UI
+- **features_config.h:** constexpr масив + `is_feature_active(module, feature)` inline lookup
+- **has_feature():** метод BaseModule для runtime guards в C++ модулях
+- **Drivers:** ds18b20 (sensor), relay (actuator), digital_input (sensor, GPIO input)
+- **Validation:** V14 (controls_settings exist), V15 (requires_roles exist), V16 (requires_feature exist), V17 (options int), V18 (options→select)
+- **209 pytest тестів** (43 нових у test_features.py + 4 binding fixtures)
+
 ### Файли які МОЖНА редагувати
-- `modules/*/manifest.json` — опис модулів (UI, state, mqtt, display)
+- `modules/*/manifest.json` — опис модулів (UI, state, mqtt, display, features, constraints)
 - `drivers/*/manifest.json` — опис драйверів (category, hardware_type, settings)
-- `data/board.json` — PCB pin assignment (gpio_outputs, onewire_buses)
+- `data/board.json` — PCB pin assignment (gpio_outputs, onewire_buses, gpio_inputs, adc_channels)
 - `data/bindings.json` — Runtime: role → driver → GPIO mapping
-- `tools/generate_ui.py` — генератор (~900 рядків, генерує 4 артефакти)
+- `tools/generate_ui.py` — генератор (~1200 рядків, генерує 5 артефактів)
 - `components/*/src/*.cpp` — C++ реалізація
 - `main/main.cpp` — boot sequence та main loop
 
@@ -79,8 +110,8 @@ board.json + bindings.json ─┘
 ### Zero Heap в Hot Path
 - НІКОЛИ: std::string, std::vector, new, malloc в on_update() / on_message()
 - ЗАВЖДИ: etl::string<N>, etl::vector<T,N>, etl::variant, etl::optional
-- SharedState: etl::unordered_map<StateKey, StateValue, 64>
-- StateKey = etl::string<24>, StateValue = etl::variant<int32_t, float, bool, etl::string<32>>
+- SharedState: etl::unordered_map<StateKey, StateValue, 96> (MODESP_MAX_STATE_ENTRIES)
+- StateKey = etl::string<32>, StateValue = etl::variant<int32_t, float, bool, etl::string<32>>
 
 ### ESP-IDF стиль
 - Логування: ESP_LOGI/W/E/D(TAG, ...) — НЕ printf/cout
@@ -103,7 +134,21 @@ board.json + bindings.json ─┘
 
 ### State keys формат
 - `<module>.<key>` — наприклад: thermostat.temperature, system.uptime
-- readwrite float/int — ОБОВ'ЯЗКОВО мають min, max, step
+- readwrite float/int — ОБОВ'ЯЗКОВО мають min, max, step (або options для enum)
+
+## Маніфести — features та options
+
+### Features (Phase 10.5)
+- Кожен бізнес-модуль оголошує `features` з `requires_roles` в маніфесті
+- `always_active: true` — feature завжди активна; інакше requires_roles перевіряються проти bindings
+- `controls_settings: [...]` — які state keys контролює ця feature
+- При генерації: неактивна feature → widgets disabled в ui.json, false в features_config.h
+- C++ модулі: `has_feature("name")` → constexpr lookup
+
+### Options (select widgets)
+- State key з полем `options: [{value, label}, ...]` → widget "select" в UI
+- `constraints` секція фільтрує options: `enum_filter` → requires_feature → active features
+- Приклад: defrost.type options фільтруються — без heater → тільки "За часом"
 
 ## Структура проекту
 
@@ -118,6 +163,8 @@ ModESP_v4/
 │   ├── modesp_json/           # JSON helpers
 │   └── jsmn/                  # Lightweight JSON parser (header-only)
 ├── drivers/
+│   └── digital_input/
+│   │   └── manifest.json      # ⭐ Driver manifest (sensor, gpio_input, 1 setting)
 │   ├── ds18b20/
 │   │   ├── manifest.json      # ⭐ Driver manifest (sensor, onewire_bus, 3 settings)
 │   │   └── src/...            # Dallas DS18B20 temperature sensor (OneWire)
@@ -131,13 +178,17 @@ ModESP_v4/
 │   ├── protection/
 │   │   ├── manifest.json      # ⭐ Alarm monitoring (5 monitors, dAd delay)
 │   │   └── src/protection_module.cpp
-│   └── thermostat/
-│       ├── manifest.json      # ⭐ Single Source of Truth для UI/state/mqtt
-│       └── src/thermostat_module.cpp
+│   ├── thermostat/
+│   │   ├── manifest.json      # ⭐ Single Source of Truth для UI/state/mqtt
+│   │   └── src/thermostat_module.cpp
+│   └── defrost/
+│       ├── manifest.json      # ⭐ 7-phase defrost cycle (3 types, 13 params)
+│       └── src/defrost_module.cpp
 ├── tools/
-│   └── generate_ui.py         # Manifest → UI + C++ headers generator
+│   ├── generate_ui.py         # Manifest → UI + C++ headers generator (~1200 lines)
+│   └── tests/                 # 209 pytest tests (test_features, test_modules, test_validator)
 ├── data/
-│   ├── board.json             # PCB pin assignment (gpio_outputs, onewire_buses)
+│   ├── board.json             # PCB pin assignment (gpio_outputs, onewire_buses, gpio_inputs, adc_channels)
 │   ├── bindings.json          # Runtime: role → driver → GPIO mapping (manifest_version: 1)
 │   ├── ui.json                # 🔄 Generated
 │   └── www/                   # Deployed WebUI (index.html, bundle.js.gz, bundle.css.gz)
@@ -146,7 +197,7 @@ ModESP_v4/
 │   ├── scripts/deploy.js      # Gzip + copy to data/www/
 │   ├── package.json           # npm run build / npm run deploy
 │   └── rollup.config.js       # Rollup bundler config
-├── generated/                 # 🔄 All generated C++ headers
+├── generated/                 # 🔄 All generated C++ headers (5 files)
 ├── docs/                      # Architecture docs (01-09)
 ├── project.json               # Active modules list
 ├── partitions.csv             # NVS(24K) + app(1.5MB) + data/LittleFS(384K)
@@ -156,7 +207,7 @@ ModESP_v4/
 ## Ключові компоненти
 
 ### SharedState — центральне сховище
-- etl::unordered_map<StateKey, StateValue, 64>
+- etl::unordered_map<StateKey, StateValue, 96> (MODESP_MAX_STATE_ENTRIES)
 - Thread-safe (FreeRTOS mutex)
 - version_ counter інкрементується на кожен set() — WsService порівнює версії
 - for_each() з callback під mutex для серіалізації
@@ -167,8 +218,9 @@ ModESP_v4/
 - Пріоритет CRITICAL — ініціалізується в Phase 1 (до бізнес-модулів)
 - **Boot:** ітерує STATE_META, для persist:true читає NVS → SharedState (або default)
 - **Runtime:** SharedState callback → dirty flag → debounce 5s → NVS flush
-- NVS namespace: "persist", ключі: "p0", "p1", ... (індекс в STATE_META)
-- Підтримує float, int32_t, bool типи
+- NVS namespace: "persist", ключі: djb2 hash від імені state key ("s" + 7 hex chars)
+- **Міграція при boot:** автоматично конвертує старі позиційні ключі "p0".."p32" → hash-based
+- Підтримує float, int32_t, bool типи (з auto-conversion між float↔int32_t)
 - set_state(SharedState*) — ін'єкція залежності з main.cpp
 
 ### ModuleManager — lifecycle
@@ -245,6 +297,26 @@ ModESP_v4/
 | `next_prompt.md` | Промпт для наступної сесії | В кінці поточної сесії |
 
 ## Changelog
+- 2026-02-20 — Phase 10.5 DONE: Features System + Select Widgets. Manifests: features/constraints/options
+  in thermostat/defrost/protection. Generator: FeatureResolver, select widgets, disabled+reason,
+  FeaturesConfigGenerator → features_config.h (5th artifact). C++: has_feature() in BaseModule,
+  guards in thermostat/defrost/protection. digital_input driver manifest. board.json: 4 relays, 1 DI, 2 ADC.
+  Validation V14-V18. 209 pytest tests green (43 new in test_features.py + 4 binding fixtures).
+- 2026-02-20 — BUG-012: NVS positional keys → hash-based (djb2). Auto-migration p0..p32 → sXXXXXXX.
+  BUG-023: POST /api/settings uses meta->type instead of decimal point heuristic. Float persist fixed.
+  AUDIT-014..017: manifest range fixes. AUDIT-038..040: security (CORS, traversal, old files removed).
+- 2026-02-20 — AUDIT Phase 10: 10 critical fixes. C++: relay min_switch_ms role-based (compressor only),
+  EM publishes actual relay state via get_state(), EM-level compressor anti-short-cycle timer
+  (COMP_MIN_OFF_MS=180s, COMP_MIN_ON_MS=120s), JSON string escaping in http_service + ws_service.
+  WebUI: ButtonWidget state key fallback (manual defrost works), icons (flame, shield-alert,
+  alert-triangle, thermometer), Dashboard uses equipment.compressor + defrost/alarm tiles,
+  StatusText defrost phase colors, alarm banner in Layout, apiPost error handling.
+- 2026-02-18 — SharedState capacity 64→96 (MODESP_MAX_STATE_ENTRIES). 69 manifest keys + ~15 system keys overflowed 64.
+- 2026-02-18 — Phase 9.4 DONE: Defrost module (modules/defrost/). 7-phase state machine,
+  3 types (natural/heater/hot gas), 4 initiations (timer/demand/combo/manual).
+  13 persist params + 2 runtime persist (interval_timer, defrost_count). 27 state keys, 10 MQTT publish.
+  Generator fix: read-only persist keys now included in state_meta.h (writable=false, persist=true).
+  4 modules, 69 state keys, 9 pages. 79 тестів зелені.
 - 2026-02-18 — Phase 9.3 DONE: Protection module (modules/protection/). 5 alarm monitors
   (HAL, LAL, ERR1, ERR2, Door). Delayed alarms (dAd), defrost blocking, auto-clear + manual reset.
   5 persist параметрів, 14 state keys, 8 MQTT publish. 79 тестів зелені. 3 modules, 42 state keys.

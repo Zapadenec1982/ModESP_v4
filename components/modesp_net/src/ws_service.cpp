@@ -18,6 +18,25 @@ namespace modesp {
 
 // ── Serialization (same format as HTTP /api/state) ──────────────
 
+// AUDIT-004: JSON escape для string значень
+static size_t ws_json_escape(char* dest, size_t dest_size, const char* src) {
+    size_t w = 0;
+    for (const char* p = src; *p && w + 2 < dest_size; ++p) {
+        switch (*p) {
+            case '"':  dest[w++] = '\\'; dest[w++] = '"';  break;
+            case '\\': dest[w++] = '\\'; dest[w++] = '\\'; break;
+            case '\n': dest[w++] = '\\'; dest[w++] = 'n';  break;
+            case '\r': dest[w++] = '\\'; dest[w++] = 'r';  break;
+            case '\t': dest[w++] = '\\'; dest[w++] = 't';  break;
+            default:
+                if (static_cast<unsigned char>(*p) >= 0x20) dest[w++] = *p;
+                break;
+        }
+    }
+    dest[w] = '\0';
+    return w;
+}
+
 struct WsSerCtx {
     char* buf;
     size_t size;
@@ -46,9 +65,11 @@ static void ws_serialize_entry(const StateKey& key, const StateValue& value, voi
                              "%s\"%s\":%s", sep, key.c_str(),
                              etl::get<bool>(value) ? "true" : "false");
     } else if (etl::holds_alternative<StringValue>(value)) {
+        char escaped[64];
+        ws_json_escape(escaped, sizeof(escaped),
+                       etl::get<StringValue>(value).c_str());
         ctx->pos += snprintf(ctx->buf + ctx->pos, ctx->remaining(),
-                             "%s\"%s\":\"%s\"", sep, key.c_str(),
-                             etl::get<StringValue>(value).c_str());
+                             "%s\"%s\":\"%s\"", sep, key.c_str(), escaped);
     }
 }
 

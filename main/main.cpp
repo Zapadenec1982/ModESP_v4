@@ -44,6 +44,7 @@
 #include "equipment_module.h"
 #include "protection_module.h"
 #include "thermostat_module.h"
+#include "defrost_module.h"
 
 #include "esp_log.h"
 #include "esp_task_wdt.h"
@@ -85,6 +86,7 @@ static ProtectionModule        protection;
 
 // Business modules (NORMAL priority — work through SharedState)
 static ThermostatModule        thermostat;
+static DefrostModule           defrost;
 
 // ═══════════════════════════════════════════════════════════════
 // Entry point
@@ -193,6 +195,9 @@ extern "C" void app_main(void)
     // Thermostat — працює через SharedState, без прямого HAL доступу
     app.modules().register_module(thermostat);
 
+    // Defrost — цикл розморозки (NORMAL priority, EM арбітрує requests)
+    app.modules().register_module(defrost);
+
     ESP_LOGI(TAG, "Phase 2: Initializing WiFi + business modules...");
     app.modules().init_all(app.state());
 
@@ -248,18 +253,32 @@ extern "C" void app_main(void)
     ESP_LOGI(TAG, "Registered %d modules total", (int)app.modules().module_count());
     ESP_LOGI(TAG, "Free heap after init: %lu bytes", esp_get_free_heap_size());
 
-    // HW Watchdog
+    // HW Watchdog — ESP-IDF v5.x auto-ініціалізує TWDT, тому reconfigure
+    bool wdt_subscribed = false;
     esp_task_wdt_config_t wdt_cfg = {
         .timeout_ms  = MODESP_WDT_TIMEOUT_MS,
         .idle_core_mask = 0,
         .trigger_panic = true,
     };
     esp_err_t wdt_err = esp_task_wdt_reconfigure(&wdt_cfg);
+    if (wdt_err != ESP_OK) {
+        // TWDT не ініціалізований — створюємо
+        wdt_err = esp_task_wdt_init(&wdt_cfg);
+    }
     if (wdt_err == ESP_OK) {
-        esp_task_wdt_add(nullptr);
-        ESP_LOGI(TAG, "HW watchdog: %d ms timeout", MODESP_WDT_TIMEOUT_MS);
+        esp_err_t add_err = esp_task_wdt_add(nullptr);
+        if (add_err == ESP_OK) {
+            wdt_subscribed = true;
+            ESP_LOGI(TAG, "HW watchdog: %d ms timeout", MODESP_WDT_TIMEOUT_MS);
+        } else if (add_err == ESP_ERR_INVALID_STATE) {
+            // Задача вже підписана — ОК
+            wdt_subscribed = true;
+            ESP_LOGI(TAG, "HW watchdog: task already subscribed (%d ms)", MODESP_WDT_TIMEOUT_MS);
+        } else {
+            ESP_LOGW(TAG, "HW watchdog: add task failed: %s", esp_err_to_name(add_err));
+        }
     } else {
-        ESP_LOGW(TAG, "HW watchdog reconfigure failed: %s", esp_err_to_name(wdt_err));
+        ESP_LOGW(TAG, "HW watchdog init failed: %s", esp_err_to_name(wdt_err));
     }
 
     constexpr int LOOP_HZ = MODESP_MAIN_LOOP_HZ;
@@ -287,7 +306,7 @@ extern "C" void app_main(void)
         }
 
         // 4. HW watchdog reset
-        esp_task_wdt_reset();
+        if (wdt_subscribed) esp_task_wdt_reset();
 
         // 5. Precise loop timing
         vTaskDelayUntil(&last_wake, period);

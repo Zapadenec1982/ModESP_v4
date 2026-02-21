@@ -41,7 +41,10 @@ bool SharedState::set(const StateKey& key, const StateValue& value) {
     }
 
     map_[key] = value;
-    version_++;
+    // Інкрементуємо version тільки при реальній зміні (BUG-017 fix)
+    if (changed) {
+        version_++;
+    }
 
     // Зберігаємо callback локально перед звільненням mutex
     auto cb = persist_cb_;

@@ -64,10 +64,14 @@ bool EquipmentModule::on_init() {
     }
 
     // Початковий стан в SharedState
+    // Оптимістична ініціалізація: sensor_ok = true щоб Protection
+    // не спрацьовувала ERR1/ERR2 до першого реального read().
+    // DS18B20 потребує ~750ms на першу конверсію — перші read() фейляться.
+    // Якщо датчик не сконфігурований — теж true (не помилка).
     state_set("equipment.air_temp", 0.0f);
     state_set("equipment.evap_temp", 0.0f);
-    state_set("equipment.sensor1_ok", false);
-    state_set("equipment.sensor2_ok", false);
+    state_set("equipment.sensor1_ok", true);
+    state_set("equipment.sensor2_ok", true);
     state_set("equipment.compressor", false);
     state_set("equipment.heater", false);
     state_set("equipment.evap_fan", false);
@@ -82,6 +86,10 @@ bool EquipmentModule::on_init() {
 }
 
 void EquipmentModule::on_update(uint32_t dt_ms) {
+    // AUDIT-003: оновлюємо таймер компресора
+    comp_since_ms_ += dt_ms;
+    if (comp_since_ms_ > 999999) comp_since_ms_ = 999999;  // Запобігаємо overflow
+
     // 1. Застосовуємо relay стани з попереднього циклу
     apply_outputs();
 
@@ -125,16 +133,12 @@ void EquipmentModule::read_sensors() {
         float temp = 0.0f;
         if (sensor_air_->read(temp)) {
             air_temp_ = temp;
-            has_air_temp_ = true;
             state_set("equipment.air_temp", air_temp_);
-            state_set("equipment.sensor1_ok", true);
-        } else {
-            // Датчик не відповідає
-            if (has_air_temp_) {
-                // Зберігаємо останнє значення, але помічаємо проблему
-                state_set("equipment.sensor1_ok", false);
-            }
         }
+        // is_healthy() враховує consecutive_errors (драйвер відстежує).
+        // read() повертає true з кешованим значенням навіть коли датчик офлайн,
+        // тому для статусу використовуємо is_healthy().
+        state_set("equipment.sensor1_ok", sensor_air_->is_healthy());
     }
 
     // Датчик випарника (опціональний)
@@ -142,12 +146,9 @@ void EquipmentModule::read_sensors() {
         float temp = 0.0f;
         if (sensor_evap_->read(temp)) {
             evap_temp_ = temp;
-            has_evap_temp_ = true;
             state_set("equipment.evap_temp", evap_temp_);
-            state_set("equipment.sensor2_ok", true);
-        } else {
-            state_set("equipment.sensor2_ok", false);
         }
+        state_set("equipment.sensor2_ok", sensor_evap_->is_healthy());
     }
 }
 
@@ -220,6 +221,27 @@ void EquipmentModule::apply_arbitration() {
         out_.hg_valve = false;
         ESP_LOGW(TAG, "INTERLOCK: heater+hg_valve → hg_valve OFF");
     }
+
+    // === AUDIT-003: Compressor anti-short-cycle (output-level) ===
+    // Захищає компресор незалежно від джерела запиту (thermostat/defrost).
+    // Працює на фактичному стані реле, а не на запитах бізнес-модулів.
+    if (out_.compressor != comp_actual_) {
+        if (out_.compressor) {
+            // Запит на ввімкнення — перевіряємо min OFF time
+            if (comp_since_ms_ < COMP_MIN_OFF_MS) {
+                out_.compressor = false;
+                ESP_LOGD(TAG, "Compressor ON blocked — min OFF (%lu/%lu ms)",
+                         comp_since_ms_, COMP_MIN_OFF_MS);
+            }
+        } else {
+            // Запит на вимкнення — перевіряємо min ON time
+            if (comp_since_ms_ < COMP_MIN_ON_MS) {
+                out_.compressor = true;  // Тримаємо ON
+                ESP_LOGD(TAG, "Compressor OFF blocked — min ON (%lu/%lu ms)",
+                         comp_since_ms_, COMP_MIN_ON_MS);
+            }
+        }
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -227,11 +249,14 @@ void EquipmentModule::apply_arbitration() {
 // ═══════════════════════════════════════════════════════════════
 
 void EquipmentModule::apply_outputs() {
-    if (compressor_) compressor_->set(out_.compressor);
-    if (heater_)     heater_->set(out_.heater);
-    if (evap_fan_)   evap_fan_->set(out_.evap_fan);
-    if (cond_fan_)   cond_fan_->set(out_.cond_fan);
-    if (hg_valve_)   hg_valve_->set(out_.hg_valve);
+    // Антикороткоциклування компресора — на рівні apply_arbitration()
+    if (compressor_) {
+        compressor_->set(out_.compressor);
+    }
+    if (heater_)   heater_->set(out_.heater);
+    if (evap_fan_) evap_fan_->set(out_.evap_fan);
+    if (cond_fan_) cond_fan_->set(out_.cond_fan);
+    if (hg_valve_) hg_valve_->set(out_.hg_valve);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -239,9 +264,19 @@ void EquipmentModule::apply_outputs() {
 // ═══════════════════════════════════════════════════════════════
 
 void EquipmentModule::publish_state() {
-    state_set("equipment.compressor", out_.compressor);
-    state_set("equipment.heater", out_.heater);
-    state_set("equipment.evap_fan", out_.evap_fan);
-    state_set("equipment.cond_fan", out_.cond_fan);
-    state_set("equipment.hg_valve", out_.hg_valve);
+    // AUDIT-002: публікуємо ФАКТИЧНИЙ стан реле (get_state()), а не бажаний (out_)
+    bool comp_now = compressor_ ? compressor_->get_state() : false;
+
+    // AUDIT-003: відстежуємо зміну фактичного стану компресора для таймера
+    if (comp_now != comp_actual_) {
+        comp_since_ms_ = 0;
+        comp_actual_ = comp_now;
+        ESP_LOGI(TAG, "Compressor → %s", comp_now ? "ON" : "OFF");
+    }
+
+    state_set("equipment.compressor", comp_now);
+    state_set("equipment.heater",     heater_     ? heater_->get_state()     : false);
+    state_set("equipment.evap_fan",   evap_fan_   ? evap_fan_->get_state()   : false);
+    state_set("equipment.cond_fan",   cond_fan_   ? cond_fan_->get_state()   : false);
+    state_set("equipment.hg_valve",   hg_valve_   ? hg_valve_->get_state()   : false);
 }

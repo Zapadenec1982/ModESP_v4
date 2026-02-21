@@ -136,5 +136,19 @@ bool write_bool(const char* ns, const char* key, bool value) {
     return err == ESP_OK;
 }
 
+bool erase_key(const char* ns, const char* key) {
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(ns, NVS_READWRITE, &handle);
+    if (err != ESP_OK) return false;
+
+    err = nvs_erase_key(handle, key);
+    if (err == ESP_OK) {
+        err = nvs_commit(handle);
+    }
+    nvs_close(handle);
+    // ESP_ERR_NVS_NOT_FOUND — ключ вже не існує, не помилка
+    return err == ESP_OK || err == ESP_ERR_NVS_NOT_FOUND;
+}
+
 } // namespace nvs_helper
 } // namespace modesp

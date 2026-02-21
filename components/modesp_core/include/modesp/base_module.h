@@ -18,6 +18,7 @@
 #pragma once
 
 #include "modesp/types.h"
+#include "features_config.h"
 #include "etl/message.h"
 #include "etl/optional.h"
 
@@ -77,6 +78,11 @@ protected:
     // Прочитати значення з SharedState
     etl::optional<StateValue> state_get(const StateKey& key) const;
     etl::optional<StateValue> state_get(const char* key) const;
+
+    // Перевірити чи feature активна (з features_config.h)
+    bool has_feature(const char* feature_name) const {
+        return modesp::gen::is_feature_active(name(), feature_name);
+    }
 
 private:
     friend class ModuleManager;  // ModuleManager встановлює зв'язки

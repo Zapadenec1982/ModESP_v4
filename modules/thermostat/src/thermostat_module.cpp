@@ -8,6 +8,11 @@
  *   ON:  T_air >= setpoint + differential
  *   OFF: T_air <= setpoint (after min_on_time elapsed)
  *
+ * Defrost pause: при defrost.active термостат повністю зупиняється.
+ *   Всі requests скидаються, таймери заморожені.
+ *   Після відтайки comp_off_time скидається → min_off рахується заново.
+ *   При газовій відтайці компресор працює від defrost, термостат не втручається.
+ *
  * Equipment Layer: all requests via SharedState (thermostat.req.*)
  */
 
@@ -177,6 +182,10 @@ bool ThermostatModule::on_init() {
              min_off_ms_ / 1000, min_on_ms_ / 1000, startup_delay_ms_ / 1000);
     ESP_LOGI(TAG, "  evap_fan_mode=%ld, cond_fan_delay=%lus",
              evap_fan_mode_, cond_fan_delay_ms_ / 1000);
+    ESP_LOGI(TAG, "Features: fan=%d, fan_temp=%d, cond_fan=%d",
+             has_feature("fan_control"),
+             has_feature("fan_temp_control"),
+             has_feature("condenser_fan"));
     return true;
 }
 
@@ -196,24 +205,42 @@ void ThermostatModule::on_update(uint32_t dt_ms) {
     defrost_active_ = read_bool("defrost.active");
     protection_lockout_ = read_bool("protection.lockout");
 
-    // Перевірка defrost.phase для FAD
-    defrost_fad_ = false;
-    auto phase_val = state_get("defrost.phase");
-    if (phase_val.has_value()) {
-        const auto* sp = etl::get_if<etl::string<32>>(&phase_val.value());
-        if (sp && *sp == "fad") {
-            defrost_fad_ = true;
-        }
-    }
-
     // 3. Дзеркало температури для UI/MQTT
     if (sensor1_ok_) {
         state_set("thermostat.temperature", current_temp_);
     }
 
-    // 4. Оновлюємо таймери
+    // ═══ Defrost pause ═══
+    // Під час відтайки термостат повністю зупиняється:
+    // - EM арбітрує: defrost.req.* має пріоритет
+    // - При газовій відтайці компресор працює від defrost, термостат не втручається
+    // - Таймери заморожені — після відтайки min_off_time рахується заново
+    if (defrost_active_) {
+        if (!was_defrost_active_) {
+            request_compressor(false);
+            request_evap_fan(false);
+            request_cond_fan(false);
+            ESP_LOGI(TAG, "Defrost active — paused");
+        }
+        was_defrost_active_ = true;
+        publish_outputs();
+        return;
+    }
+
+    // Defrost щойно завершився — скидаємо таймери
+    if (was_defrost_active_) {
+        was_defrost_active_ = false;
+        comp_off_time_ms_ = 0;
+        comp_on_time_ms_ = 0;
+        cond_fan_delay_active_ = false;
+        cond_fan_off_timer_ms_ = 0;
+        ESP_LOGI(TAG, "Defrost ended — resumed (timers reset)");
+    }
+
+    // 4. Оновлюємо таймери по ФАКТИЧНОМУ стану компресора (BUG-009 fix)
     state_timer_ms_ += dt_ms;
-    if (compressor_on_) {
+    bool comp_actual = read_bool("equipment.compressor");
+    if (comp_actual) {
         comp_on_time_ms_ += dt_ms;
     } else {
         comp_off_time_ms_ += dt_ms;
@@ -227,24 +254,7 @@ void ThermostatModule::on_update(uint32_t dt_ms) {
         return;
     }
 
-    // 6. Defrost active — thermostat не керує (крім FAD і COd затримки)
-    if (defrost_active_ && !defrost_fad_) {
-        // Defrost модуль керує через EM
-        request_compressor(false);
-        request_evap_fan(false);
-        // Конд. вентилятор — дозволяємо COd затримку відпрацювати (BUG-004 fix)
-        update_cond_fan(dt_ms);
-        return;
-    }
-
-    // FAD phase: Defrost каже "потрібен компресор і конд.вент."
-    // Thermostat не втручається — Defrost шле req через EM
-    if (defrost_fad_) {
-        request_evap_fan(false);  // Вент. випарника OFF при будь-якому defrost
-        return;
-    }
-
-    // 7. State machine
+    // 6. State machine
     switch (state_) {
         case State::STARTUP:
             // Чекаємо startup_delay, потім → IDLE
@@ -349,10 +359,11 @@ void ThermostatModule::update_safety_run(uint32_t dt_ms) {
 // ═══════════════════════════════════════════════════════════════
 
 void ThermostatModule::update_evap_fan() {
-    // Безумовно OFF при defrost/drip/fad
-    if (defrost_active_) {
-        request_evap_fan(false);
-        return;
+    // Примітка: під час defrost on_update() робить return раніше,
+    // тому цей метод викликається тільки при нормальній роботі.
+
+    if (!has_feature("fan_control")) {
+        return;  // evap_fan не призначений → не керуємо
     }
 
     switch (evap_fan_mode_) {
@@ -368,8 +379,8 @@ void ThermostatModule::update_evap_fan() {
 
         case 2: {
             // За T_evap: вимикається якщо T_evap > fan_stop_temp
-            // При відмові датчика випарника — fallback на mode 1
-            if (!sensor2_ok_) {
+            // Потрібен датчик випарника — fallback на mode 1
+            if (!has_feature("fan_temp_control") || !sensor2_ok_) {
                 request_evap_fan(compressor_on_);
                 break;
             }
@@ -400,8 +411,9 @@ void ThermostatModule::update_evap_fan() {
 // ═══════════════════════════════════════════════════════════════
 
 void ThermostatModule::update_cond_fan(uint32_t dt_ms) {
-    // BUG-004 fix: при defrost — не вимикаємо одразу, дозволяємо COd delay відпрацювати.
-    // compressor_on_ == false при defrost → delay логіка нижче спрацює автоматично.
+    if (!has_feature("condenser_fan")) {
+        return;  // cond_fan не призначений → не керуємо
+    }
 
     if (compressor_on_) {
         // Компресор ON → конд. вент. ON

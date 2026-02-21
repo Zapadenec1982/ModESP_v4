@@ -18,10 +18,12 @@ from generate_ui import (
     DriverManifestValidator,
     DriverManifestLoader,
     cross_validate,
+    FeatureResolver,
     UIJsonGenerator,
     StateMetaGenerator,
     MqttTopicsGenerator,
     DisplayScreensGenerator,
+    FeaturesConfigGenerator,
     WIDGET_TYPE_COMPAT,
 )
 
@@ -63,3 +65,27 @@ def valid_project():
 def thermostat_manifests(valid_thermostat):
     """List of manifests containing thermostat (for generators)."""
     return [valid_thermostat]
+
+
+@pytest.fixture
+def bindings_minimal():
+    """Мінімальні bindings: compressor + air_temp."""
+    return load_fixture("bindings_minimal.json")
+
+
+@pytest.fixture
+def bindings_with_evap():
+    """Bindings з датчиком випарника."""
+    return load_fixture("bindings_with_evap.json")
+
+
+@pytest.fixture
+def bindings_with_fans():
+    """Bindings з датчиком випарника + вентиляторами."""
+    return load_fixture("bindings_with_fans.json")
+
+
+@pytest.fixture
+def bindings_full():
+    """Повні bindings з усіма ролями."""
+    return load_fixture("bindings_full.json")

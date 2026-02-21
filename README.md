@@ -15,15 +15,16 @@ ModESP v4 is an open-source firmware framework that turns a cheap ESP32 module i
 
 ### Key Features
 
-- **Modular architecture** -- plug-in modules with lifecycle management and priority-based initialization
-- **Manifest-driven code generation** -- single source of truth: JSON manifests auto-generate UI, C++ headers, MQTT topics
-- **Zero heap in hot path** -- ETL (Embedded Template Library) instead of STL; no `new`/`malloc` in runtime loops
-- **Web UI** -- built-in HTTP server with real-time WebSocket state broadcast
-- **MQTT with TLS** -- publish state and subscribe to commands via any MQTT broker
-- **OTA updates** -- over-the-air firmware upload with rollback support
-- **Persistent settings** -- auto-save configuration to NVS with debounce
-- **WiFi** -- STA mode (connect to router) with AP fallback (ModESP-XXXX)
-- **Hardware abstraction** -- DS18B20 temperature sensors (OneWire), GPIO relays with min on/off protection
+- **Full refrigeration control** — thermostat with asymmetric differential, 7-phase defrost (3 types), 5 alarm monitors with protection
+- **Equipment Manager** — centralized HAL owner with arbitration (Protection > Defrost > Thermostat) and safety interlocks
+- **Progressive feature disclosure** — UI shows only settings for connected equipment; select widgets with human-readable labels
+- **Manifest-driven code generation** — JSON manifests → auto-generated UI, C++ headers, MQTT topics, feature flags
+- **Zero heap in hot path** — ETL instead of STL; no `new`/`malloc` in runtime loops
+- **Svelte Web UI** — real-time dashboard with WebSocket, 17KB gzipped, dark theme
+- **MQTT with TLS** — publish state and subscribe to commands via any MQTT broker
+- **OTA updates** — over-the-air firmware upload with rollback support
+- **Persistent settings** — auto-save configuration to NVS with debounce
+- **WiFi** — STA mode (connect to router) with AP fallback (ModESP-XXXX)
 
 ---
 
@@ -32,12 +33,30 @@ ModESP v4 is an open-source firmware framework that turns a cheap ESP32 module i
 ```
  module manifest.json  ──┐
  driver manifest.json  ──┼──▶  generate_ui.py  ──▶  ui.json (WebUI schema)
- board.json            ──┤                     ──▶  state_meta.h (C++ constexpr)
+ board.json            ──┤                     ──▶  state_meta.h (C++ metadata)
  bindings.json         ──┘                     ──▶  mqtt_topics.h
                                                ──▶  display_screens.h
+                                               ──▶  features_config.h
 ```
 
-The Python generator (`tools/generate_ui.py`, ~900 lines) reads all manifests and produces 4 artifacts. These are regenerated on every build -- never edit them manually.
+### Equipment Layer
+
+```
+  Thermostat          Defrost           Protection
+      │                  │                  │
+      │ req.compressor   │ req.heater       │ lockout
+      ▼                  ▼                  ▼
+  ┌──────────────────────────────────────────────┐
+  │           Equipment Manager                   │
+  │  Arbitration: Protection > Defrost > Thermo   │
+  │  Interlocks: heater↔compressor, valve→comp    │
+  └──────────────────────────────────────────────┘
+      │           │           │           │
+    Relay1      Relay2      Relay3      Relay4
+    DS18B20     DS18B20     DI(door)    ...
+```
+
+Business modules never access hardware directly — they publish requests to SharedState, Equipment Manager arbitrates and drives relays.
 
 ---
 
@@ -48,29 +67,36 @@ ModESP_v4/
 ├── main/main.cpp                  # Boot sequence, main loop (3 init phases)
 ├── components/
 │   ├── modesp_core/               # BaseModule, ModuleManager, SharedState, types
-│   ├── modesp_services/           # Error, Watchdog, Logger, Config, NVS, Persist
+│   ├── modesp_services/           # Error, Watchdog, Logger, Config, NVS, PersistService
 │   ├── modesp_hal/                # HAL, DriverManager, driver interfaces
 │   ├── modesp_net/                # WiFi, HTTP (12 endpoints), WebSocket
 │   ├── modesp_mqtt/               # MQTT client with TLS
 │   ├── modesp_json/               # JSON serialization helpers
 │   └── jsmn/                      # Lightweight JSON parser (header-only)
 ├── drivers/
+│   ├── digital_input/             # GPIO digital input (door contact etc.)
 │   ├── ds18b20/                   # Dallas DS18B20 temperature sensor (OneWire)
 │   └── relay/                     # GPIO relay with min on/off time protection
 ├── modules/
-│   └── thermostat/                # On/Off regulation with hysteresis
+│   ├── equipment/                 # HAL owner, arbitration, interlocks
+│   ├── thermostat/                # Asymmetric differential, fan control, safety run
+│   ├── defrost/                   # 7-phase FSM, 3 defrost types, 4 initiations
+│   └── protection/                # 5 alarm monitors, delayed alarms, manual reset
 ├── tools/
-│   ├── generate_ui.py             # Manifest → artifacts generator
-│   └── tests/                     # 79 pytest tests
+│   ├── generate_ui.py             # Manifest → 5 artifacts generator (~1200 lines)
+│   └── tests/                     # 209 pytest tests
+├── webui/                         # Svelte 4 WebUI source
+│   ├── src/                       # App.svelte, stores, components (15 widgets), pages
+│   └── scripts/deploy.js          # Gzip + copy to data/www/
 ├── data/
-│   ├── board.json                 # PCB pin assignment
+│   ├── board.json                 # PCB pin assignment (4 relays, 1 OW, 1 DI, 2 ADC)
 │   ├── bindings.json              # Runtime: role → driver → GPIO mapping
-│   └── www/                       # Static WebUI (index.html, app.js, style.css)
+│   ├── ui.json                    # 🔄 Generated
+│   └── www/                       # Deployed WebUI (index.html, bundle.js.gz, bundle.css.gz)
+├── generated/                     # 🔄 5 generated C++ headers
 ├── docs/                          # Architecture documentation
-├── project.json                   # Active modules configuration
-├── partitions.csv                 # Flash partition table (NVS + app + LittleFS)
-├── sdkconfig.defaults             # Minimal ESP-IDF config
-└── CMakeLists.txt                 # Build config (auto-runs generator)
+├── project.json                   # Active modules list
+└── CMakeLists.txt                 # Auto-runs generate_ui.py before build
 ```
 
 ---
@@ -80,44 +106,36 @@ ModESP_v4/
 ### Prerequisites
 
 - [ESP-IDF v5.5](https://docs.espressif.com/projects/esp-idf/en/v5.5/esp32/get-started/)
-- Python 3.8+
+- Python 3.8+ (for generator and tests)
+- Node.js 18+ (for WebUI build)
 - ESP32-WROOM-32 board
 
 ### Build & Flash
 
 ```bash
-# Clone
-git clone https://github.com/<your-username>/ModESP_v4.git
 cd ModESP_v4
-
-# Set target
-idf.py set-target esp32
 
 # Build (auto-runs generate_ui.py)
 idf.py build
 
-# Flash and monitor (adjust COM port)
+# Flash and monitor
 idf.py -p COM15 flash monitor
+```
+
+### Build WebUI
+
+```bash
+cd webui
+npm install
+npm run build
+npm run deploy   # → data/www/
 ```
 
 ### Run Tests
 
 ```bash
-pytest tools/tests/ -v
+python -m pytest tools/tests/ -v   # 209 tests
 ```
-
----
-
-## Configuration
-
-| File | Purpose |
-|------|---------|
-| `project.json` | Active modules and system pages |
-| `data/board.json` | PCB pin assignment (GPIO outputs, OneWire buses) |
-| `data/bindings.json` | Runtime mapping: role → driver → GPIO |
-| `modules/*/manifest.json` | Module definition (UI, state keys, MQTT topics) |
-| `drivers/*/manifest.json` | Driver definition (category, hardware type, settings) |
-| `sdkconfig.defaults` | ESP-IDF configuration overrides |
 
 ---
 
@@ -127,7 +145,7 @@ pytest tools/tests/ -v
 |----------|--------|-------------|
 | `/api/state` | GET | Full SharedState as JSON |
 | `/api/ui` | GET | UI schema (generated from manifests) |
-| `/api/settings` | POST | Change writable state keys (with min/max validation) |
+| `/api/settings` | POST | Change writable state keys (with validation) |
 | `/api/board` | GET | Board configuration |
 | `/api/bindings` | GET | Driver bindings |
 | `/api/modules` | GET | Module list and status |
@@ -137,6 +155,22 @@ pytest tools/tests/ -v
 | `/api/ota` | GET/POST | Firmware info / OTA upload |
 | `/api/restart` | POST | Restart ESP32 |
 | `/ws` | WS | Real-time state broadcast |
+
+---
+
+## Current Status
+
+**Phase 10.5 (Features System) complete.** The following is fully operational:
+
+- 4 business modules: Equipment Manager, Thermostat v2, Defrost (7-phase), Protection (5 alarms)
+- 3 drivers: DS18B20 (OneWire), Relay (GPIO), Digital Input (GPIO)
+- Progressive feature disclosure — disabled settings for unconnected equipment
+- Select widgets with human-readable labels for enum parameters
+- Svelte WebUI with 15 widget types, Dashboard, dark theme (17KB gzipped)
+- MQTT with TLS, OTA with rollback, auto-persist settings to NVS
+- WiFi STA + AP fallback
+- 209 pytest tests green
+- Free heap after boot: **176 KB** / 240 KB
 
 ---
 
@@ -150,63 +184,22 @@ pytest tools/tests/ -v
 | Containers | ETL (Embedded Template Library) |
 | JSON parser | jsmn (header-only) |
 | Filesystem | LittleFS |
-| RTOS | FreeRTOS |
-| Code generation | Python 3 |
-| Testing | pytest (79 tests) |
-
----
-
-## Current Status
-
-**Phase 6.5 complete.** The following is fully operational:
-
-- 10+ system modules initialized at boot
-- Thermostat module with on/off hysteresis control
-- DS18B20 sensor reading, relay control
-- WiFi (STA + AP fallback)
-- HTTP REST API (12 endpoints)
-- WebSocket real-time broadcast (max 4 clients)
-- MQTT with TLS support
-- OTA firmware update with rollback
-- Settings auto-persist to NVS (5s debounce)
-- Free heap after boot: **177 KB** / 240 KB
+| WebUI | Svelte 4, Rollup, Lucide icons |
+| Code generation | Python 3 (manifest → 5 artifacts) |
+| Testing | pytest (209 tests) |
 
 ---
 
 ## License
 
-This project is licensed under the **GNU General Public License v3.0** -- see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **GNU General Public License v3.0**.
 
 ---
 
 ## Українською
 
-### Що таке ModESP v4?
+ModESP v4 — модульний фреймворк прошивки для промислових ESP32-контролерів
+холодильного обладнання. Замінює дорогі контролери Danfoss/Dixell дешевим
+модулем ESP32 з професійною архітектурою.
 
-ModESP v4 -- модульний фреймворк прошивки для промислових ESP32-контролерів холодильного обладнання. Замінює дорогі контролери Danfoss/Dixell дешевим модулем ESP32 з професійною архітектурою.
-
-### Для кого?
-
-- OEM-виробники холодильного обладнання (UBC Group, Modern Expo)
-- Сервісні інженери
-- Інтегратори промислового обладнання
-
-### Як почати?
-
-1. Встановіть [ESP-IDF v5.5](https://docs.espressif.com/projects/esp-idf/en/v5.5/esp32/get-started/)
-2. Клонуйте репозиторій: `git clone <url>`
-3. Зберіть проект: `idf.py build`
-4. Прошийте ESP32: `idf.py -p COM15 flash monitor`
-5. Підключіться до WiFi точки `ModESP-XXXX` та відкрийте `192.168.4.1`
-
-### Документація
-
-Уся внутрішня документація та коментарі в коді -- **українською мовою**. Архітектурні документи знаходяться в папці `docs/`.
-
-### Технічні особливості
-
-- Нуль алокацій в гарячому шляху (ETL замість STL)
-- Автогенерація UI, MQTT-топіків та C++ метаданих з маніфестів
-- Персистентність налаштувань в NVS з дебаунсом
-- OTA-оновлення з підтримкою rollback
-- MQTT з TLS для інтеграції з SCADA/HMI
+Уся внутрішня документація та коментарі в коді — **українською мовою**.

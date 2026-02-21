@@ -1,6 +1,6 @@
 <script>
   import { apiGet, apiPost } from '../../lib/api.js';
-  import { setStateKey } from '../../stores/state.js';
+  import { setStateKey, state } from '../../stores/state.js';
   import { onMount } from 'svelte';
 
   export let config;
@@ -13,6 +13,7 @@
       setStateKey('mqtt.connected', d.connected || false);
       setStateKey('mqtt.status', d.status || 'unknown');
       setStateKey('mqtt.broker', d.broker || '');
+      setStateKey('mqtt.enabled', d.enabled || false);
       // Fill form inputs via DOM
       setTimeout(() => {
         setInput('mqtt.broker', d.broker || '');
@@ -40,7 +41,8 @@
       port: parseInt(getInput('mqtt.port')) || 1883,
       user: getInput('mqtt.user').trim(),
       password: getInput('mqtt.password'),
-      prefix: getInput('mqtt.prefix').trim()
+      prefix: getInput('mqtt.prefix').trim(),
+      enabled: !!$state['mqtt.enabled'],
     };
 
     try {

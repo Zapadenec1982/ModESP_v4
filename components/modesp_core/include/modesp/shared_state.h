@@ -9,7 +9,7 @@
  *   - Zero heap allocation
  *   - Thread-safe (FreeRTOS mutex)
  *   - O(1) average доступ
- *   - ~4KB RAM при 64 entries
+ *   - ~6KB RAM при 96 entries
  */
 
 #pragma once
@@ -23,7 +23,7 @@
 namespace modesp {
 
 #ifndef MODESP_MAX_STATE_ENTRIES
-#define MODESP_MAX_STATE_ENTRIES 64
+#define MODESP_MAX_STATE_ENTRIES 96
 #endif
 
 class SharedState {

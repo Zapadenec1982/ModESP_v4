@@ -120,6 +120,6 @@ private:
 
     // Зовнішні сигнали
     bool  defrost_active_      = false;
-    bool  defrost_fad_         = false;    // defrost.phase == "fad"
+    bool  was_defrost_active_  = false;    // для детекції start/end transition
     bool  protection_lockout_  = false;
 };

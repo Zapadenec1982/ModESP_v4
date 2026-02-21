@@ -53,6 +53,26 @@ static bool tok_to_bool(const char* json, const jsmntok_t* tok) {
     return strncmp(json + tok->start, "true", 4) == 0;
 }
 
+// Helper: підрахунок кількості токенів у значенні (для пропуску об'єктів/масивів)
+static int skip_token(const jsmntok_t* tokens, int idx, int ntokens) {
+    if (idx >= ntokens) return idx;
+    if (tokens[idx].type == JSMN_PRIMITIVE || tokens[idx].type == JSMN_STRING) {
+        return idx + 1;
+    }
+    // Об'єкт або масив: пропустити всі дочірні токени
+    int children = tokens[idx].size;
+    int j = idx + 1;
+    for (int c = 0; c < children; c++) {
+        if (tokens[idx].type == JSMN_OBJECT) {
+            j = skip_token(tokens, j, ntokens);     // key
+            j = skip_token(tokens, j, ntokens);     // value
+        } else {
+            j = skip_token(tokens, j, ntokens);     // array element
+        }
+    }
+    return j;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // Lifecycle
 // ═══════════════════════════════════════════════════════════════
@@ -226,8 +246,9 @@ bool ConfigService::parse_board_json() {
             }
             i = j;
         } else {
-            // Skip unknown top-level key + value
-            i += 2;
+            // Пропустити невідомий ключ + значення (масиви/об'єкти коректно)
+            i++;  // skip key
+            i = skip_token(tokens, i, ntokens);  // skip value
         }
     }
 
@@ -312,7 +333,8 @@ bool ConfigService::parse_bindings_json() {
             }
             i = j;
         } else {
-            i += 2;
+            i++;
+            i = skip_token(tokens, i, ntokens);
         }
     }
 

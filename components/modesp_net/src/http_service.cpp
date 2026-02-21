@@ -12,6 +12,7 @@
 
 #include "esp_log.h"
 #include "esp_system.h"
+#include "esp_mac.h"
 #include "esp_ota_ops.h"
 #include "esp_app_format.h"
 #include "esp_sntp.h"
@@ -32,10 +33,10 @@ namespace modesp {
 
 // ── Helpers ─────────────────────────────────────────────────────
 
+// AUDIT-039: CORS * видалений — UI на тому ж origin, cross-origin запити не потрібні.
+// Це захищає від CSRF атак з зовнішніх сайтів на локальний IP пристрою.
 void HttpService::set_cors_headers(httpd_req_t* req) {
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Headers", "Content-Type");
+    (void)req;
 }
 
 esp_err_t HttpService::handle_options(httpd_req_t* req) {
@@ -52,6 +53,30 @@ static int read_file_to_buf(const char* path, char* buf, size_t buf_size) {
     fclose(f);
     if (len >= 0) buf[len] = '\0';
     return len;
+}
+
+// AUDIT-004: JSON escape для string значень (захист від SSID з лапками тощо)
+// Ескейпить ", \, і control characters. Пише в dest, повертає кількість записаних байт.
+static size_t json_escape_str(char* dest, size_t dest_size, const char* src) {
+    size_t w = 0;
+    for (const char* p = src; *p && w + 2 < dest_size; ++p) {
+        switch (*p) {
+            case '"':  dest[w++] = '\\'; dest[w++] = '"';  break;
+            case '\\': dest[w++] = '\\'; dest[w++] = '\\'; break;
+            case '\n': dest[w++] = '\\'; dest[w++] = 'n';  break;
+            case '\r': dest[w++] = '\\'; dest[w++] = 'r';  break;
+            case '\t': dest[w++] = '\\'; dest[w++] = 't';  break;
+            default:
+                if (static_cast<unsigned char>(*p) < 0x20) {
+                    // Пропускаємо інші control characters
+                } else {
+                    dest[w++] = *p;
+                }
+                break;
+        }
+    }
+    dest[w] = '\0';
+    return w;
 }
 
 // Context for SharedState serialization
@@ -84,9 +109,12 @@ static void serialize_state_entry(const StateKey& key, const StateValue& value, 
                              "%s\"%s\":%s", sep, key.c_str(),
                              etl::get<bool>(value) ? "true" : "false");
     } else if (etl::holds_alternative<StringValue>(value)) {
+        // AUDIT-004: ескейпимо string значення для коректного JSON
+        char escaped[64];
+        json_escape_str(escaped, sizeof(escaped),
+                        etl::get<StringValue>(value).c_str());
         ctx->pos += snprintf(ctx->buf + ctx->pos, ctx->remaining(),
-                             "%s\"%s\":\"%s\"", sep, key.c_str(),
-                             etl::get<StringValue>(value).c_str());
+                             "%s\"%s\":\"%s\"", sep, key.c_str(), escaped);
     }
 }
 
@@ -159,6 +187,105 @@ esp_err_t HttpService::handle_get_bindings(httpd_req_t* req) {
     set_cors_headers(req);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, buf, len);
+    return ESP_OK;
+}
+
+esp_err_t HttpService::handle_post_bindings(httpd_req_t* req) {
+    // Приймаємо JSON body — bindings.json зазвичай < 512 байт
+    char buf[1024];
+    int total = 0;
+    int remaining = req->content_len;
+    if (remaining <= 0 || remaining >= (int)sizeof(buf)) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                            remaining <= 0 ? "Empty body" : "Body too large");
+        return ESP_FAIL;
+    }
+
+    while (remaining > 0) {
+        int recv_len = httpd_req_recv(req, buf + total, remaining);
+        if (recv_len <= 0) {
+            if (recv_len == HTTPD_SOCK_ERR_TIMEOUT) continue;
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Receive error");
+            return ESP_FAIL;
+        }
+        total += recv_len;
+        remaining -= recv_len;
+    }
+    buf[total] = '\0';
+
+    // Мінімальна валідація JSON: manifest_version + bindings array
+    jsmn_parser parser;
+    jsmntok_t tokens[96];  // ~10 bindings × ~8 tokens/binding + overhead
+    jsmn_init(&parser);
+    int r = jsmn_parse(&parser, buf, total, tokens, 96);
+    if (r < 1 || tokens[0].type != JSMN_OBJECT) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+        return ESP_FAIL;
+    }
+
+    // Перевірка: є manifest_version і bindings array
+    bool has_version = false;
+    bool has_bindings = false;
+    for (int i = 1; i + 1 < r; ) {
+        if (tokens[i].type != JSMN_STRING) break;
+        int klen = tokens[i].end - tokens[i].start;
+        const char* kstr = buf + tokens[i].start;
+        if (klen == 16 && strncmp(kstr, "manifest_version", 16) == 0) {
+            has_version = true;
+        } else if (klen == 8 && strncmp(kstr, "bindings", 8) == 0) {
+            if (tokens[i + 1].type == JSMN_ARRAY) {
+                has_bindings = true;
+            }
+        }
+        // Пропуск ключ + значення
+        i++;  // skip key
+        // skip value (може бути об'єкт/масив з вкладеними токенами)
+        if (i < r && (tokens[i].type == JSMN_PRIMITIVE ||
+                      tokens[i].type == JSMN_STRING)) {
+            i++;
+        } else if (i < r) {
+            // Об'єкт або масив — порахувати всі вкладені токени
+            int count = 1;
+            int j = i + 1;
+            while (count > 0 && j < r) {
+                if (tokens[j].type == JSMN_OBJECT || tokens[j].type == JSMN_ARRAY) {
+                    count += tokens[j].size;
+                }
+                count--;
+                j++;
+            }
+            i = j;
+        }
+    }
+
+    if (!has_version || !has_bindings) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                            "Missing manifest_version or bindings array");
+        return ESP_FAIL;
+    }
+
+    // Записуємо raw JSON в файл
+    FILE* f = fopen("/data/bindings.json", "w");
+    if (!f) {
+        ESP_LOGE(TAG, "POST /bindings: cannot open file for writing");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR,
+                            "Cannot write bindings.json");
+        return ESP_FAIL;
+    }
+    size_t written = fwrite(buf, 1, total, f);
+    fclose(f);
+
+    if ((int)written != total) {
+        ESP_LOGE(TAG, "POST /bindings: write incomplete (%d/%d)", (int)written, total);
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Write error");
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "POST /bindings: saved %d bytes, restart needed", total);
+
+    set_cors_headers(req);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"ok\":true,\"needs_restart\":true}");
     return ESP_OK;
 }
 
@@ -238,7 +365,7 @@ esp_err_t HttpService::handle_post_settings(httpd_req_t* req) {
     int accepted = 0;
     int rejected = 0;
 
-    for (int i = 1; i < r - 1; i += 2) {
+    for (int i = 1; i + 1 < r; i += 2) {
         if (tokens[i].type != JSMN_STRING) continue;
 
         const char* key_str = buf + tokens[i].start;
@@ -258,19 +385,20 @@ esp_err_t HttpService::handle_post_settings(httpd_req_t* req) {
         }
 
         if (val_tok.type == JSMN_PRIMITIVE) {
-            if (strchr(val_str, '.')) {
+            // BUG-023 fix: використовуємо meta->type замість евристики з крапкою.
+            // JavaScript може відправити "5" (без крапки) для float параметра,
+            // що ламало persist (etl::get_if<float> на int32_t = nullptr).
+            if (val_str[0] == 't' || val_str[0] == 'f') {
+                self->state_->set(key_str, val_str[0] == 't');
+                accepted++;
+            } else if (strcmp(meta->type, "float") == 0) {
                 float fval = static_cast<float>(atof(val_str));
-                // Clamp до min/max з state_meta
                 if (fval < meta->min_val) fval = meta->min_val;
                 if (fval > meta->max_val) fval = meta->max_val;
                 self->state_->set(key_str, fval);
                 accepted++;
-            } else if (val_str[0] == 't' || val_str[0] == 'f') {
-                self->state_->set(key_str, val_str[0] == 't');
-                accepted++;
             } else {
                 int32_t ival = static_cast<int32_t>(atoi(val_str));
-                // Clamp int до min/max
                 if (static_cast<float>(ival) < meta->min_val) ival = static_cast<int32_t>(meta->min_val);
                 if (static_cast<float>(ival) > meta->max_val) ival = static_cast<int32_t>(meta->max_val);
                 self->state_->set(key_str, ival);
@@ -317,7 +445,7 @@ esp_err_t HttpService::handle_post_wifi(httpd_req_t* req) {
     const char* ssid = nullptr;
     const char* pass = nullptr;
 
-    for (int i = 1; i < r - 1; i += 2) {
+    for (int i = 1; i + 1 < r; i += 2) {
         if (tokens[i].type != JSMN_STRING) continue;
         buf[tokens[i].end] = '\0';
         buf[tokens[i + 1].end] = '\0';
@@ -395,6 +523,106 @@ esp_err_t HttpService::handle_get_wifi_scan(httpd_req_t* req) {
     set_cors_headers(req);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, buf, (ssize_t)pos);
+    return ESP_OK;
+}
+
+esp_err_t HttpService::handle_get_wifi_ap(httpd_req_t* req) {
+    // Повертаємо поточну конфігурацію AP з NVS
+    char ap_ssid[33] = {};
+    int32_t ap_channel = 1;
+    bool has_password = false;
+
+    nvs_helper::read_str("wifi", "ap_ssid", ap_ssid, sizeof(ap_ssid));
+    nvs_helper::read_i32("wifi", "ap_chan", ap_channel);
+
+    // Якщо кастомний SSID не збережений — показуємо дефолтний (ModESP-XXXX)
+    if (ap_ssid[0] == '\0') {
+        uint8_t mac[6];
+        esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
+        snprintf(ap_ssid, sizeof(ap_ssid), "ModESP-%02X%02X", mac[4], mac[5]);
+    }
+
+    // Перевірити чи є збережений пароль (не повертаємо сам пароль)
+    char ap_pass[65] = {};
+    if (nvs_helper::read_str("wifi", "ap_pass", ap_pass, sizeof(ap_pass))) {
+        has_password = (strlen(ap_pass) >= 8);
+    }
+
+    char buf[256];
+    char escaped_ssid[68];
+    json_escape_str(escaped_ssid, sizeof(escaped_ssid), ap_ssid);
+
+    snprintf(buf, sizeof(buf),
+             "{\"ssid\":\"%s\",\"channel\":%ld,\"password_set\":%s}",
+             escaped_ssid, (long)ap_channel,
+             has_password ? "true" : "false");
+
+    set_cors_headers(req);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, buf);
+    return ESP_OK;
+}
+
+esp_err_t HttpService::handle_post_wifi_ap(httpd_req_t* req) {
+    char buf[256];
+    int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (len <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty body");
+        return ESP_FAIL;
+    }
+    buf[len] = '\0';
+
+    jsmn_parser parser;
+    jsmntok_t tokens[12];
+    jsmn_init(&parser);
+    int r = jsmn_parse(&parser, buf, len, tokens, 12);
+    if (r < 1 || tokens[0].type != JSMN_OBJECT) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+        return ESP_FAIL;
+    }
+
+    const char* ssid = nullptr;
+    const char* password = nullptr;
+    int channel = -1;
+
+    for (int i = 1; i + 1 < r; i += 2) {
+        if (tokens[i].type != JSMN_STRING) continue;
+        buf[tokens[i].end] = '\0';
+        buf[tokens[i + 1].end] = '\0';
+
+        const char* key = buf + tokens[i].start;
+        const char* val = buf + tokens[i + 1].start;
+
+        if (strcmp(key, "ssid") == 0) ssid = val;
+        else if (strcmp(key, "password") == 0) password = val;
+        else if (strcmp(key, "channel") == 0) channel = atoi(val);
+    }
+
+    if (!ssid || strlen(ssid) == 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing or empty ssid");
+        return ESP_FAIL;
+    }
+
+    // Пароль: або порожній (open), або >= 8 символів (WPA2)
+    if (password && strlen(password) > 0 && strlen(password) < 8) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST,
+                            "Password must be empty (open) or at least 8 chars");
+        return ESP_FAIL;
+    }
+
+    if (channel < 1 || channel > 13) channel = 1;
+
+    // Зберігаємо в NVS
+    nvs_helper::write_str("wifi", "ap_ssid", ssid);
+    nvs_helper::write_str("wifi", "ap_pass", password ? password : "");
+    nvs_helper::write_i32("wifi", "ap_chan", (int32_t)channel);
+
+    ESP_LOGI(TAG, "AP config saved: ssid='%s' channel=%d pass=%s",
+             ssid, channel, (password && strlen(password) >= 8) ? "set" : "open");
+
+    set_cors_headers(req);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, "{\"ok\":true,\"msg\":\"AP config saved. Restart to apply.\"}");
     return ESP_OK;
 }
 
@@ -577,7 +805,7 @@ esp_err_t HttpService::handle_post_time(httpd_req_t* req) {
     long unix_time = 0;
     char new_tz[48] = {};
 
-    for (int i = 1; i < r - 1; i += 2) {
+    for (int i = 1; i + 1 < r; i += 2) {
         if (tokens[i].type != JSMN_STRING) continue;
         buf[tokens[i].end] = '\0';
         buf[tokens[i + 1].end] = '\0';
@@ -651,6 +879,12 @@ esp_err_t HttpService::handle_static(httpd_req_t* req) {
         return ESP_OK;
     }
 
+    // AUDIT-040: захист від directory traversal (/../../../etc/passwd)
+    if (strstr(uri, "..") != nullptr) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid path");
+        return ESP_OK;
+    }
+
     // Build filesystem path
     char filepath[64];
     if (strcmp(uri, "/") == 0) {
@@ -712,10 +946,13 @@ void HttpService::register_api_handlers() {
         {"/api/board",    HTTP_GET,  handle_get_board},
         {"/api/ui",       HTTP_GET,  handle_get_ui},
         {"/api/bindings", HTTP_GET,  handle_get_bindings},
+        {"/api/bindings", HTTP_POST, handle_post_bindings},
         {"/api/modules",  HTTP_GET,  handle_get_modules},
         {"/api/settings",   HTTP_POST, handle_post_settings},
         {"/api/wifi",       HTTP_POST, handle_post_wifi},
         {"/api/wifi/scan",  HTTP_GET,  handle_get_wifi_scan},
+        {"/api/wifi/ap",    HTTP_GET,  handle_get_wifi_ap},
+        {"/api/wifi/ap",    HTTP_POST, handle_post_wifi_ap},
         {"/api/restart",    HTTP_POST, handle_post_restart},
         {"/api/ota",        HTTP_GET,  handle_get_ota},
         {"/api/time",       HTTP_GET,  handle_get_time},
@@ -781,7 +1018,7 @@ void HttpService::register_static_handler() {
 bool HttpService::start_server() {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
-    config.max_uri_handlers = 32;
+    config.max_uri_handlers = 40;
     config.stack_size = 8192;
 
     // WebSocket connections are long-lived. The default recv_wait_timeout

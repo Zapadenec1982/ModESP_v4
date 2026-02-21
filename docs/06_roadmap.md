@@ -1,6 +1,6 @@
 # ModESP v4 — Дорожня карта розвитку
 
-> Останнє оновлення: 2026-02-18
+> Останнє оновлення: 2026-02-20
 > Версія прошивки: 4.0.0
 > Платформа: ESP32-WROOM-32, ESP-IDF v5.5, C++17 + ETL
 
@@ -22,7 +22,7 @@ ModESP v4 — модульна платформа для промислових 
 
 ### Phase 1 — Ядро (завершено)
 - ModuleManager з пріоритетами та lifecycle
-- SharedState (thread-safe, zero-heap, etl::unordered_map<64>)
+- SharedState (thread-safe, zero-heap, etl::unordered_map<96>)
 - EventBus (etl::message_bus<24>, pub/sub)
 - Базові типи (StateKey<24>, StateValue variant)
 - App singleton з main loop
@@ -55,9 +55,8 @@ ModESP v4 — модульна платформа для промислових 
 ### Phase 5b — UI Generation Pipeline (завершено)
 - Manifest-driven architecture (module manifest.json → all artifacts)
 - Python генератор generate_ui.py (820 рядків, рефакторинг з 1216)
-- Артефакти: ui.json, index.html, state_meta.h, mqtt_topics.h, display_screens.h
-- Self-contained WebUI (22KB inline HTML/CSS/JS)
-- Auto-generated UI з widget types: gauge, slider, toggle, indicator...
+- Артефакти: ui.json, state_meta.h, mqtt_topics.h, display_screens.h
+- Svelte WebUI (webui/) замінив inline HTML генерацію
 
 ---
 
@@ -105,7 +104,7 @@ Manifest spec покриває Board, Driver, Module, Bindings + Validation Summ
 - [x] state_meta.h: persist + default_val поля (генеруються з manifest)
 - [x] POST /api/settings: валідація через state_meta (writable check, min/max clamp)
 - [x] Модулі НЕ працюють з NVS напряму — thermostat читає з SharedState
-- [x] NVS key strategy: "p0", "p1", ... (індекс в STATE_META, max 15 chars safe)
+- [x] NVS key strategy: djb2 hash від state key name ("s" + 7 hex chars)
 
 **DataLogger module (окремий модуль, перенесено на Phase 9+):**
 - [ ] Підписується через inputs на потрібні ключі
@@ -157,6 +156,29 @@ webui/
 ├── package.json
 └── rollup.config.js
 ```
+
+## ✅ Phase 9.5 — Audit + Bugfixes (завершено)
+**Мета:** Стабілізація після Phase 9.
+
+- [x] Architecture review + Business logic review vs spec_v3
+- [x] Independent bug verification — 27 bugs found, 14 fixed
+- [x] 10 critical + 7 quick-win audit fixes
+- [x] NVS hash-based keys migration, POST type detection fix
+
+---
+
+## ✅ Phase 10.5 — Features System + Select Widgets (завершено)
+**Мета:** Прогресивне розкриття функціональності.
+
+- [x] Features в маніфестах (thermostat/defrost/protection)
+- [x] Constraints (enum_filter) для enum settings
+- [x] Select widgets з options (value+label)
+- [x] FeatureResolver + FeaturesConfigGenerator (5-й артефакт)
+- [x] has_feature() в BaseModule + guards в C++ модулях
+- [x] SelectWidget.svelte + disabled state в WebUI
+- [x] 209 pytest tests green
+
+---
 
 ## 📋 Заплановані фази
 
@@ -220,19 +242,19 @@ Protection > Defrost > Thermostat (пріоритет арбітражу)
   Auto-clear + manual reset (protection.reset_alarms). 5 persist params, 14 state keys.
   protection.lockout reserved (always false). Priority HIGH(1) — runs before Thermostat.
   
-- [ ] **9.4 Defrost** — цикл розморозки (spec_v3 §3).
-  State machine з 7 фазами (стабілізація→клапан→відтайка→вирівнювання→дренаж→FAD→відновлення).
-  3 типи: зупинка (dFT=0) / тен (dFT=1) / гарячий газ (dFT=2).
+- [x] **9.4 Defrost** — цикл розморозки (spec_v3 §3). (DONE — 2026-02-18)
+  7-phase state machine: IDLE→STABILIZE→VALVE_OPEN→ACTIVE→EQUALIZE→DRIP→FAD.
+  3 типи: зупинка (dFT=0) / тен (dFT=1) / гарячий газ (dFT=2, 7 фаз).
   4 ініціації: таймер (dit) / demand (dSS) / комбінований / ручний.
-  Завершення: по T_evap (dSt) або по таймеру безпеки (dEt).
-  Лічильник відтайок в NVS (persist). defrost.active → EM блокує Thermostat.
+  13 persist params + 2 runtime persist (interval_timer, defrost_count).
+  27 state keys, 10 MQTT publish. Generator fix: read-only persist → state_meta.h.
 
 **Базовий документ:** docs/controller_spec_v3.docx (10K chars, 19 таблиць параметрів)
 
 **Залежності:** Phase 6.5 (auto-persist), Phase 7a (WebUI для відображення)
 **Оцінка:** 6-8 сесій
 
-### Phase 10 — Multi-sensor + PID
+### Phase 11 — Multi-sensor + PID
 **Мета:** Підтримка складних конфігурацій обладнання.
 **Пріоритет:** СЕРЕДНІЙ.
 
@@ -245,7 +267,7 @@ Protection > Defrost > Thermostat (пріоритет арбітражу)
 **Залежності:** Phase 3 (HAL), Phase 9 (defrost)
 **Оцінка:** 3-4 сесії
 
-### Phase 11 — NTP + mDNS + Cloud
+### Phase 12 — NTP + mDNS + Cloud
 **Мета:** Повноцінна мережева інтеграція.
 **Пріоритет:** СЕРЕДНІЙ.
 
@@ -262,7 +284,7 @@ Protection > Defrost > Thermostat (пріоритет арбітражу)
 **Залежності:** Phase 5a (WiFi AP), Phase 6 (MQTT)
 **Оцінка:** 2-3 сесії
 
-### Phase 12 — Modbus + Industrial Protocols
+### Phase 13 — Modbus + Industrial Protocols
 **Мета:** Інтеграція з промисловими системами (BMS, SCADA).
 **Пріоритет:** НИЗЬКИЙ (для великих інсталяцій).
 
@@ -279,19 +301,20 @@ Protection > Defrost > Thermostat (пріоритет арбітражу)
 ## 🗓️ Візуальна дорожня карта
 
 ```
-2026 Q1                    Q2                      Q3                  Q4
-──────────────────────────────────────────────────────────────────────────
- ✅ Phase 1-5c             ✅ Phase 6     📋 Phase 7
- (ядро, HAL, WiFi STA/AP,   MQTT + OTA     Svelte WebUI
-  HTTP, WebSocket,         ✅ Phase 6.5
-  UI Generation,            Auto-persist   📋 Phase 9     📋 Phase 8
-  tests, docs)                              Alarm/Defrost   LCD/OLED
-                                          
-                                            📋 Phase 10
-                                             Multi-sensor, PID
-──────────────────────────────────────────────────────────────────────────
+2026 Q1                    Q2                      Q3
+──────────────────────────────────────────────────────────────
+ ✅ Phase 1-6.5            ✅ Phase 9      📋 Phase 7b-c
+ (ядро, HAL, WiFi,          Equipment      WebUI polish
+  HTTP, WS, MQTT, OTA,      Thermostat     (charts, PWA)
+  persist, Svelte UI)        Defrost
+                             Protection    📋 Phase 8
+                           ✅ Phase 9.5    LCD/OLED
+                             Audit+Bugs
+                           ✅ Phase 10.5   📋 Phase 11
+                             Features       Multi-sensor
+──────────────────────────────────────────────────────────────
                                             2027 Q1
-                                            📋 Phase 11-12
+                                            📋 Phase 12-13
                                              NTP/mDNS, Modbus
 ```
 
@@ -308,11 +331,11 @@ ESP32 з DS18B20 + реле, WiFi STA/AP, WebUI, REST API, WebSocket.
 Стабільна прошивка з MQTT, OTA оновленням.
 Можна розгорнути на реальному обладнанні з віддаленим моніторингом.
 
-### M3: "Production Ready" (Phase 7 + 9)
-Професійний WebUI (Svelte tiles), alarm/defrost модулі.
+### M3: "Production Ready" (Phase 9 + 9.5 + 10.5) ✅ ДОСЯГНУТО
+Промислові модулі, features system, select widgets, аудит + bugfixes.
 Готовий для демонстрації OEM виробникам (UBC, Modern Expo).
 
-### M4: "Industrial Grade" (Phase 10 + 11 + 12)
+### M4: "Industrial Grade" (Phase 11 + 12 + 13)
 Multi-sensor, PID, Modbus, Cloud.
 Повноцінна заміна Danfoss ERC/AK контролерів.
 
@@ -329,6 +352,10 @@ Multi-sensor, PID, Modbus, Cloud.
 ---
 
 ## Changelog
+- v14.0 (2026-02-20) — Phase 10.5 DONE: Features System + Select Widgets. Phase 9.5 DONE: Audit+Bugfixes.
+  Milestone M3 ДОСЯГНУТО. Phase numbering: old 10→11, 11→12, 12→13. 209 tests, 5 artifacts.
+- v12.0 (2026-02-18) — Phase 9.4 DONE: Defrost module (7-phase state machine, 3 types, 4 initiations,
+  13 persist params + 2 runtime persist). Phase 9 COMPLETE — 4 industrial modules. 69 state keys.
 - v11.0 (2026-02-18) — Phase 9.3 DONE: Protection module (5 alarm monitors, dAd delay, defrost blocking,
   auto-clear + manual reset, 5 persist params, 14 state keys). 3 modules, 42 state keys total.
 - v10.0 (2026-02-18) — Phase 9.2 DONE: Thermostat v2 (asymmetric differential, state machine,

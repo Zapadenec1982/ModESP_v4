@@ -41,5 +41,8 @@ bool read_bool(const char* ns, const char* key, bool& out);
 /// Write a bool value (stored as uint8_t). Returns false on error.
 bool write_bool(const char* ns, const char* key, bool value);
 
+/// Erase a single key from NVS. Returns false on error.
+bool erase_key(const char* ns, const char* key);
+
 } // namespace nvs_helper
 } // namespace modesp

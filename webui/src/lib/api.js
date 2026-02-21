@@ -12,6 +12,11 @@ export async function apiPost(url, data) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   });
+  // AUDIT-010: перевіряємо статус відповіді перед парсингом JSON
+  if (!r.ok) {
+    const text = await r.text();
+    throw new Error(text || `POST ${url}: ${r.status}`);
+  }
   return r.json();
 }
 

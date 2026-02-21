@@ -54,6 +54,17 @@ int32_t DefrostModule::read_int(const char* key, int32_t def) {
 
 void DefrostModule::sync_settings() {
     defrost_type_  = read_int("defrost.type", 0);
+    // Feature guard: невалідний тип → fallback
+    if (defrost_type_ == 1 && !has_feature("defrost_electric")) {
+        ESP_LOGW(TAG, "Defrost type=1 but no heater → fallback to 0");
+        defrost_type_ = 0;
+        state_set("defrost.type", static_cast<int32_t>(0));
+    }
+    if (defrost_type_ == 2 && !has_feature("defrost_hot_gas")) {
+        ESP_LOGW(TAG, "Defrost type=2 but no hg_valve → fallback to 0");
+        defrost_type_ = 0;
+        state_set("defrost.type", static_cast<int32_t>(0));
+    }
     counter_mode_  = read_int("defrost.counter_mode", 1);
     initiation_    = read_int("defrost.initiation", 0);
     end_temp_      = read_float("defrost.end_temp", end_temp_);
@@ -211,6 +222,7 @@ bool DefrostModule::on_init() {
     state_set("defrost.defrost_count", defrost_count_);
     state_set("defrost.last_termination", "none");
     state_set("defrost.consecutive_timeouts", static_cast<int32_t>(0));
+    state_set("defrost.heater_alarm", false);
     state_set("defrost.manual_start", false);
     state_set("defrost.req.compressor", false);
     state_set("defrost.req.heater", false);
@@ -232,6 +244,10 @@ bool DefrostModule::on_init() {
              end_temp_,
              static_cast<long>(max_duration_ms_ / 60000),
              static_cast<long>(defrost_count_));
+    ESP_LOGI(TAG, "Features: by_sensor=%d, electric=%d, hot_gas=%d",
+             has_feature("defrost_by_sensor"),
+             has_feature("defrost_electric"),
+             has_feature("defrost_hot_gas"));
     return true;
 }
 
@@ -330,8 +346,11 @@ bool DefrostModule::check_timer_trigger() {
 }
 
 bool DefrostModule::check_demand_trigger() {
+    if (!has_feature("defrost_by_sensor")) return false;
     // Потрібен датчик випарника
     if (!sensor2_ok_) return false;
+    // Мінімальний інтервал — не запускати defrost одразу після попереднього (BUG-008 fix)
+    if (interval_timer_ms_ < interval_ms_ / 4) return false;
     return evap_temp_ < demand_temp_;
 }
 
@@ -387,8 +406,9 @@ void DefrostModule::update_active_phase(uint32_t dt_ms) {
     phase_timer_ms_ += dt_ms;
 
     // Завершення по T_evap (основна)
-    if (sensor2_ok_ && evap_temp_ >= end_temp_) {
+    if (has_feature("defrost_by_sensor") && sensor2_ok_ && evap_temp_ >= end_temp_) {
         consecutive_timeouts_ = 0;
+        state_set("defrost.heater_alarm", false);
         state_set("defrost.last_termination", "temp");
         finish_active_phase("temp reached");
         return;
@@ -401,6 +421,8 @@ void DefrostModule::update_active_phase(uint32_t dt_ms) {
         state_set("defrost.consecutive_timeouts", consecutive_timeouts_);
         if (consecutive_timeouts_ >= 3) {
             ESP_LOGW(TAG, "3 consecutive timeouts — possible heater/sensor failure!");
+            // Публікуємо alarm для Protection/WebUI (BUG-010 fix)
+            state_set("defrost.heater_alarm", true);
         }
         finish_active_phase("timeout");
         return;

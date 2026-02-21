@@ -54,6 +54,46 @@
     }
   },
 
+  "features": {
+    "basic_cooling": {
+      "description": "Базове охолодження з асиметричним диференціалом",
+      "requires_roles": [],
+      "always_active": true,
+      "controls_settings": [
+        "thermostat.setpoint", "thermostat.differential",
+        "thermostat.min_off_time", "thermostat.min_on_time",
+        "thermostat.startup_delay",
+        "thermostat.safety_run_on", "thermostat.safety_run_off"
+      ]
+    },
+    "fan_control": {
+      "description": "Керування вентилятором випарника",
+      "requires_roles": ["evap_fan"],
+      "controls_settings": ["thermostat.evap_fan_mode"]
+    },
+    "fan_temp_control": {
+      "description": "Керування вентилятором за температурою випарника",
+      "requires_roles": ["evap_fan", "evap_temp"],
+      "controls_settings": ["thermostat.fan_stop_temp", "thermostat.fan_stop_hyst"]
+    },
+    "condenser_fan": {
+      "description": "Керування вентилятором конденсатора",
+      "requires_roles": ["cond_fan"],
+      "controls_settings": ["thermostat.cond_fan_delay"]
+    }
+  },
+
+  "constraints": {
+    "thermostat.evap_fan_mode": {
+      "type": "enum_filter",
+      "values": {
+        "0": {"always": true},
+        "1": {"always": true},
+        "2": {"requires_feature": "fan_temp_control"}
+      }
+    }
+  },
+
   "state": {
     "thermostat.temperature": {
       "type": "float",
@@ -76,7 +116,7 @@
       "type": "float",
       "unit": "\u00b0C",
       "access": "readwrite",
-      "min": 0.1,
+      "min": 0.5,
       "max": 10.0,
       "step": 0.1,
       "default": 2.0,
@@ -98,10 +138,10 @@
       "type": "int",
       "unit": "с",
       "access": "readwrite",
-      "min": 0,
+      "min": 30,
       "max": 600,
       "step": 1,
-      "default": 60,
+      "default": 120,
       "persist": true,
       "description": "Мін. час роботи компресора (cOt)"
     },
@@ -118,14 +158,15 @@
     },
     "thermostat.evap_fan_mode": {
       "type": "int",
-      "unit": "",
       "access": "readwrite",
-      "min": 0,
-      "max": 2,
-      "step": 1,
       "default": 1,
       "persist": true,
-      "description": "Режим вент. випарника (0=пост, 1=з компр, 2=за T_evap)"
+      "options": [
+        {"value": 0, "label": "Постійно"},
+        {"value": 1, "label": "З компресором"},
+        {"value": 2, "label": "За температурою випарника"}
+      ],
+      "description": "Режим вент. випарника (FAn)"
     },
     "thermostat.fan_stop_temp": {
       "type": "float",
@@ -304,7 +345,7 @@
         "widgets": [
           {
             "key": "thermostat.evap_fan_mode",
-            "widget": "number_input"
+            "widget": "select"
           },
           {
             "key": "thermostat.fan_stop_temp",

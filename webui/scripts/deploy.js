@@ -1,17 +1,20 @@
 /**
  * Deploy script: gzip bundles and copy to data/www/
  * Usage: npm run deploy (builds + deploys)
+ *
+ * Uses Node.js zlib instead of CLI gzip (Windows compatibility)
  */
-import { execSync } from 'child_process';
-import { copyFileSync, existsSync } from 'fs';
+import { createReadStream, createWriteStream, copyFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { createGzip } from 'zlib';
+import { pipeline } from 'stream/promises';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dist = join(__dirname, '..', 'dist');
 const www = join(__dirname, '..', '..', 'data', 'www');
 
-// Gzip bundles
+// Gzip bundles using Node.js zlib (cross-platform)
 console.log('Compressing bundles...');
 for (const f of ['bundle.js', 'bundle.css']) {
   const src = join(dist, f);
@@ -19,7 +22,13 @@ for (const f of ['bundle.js', 'bundle.css']) {
     console.error(`Missing: ${src}`);
     process.exit(1);
   }
-  execSync(`gzip -kf "${src}"`);
+  const dst = join(dist, `${f}.gz`);
+  await pipeline(
+    createReadStream(src),
+    createGzip({ level: 9 }),
+    createWriteStream(dst)
+  );
+  console.log(`  ${f} -> ${f}.gz`);
 }
 
 // Copy to data/www/

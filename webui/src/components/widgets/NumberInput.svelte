@@ -23,7 +23,10 @@
 
   function send(nv) {
     setStateKey(config.key, nv);
-    apiPost('/api/settings', { [config.key]: nv }).catch(console.error);
+    if (!config.form_only) {
+      const endpoint = config.api_endpoint || '/api/settings';
+      apiPost(endpoint, { [config.key]: nv }).catch(console.error);
+    }
   }
 </script>
 

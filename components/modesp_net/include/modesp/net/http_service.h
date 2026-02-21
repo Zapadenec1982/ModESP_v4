@@ -7,10 +7,13 @@
  *   GET  /api/board    — board.json contents
  *   GET  /api/ui       — ui.json (generated UI schema)
  *   GET  /api/bindings — bindings.json contents
+ *   POST /api/bindings — save new bindings.json (needs restart)
  *   GET  /api/modules  — registered modules info
  *   POST /api/settings — update thermostat setpoint etc.
  *   POST /api/wifi     — save WiFi credentials
  *   GET  /api/wifi/scan — scan available WiFi networks
+ *   GET  /api/wifi/ap   — current AP configuration
+ *   POST /api/wifi/ap   — save AP configuration
  *   POST /api/restart  — restart ESP32
  *   GET  /[path]       — static files from LittleFS /data/www/
  */
@@ -63,10 +66,13 @@ private:
     static esp_err_t handle_get_board(httpd_req_t* req);
     static esp_err_t handle_get_ui(httpd_req_t* req);
     static esp_err_t handle_get_bindings(httpd_req_t* req);
+    static esp_err_t handle_post_bindings(httpd_req_t* req);
     static esp_err_t handle_get_modules(httpd_req_t* req);
     static esp_err_t handle_post_settings(httpd_req_t* req);
     static esp_err_t handle_post_wifi(httpd_req_t* req);
     static esp_err_t handle_get_wifi_scan(httpd_req_t* req);
+    static esp_err_t handle_get_wifi_ap(httpd_req_t* req);
+    static esp_err_t handle_post_wifi_ap(httpd_req_t* req);
     static esp_err_t handle_post_restart(httpd_req_t* req);
     static esp_err_t handle_get_ota(httpd_req_t* req);
     static esp_err_t handle_post_ota(httpd_req_t* req);

@@ -3,9 +3,19 @@
   export let value;
 
   const statusColors = {
+    // Thermostat
     idle: 'var(--fg-muted)',
     cooling: 'var(--accent)',
     safe_mode: 'var(--warning)',
+    startup: 'var(--fg-muted)',
+    // Defrost (AUDIT-008)
+    stabilize: '#f59e0b',
+    valve_open: '#f59e0b',
+    active: '#ef4444',
+    equalize: '#f59e0b',
+    drip: '#8b5cf6',
+    fad: '#06b6d4',
+    // Network
     connected: 'var(--success)',
     disconnected: 'var(--error)',
     error: 'var(--error)'

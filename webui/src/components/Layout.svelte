@@ -1,9 +1,61 @@
 <script>
+  import { onMount, onDestroy } from 'svelte';
   import { pages, deviceName } from '../stores/ui.js';
-  import { wsConnected } from '../stores/state.js';
+  import { wsConnected, state } from '../stores/state.js';
   import Icon from './Icon.svelte';
 
   export let currentPage = 'dashboard';
+
+  // AUDIT-009: alarm banner на всіх сторінках
+  $: alarmActive = $state['protection.alarm_active'];
+  $: alarmCode = $state['protection.alarm_code'];
+
+  // Годинник в topbar — тікає щосекунди локально,
+  // синхронізується з system.time через WebSocket (кожні 5с)
+  let clockTime = '';
+  let clockDate = '';
+  let tickTimer = null;
+  let serverSeconds = 0; // секунди з останнього sync
+
+  // Парсимо "HH:MM:SS" → секунди від початку доби
+  function parseHMS(s) {
+    if (!s || s === '--:--:--') return -1;
+    const p = s.split(':');
+    return (+p[0]) * 3600 + (+p[1]) * 60 + (+p[2] || 0);
+  }
+
+  // Форматуємо секунди → "HH:MM:SS"
+  function fmtHMS(sec) {
+    const s = ((sec % 86400) + 86400) % 86400;
+    const h = String(Math.floor(s / 3600)).padStart(2, '0');
+    const m = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+    const ss = String(s % 60).padStart(2, '0');
+    return `${h}:${m}:${ss}`;
+  }
+
+  // Sync з WebSocket state
+  $: {
+    const st = $state['system.time'];
+    const sd = $state['system.date'];
+    if (st && st !== '--:--:--') {
+      serverSeconds = parseHMS(st);
+      clockTime = st;
+    }
+    if (sd && sd !== '--.--.----') clockDate = sd;
+  }
+
+  onMount(() => {
+    tickTimer = setInterval(() => {
+      if (serverSeconds >= 0) {
+        serverSeconds = (serverSeconds + 1) % 86400;
+        clockTime = fmtHMS(serverSeconds);
+      }
+    }, 1000);
+  });
+
+  onDestroy(() => {
+    if (tickTimer) clearInterval(tickTimer);
+  });
 
   function navigate(id) {
     currentPage = id;
@@ -42,10 +94,25 @@
 
   <!-- Main content -->
   <div class="main-area">
+    <!-- AUDIT-009: alarm banner на всіх сторінках -->
+    {#if alarmActive}
+      <div class="alarm-banner" on:click={() => navigate('protection')}>
+        ALARM: {alarmCode ? String(alarmCode).toUpperCase().replace('_', ' ') : 'ACTIVE'}
+      </div>
+    {/if}
     <header class="topbar">
       <h1 class="topbar-title">{currentTitle}</h1>
-      <div class="ws-badge" class:connected={$wsConnected}>
-        <span class="ws-dot"></span>
+      <div class="topbar-right">
+        {#if clockTime}
+          <div class="topbar-clock">
+            <Icon name="clock" size={14} />
+            <span class="clock-time">{clockTime}</span>
+            <span class="clock-date">{clockDate}</span>
+          </div>
+        {/if}
+        <div class="ws-badge" class:connected={$wsConnected}>
+          <span class="ws-dot"></span>
+        </div>
       </div>
     </header>
     <main class="content">
@@ -178,6 +245,24 @@
     box-shadow: 0 0 6px var(--success);
   }
 
+  /* === Alarm banner (AUDIT-009) === */
+  .alarm-banner {
+    background: #991b1b;
+    color: #fff;
+    text-align: center;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    cursor: pointer;
+    animation: alarm-flash 1.5s infinite;
+  }
+
+  @keyframes alarm-flash {
+    0%, 100% { background: #991b1b; }
+    50% { background: #dc2626; }
+  }
+
   /* === Main area === */
   .main-area {
     flex: 1;
@@ -202,6 +287,30 @@
   .topbar-title {
     font-size: 18px;
     font-weight: 600;
+  }
+
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .topbar-clock {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--fg-muted);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .clock-time {
+    font-weight: 500;
+    color: var(--fg);
+  }
+
+  .clock-date {
+    opacity: 0.7;
   }
 
   .ws-badge {

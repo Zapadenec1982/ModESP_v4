@@ -36,6 +36,23 @@
     }
   },
 
+  "features": {
+    "basic_protection": {
+      "description": "Захист по температурі камери та датчику",
+      "requires_roles": [],
+      "always_active": true,
+      "controls_settings": [
+        "protection.high_limit", "protection.low_limit",
+        "protection.alarm_delay", "protection.manual_reset"
+      ]
+    },
+    "door_protection": {
+      "description": "Моніторинг дверей камери",
+      "requires_roles": ["door_contact"],
+      "controls_settings": ["protection.door_delay"]
+    }
+  },
+
   "state": {
     "protection.lockout": {
       "type": "bool",
@@ -103,7 +120,7 @@
       "type": "int",
       "unit": "хв",
       "access": "readwrite",
-      "min": 0,
+      "min": 5,
       "max": 120,
       "step": 1,
       "default": 30,

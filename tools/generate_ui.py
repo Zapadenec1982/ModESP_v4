@@ -41,8 +41,10 @@ WIDGET_TYPE_COMPAT = {
     "gauge":        {"float", "int"},
     "slider":       {"float", "int"},
     "number_input": {"float", "int"},
+    "select":       {"int", "string"},
     "indicator":    {"bool"},
     "toggle":       {"bool"},
+    "button":       {"bool"},
     "status_text":  {"string"},
     "value":        {"float", "int", "bool", "string"},
     "chart":        {"float"},
@@ -94,9 +96,9 @@ class ManifestValidator:
             if "access" not in info:
                 self.errors.append(f"[{name}] State key '{key}' missing 'access'")
 
-            # readwrite keys must have min/max/step
+            # readwrite keys must have min/max/step (unless options present)
             if info.get("access") == "readwrite":
-                if info.get("type") in ("float", "int"):
+                if info.get("type") in ("float", "int") and "options" not in info:
                     for prop in ("min", "max", "step"):
                         if prop not in info:
                             self.errors.append(
@@ -149,6 +151,44 @@ class ManifestValidator:
                 self.errors.append(
                     f"[{name}] Display menu_item key '{item['key']}' not found in state")
 
+        # V14: features.*.controls_settings keys must exist in state
+        features = manifest.get("features", {})
+        for feat_name, feat in features.items():
+            for cs_key in feat.get("controls_settings", []):
+                if cs_key not in state:
+                    self.errors.append(
+                        f"[{name}] Feature '{feat_name}' controls_settings "
+                        f"key '{cs_key}' not found in state")
+
+        # V16: constraints.*.values.*.requires_feature must exist in features
+        constraints = manifest.get("constraints", {})
+        for c_key, constraint in constraints.items():
+            for val_str, rule in constraint.get("values", {}).items():
+                rf = rule.get("requires_feature")
+                if rf and rf not in features:
+                    self.errors.append(
+                        f"[{name}] Constraint '{c_key}' value '{val_str}' "
+                        f"requires_feature '{rf}' not found in features")
+
+        # V17: options values must be int
+        for key, info in state.items():
+            if "options" in info:
+                for opt in info["options"]:
+                    if not isinstance(opt.get("value"), int):
+                        self.errors.append(
+                            f"[{name}] State key '{key}' option value "
+                            f"'{opt.get('value')}' must be int")
+
+        # V18: state key with options but UI widget != "select" → warning
+        for card in ui.get("cards", []):
+            for w in card.get("widgets", []):
+                wkey = w.get("key", "")
+                wtype = w.get("widget", "")
+                if wkey in state and "options" in state.get(wkey, {}) and wtype != "select":
+                    self.warnings.append(
+                        f"[{name}] State key '{wkey}' has options but "
+                        f"widget is '{wtype}' (expected 'select')")
+
         return len(self.errors) == 0
 
     def validate_cross_module(self, manifests, active_modules=None):
@@ -175,6 +215,24 @@ class ManifestValidator:
                         f"'{seen_keys[key]}' and '{name}'")
                 else:
                     seen_keys[key] = name
+
+        # V15: features.requires_roles must exist in equipment.requires[].role
+        equipment_roles = set()
+        for m in manifests:
+            if m.get("module") == "equipment":
+                for req in m.get("requires", []):
+                    equipment_roles.add(req.get("role", ""))
+                break
+        if equipment_roles:
+            for m in manifests:
+                mod_name = m.get("module", "?")
+                for feat_name, feat in m.get("features", {}).items():
+                    for role in feat.get("requires_roles", []):
+                        if role not in equipment_roles:
+                            self.errors.append(
+                                f"[{mod_name}] Feature '{feat_name}' "
+                                f"requires_role '{role}' not found in "
+                                f"equipment.requires")
 
         # Валідація inputs секцій
         if active_modules is None:
@@ -497,6 +555,79 @@ def cross_validate(module_manifests, driver_manifests, errors, warnings):
 
 
 # ═══════════════════════════════════════════════════════════════
+#  Feature Resolver
+# ═══════════════════════════════════════════════════════════════
+
+class FeatureResolver:
+    """Визначає які features активні на основі bindings."""
+
+    def __init__(self, bindings_data, equipment_manifest):
+        self.bound_roles = set()
+        for b in bindings_data.get("bindings", []):
+            self.bound_roles.add(b["role"])
+        self.all_equipment_roles = set()
+        for r in equipment_manifest.get("requires", []):
+            self.all_equipment_roles.add(r["role"])
+
+    def resolve_module(self, module_manifest):
+        """Повертає dict {feature_name: bool} для одного модуля."""
+        features = module_manifest.get("features", {})
+        result = {}
+        for name, feat in features.items():
+            if feat.get("always_active", False):
+                result[name] = True
+            else:
+                required = set(feat.get("requires_roles", []))
+                result[name] = required.issubset(self.bound_roles)
+        return result
+
+    def resolve_all(self, manifests):
+        """Повертає dict {module_name: {feature_name: bool}}."""
+        result = {}
+        for m in manifests:
+            result[m.get("module", "?")] = self.resolve_module(m)
+        return result
+
+    def resolve_constraints(self, module_manifest, active_features):
+        """Фільтрує options за constraints + active features.
+        Повертає dict {setting_key: [filtered_options]}."""
+        constraints = module_manifest.get("constraints", {})
+        state = module_manifest.get("state", {})
+        result = {}
+        for key, constraint in constraints.items():
+            if constraint.get("type") != "enum_filter":
+                continue
+            # Беремо оригінальні options зі state definition
+            original_options = state.get(key, {}).get("options", [])
+            if not original_options:
+                continue
+            # Фільтруємо за constraints
+            filtered = []
+            for opt in original_options:
+                val_str = str(opt["value"])
+                rule = constraint.get("values", {}).get(val_str, {})
+                if rule.get("always", False):
+                    filtered.append(opt)
+                elif rule.get("requires_feature"):
+                    if active_features.get(rule["requires_feature"], False):
+                        filtered.append(opt)
+                # Якщо немає правила для цього value — пропускаємо
+            result[key] = filtered
+        return result
+
+    def get_disabled_info(self, key, module_manifest, active_features):
+        """Для setting key → (disabled: bool, reason: str|None)."""
+        for feat_name, feat in module_manifest.get("features", {}).items():
+            if key in feat.get("controls_settings", []):
+                if not active_features.get(feat_name, True):
+                    missing = set(feat.get("requires_roles", [])) - self.bound_roles
+                    reason = f"Потрібно: {', '.join(sorted(missing))}" if missing else feat.get("description", "")
+                    return True, reason
+                return False, None
+        return False, None
+
+
+# ═══════════════════════════════════════════════════════════════
 #  UI JSON Generator  (data/ui.json)
 # ═══════════════════════════════════════════════════════════════
 
@@ -504,12 +635,25 @@ class UIJsonGenerator:
     """Generates merged ui.json for runtime serving via GET /api/ui."""
 
     def generate(self, project, manifests, driver_manifests=None,
-                 board=None, bindings=None):
+                 board=None, bindings=None, resolver=None):
         # Глобальна карта всіх state keys з усіх модулів (для cross-module widget keys)
         self._all_state = {}
         for m in manifests:
             for key, info in m.get("state", {}).items():
                 self._all_state[key] = info
+
+        # Зберігаємо resolver для використання у _build_widget
+        self._resolver = resolver
+
+        # Для кожного модуля обчислюємо active features та constraints
+        self._module_features = {}
+        self._module_constraints = {}
+        if resolver:
+            for m in manifests:
+                mod_name = m.get("module", "?")
+                active = resolver.resolve_module(m)
+                self._module_features[mod_name] = active
+                self._module_constraints[mod_name] = resolver.resolve_constraints(m, active)
 
         pages = []
 
@@ -527,12 +671,18 @@ class UIJsonGenerator:
             pages.append(page)
         # Bindings page (equipment overview)
         if bindings and board:
+            # Витягуємо requires з equipment manifest
+            equip_requires = []
+            for m in manifests:
+                if m.get("module") == "equipment":
+                    equip_requires = m.get("requires", [])
+                    break
             pages.append(self._bindings_page(
-                bindings, board, driver_manifests or {}))
+                bindings, board, driver_manifests or {},
+                equip_requires))
         if sys_pages.get("network", True):
             pages.append(self._network_page())
-        if sys_pages.get("firmware", False):
-            pages.append(self._firmware_page())
+        # firmware cards merged into _system_page
         if sys_pages.get("system", True):
             pages.append(self._system_page())
 
@@ -550,9 +700,12 @@ class UIJsonGenerator:
                 if info.get("unit"):
                     entry["unit"] = info["unit"]
                 if info.get("access") == "readwrite":
-                    for prop in ("min", "max", "step"):
-                        if prop in info:
-                            entry[prop] = info[prop]
+                    if "options" in info:
+                        entry["options"] = info["options"]
+                    else:
+                        for prop in ("min", "max", "step"):
+                            if prop in info:
+                                entry[prop] = info[prop]
                 state_meta[key] = entry
 
         return {
@@ -589,11 +742,23 @@ class UIJsonGenerator:
 
     def _build_widget(self, w, manifest):
         """Build a widget dict with state metadata merged in."""
-        widget = {"key": w["key"], "widget": w["widget"]}
+        key = w["key"]
+        widget = {"key": key, "widget": w["widget"]}
         # Шукаємо state info спочатку в поточному модулі, потім в глобальній карті
-        state_info = manifest.get("state", {}).get(w["key"], {})
+        state_info = manifest.get("state", {}).get(key, {})
         if not state_info and hasattr(self, '_all_state'):
-            state_info = self._all_state.get(w["key"], {})
+            state_info = self._all_state.get(key, {})
+
+        mod_name = manifest.get("module", "?")
+
+        # Select: якщо є options в state definition
+        if "options" in state_info:
+            widget["widget"] = "select"
+            constraints_map = self._module_constraints.get(mod_name, {})
+            if key in constraints_map:
+                widget["options"] = constraints_map[key]
+            else:
+                widget["options"] = state_info["options"]
 
         # Pull metadata from state definition
         if state_info.get("unit"):
@@ -602,11 +767,20 @@ class UIJsonGenerator:
             widget["description"] = state_info["description"]
         if state_info.get("access") == "readwrite":
             widget["editable"] = True
-            for prop in ("min", "max", "step"):
-                if prop in state_info:
-                    widget[prop] = state_info[prop]
+            if "options" not in state_info:
+                for prop in ("min", "max", "step"):
+                    if prop in state_info:
+                        widget[prop] = state_info[prop]
         if state_info.get("enum"):
             widget["enum"] = state_info["enum"]
+
+        # Feature disabled check
+        if self._resolver:
+            active_features = self._module_features.get(mod_name, {})
+            disabled, reason = self._resolver.get_disabled_info(key, manifest, active_features)
+            if disabled:
+                widget["disabled"] = True
+                widget["disabled_reason"] = reason
 
         # Widget-specific props from manifest ui section
         for prop in ("size", "color_zones", "on_label", "off_label",
@@ -662,6 +836,8 @@ class UIJsonGenerator:
                     "group": "settings",
                     "collapsible": True,
                     "widgets": [
+                        {"key": "_action.wifi_scan", "widget": "wifi_scan",
+                         "label": "Сканувати мережі"},
                         {"key": "wifi.ssid", "widget": "text_input",
                          "editable": True, "description": "SSID",
                          "api_endpoint": "/api/wifi"},
@@ -671,6 +847,25 @@ class UIJsonGenerator:
                         {"key": "_action.wifi_save", "widget": "wifi_save",
                          "label": "Зберегти",
                          "api_endpoint": "/api/wifi"},
+                    ],
+                },
+                {
+                    "title": "Точка доступу",
+                    "group": "settings",
+                    "collapsible": True,
+                    "widgets": [
+                        {"key": "wifi.ap_ssid", "widget": "text_input",
+                         "editable": True, "description": "SSID точки доступу",
+                         "form_only": True},
+                        {"key": "wifi.ap_password", "widget": "password_input",
+                         "editable": True, "description": "Пароль (мін. 8 символів або порожній)",
+                         "form_only": True},
+                        {"key": "wifi.ap_channel", "widget": "number_input",
+                         "editable": True, "description": "Канал",
+                         "min": 1, "max": 13, "step": 1,
+                         "form_only": True},
+                        {"key": "_action.ap_save", "widget": "ap_save",
+                         "label": "Зберегти AP"},
                     ],
                 },
                 {
@@ -696,7 +891,8 @@ class UIJsonGenerator:
                          "api_endpoint": "/api/mqtt"},
                         {"key": "mqtt.port", "widget": "number_input",
                          "editable": True, "description": "Порт",
-                         "min": 1, "max": 65535, "step": 1},
+                         "min": 1, "max": 65535, "step": 1,
+                         "form_only": True},
                         {"key": "mqtt.user", "widget": "text_input",
                          "editable": True, "description": "Логін",
                          "api_endpoint": "/api/mqtt"},
@@ -707,7 +903,8 @@ class UIJsonGenerator:
                          "editable": True, "description": "Префікс топіків",
                          "api_endpoint": "/api/mqtt"},
                         {"key": "mqtt.enabled", "widget": "toggle",
-                         "editable": True, "description": "Увімкнути MQTT"},
+                         "editable": True, "description": "Увімкнути MQTT",
+                         "form_only": True},
                         {"key": "_action.mqtt_save", "widget": "mqtt_save",
                          "label": "Зберегти",
                          "api_endpoint": "/api/mqtt"},
@@ -717,39 +914,14 @@ class UIJsonGenerator:
         }
 
     def _system_page(self):
+        """System page: info, firmware, time settings, actions."""
         return {
             "id": "system",
             "title": "Система",
-            "icon": "settings",
+            "icon": "cpu",
             "order": 99,
             "system": True,
             "cards": [
-                {
-                    "title": "Час",
-                    "widgets": [
-                        {"key": "system.time", "widget": "value",
-                         "description": "Поточний час"},
-                        {"key": "system.date", "widget": "value",
-                         "description": "Дата"},
-                    ],
-                },
-                {
-                    "title": "Налаштування часу",
-                    "group": "settings",
-                    "collapsible": True,
-                    "widgets": [
-                        {"key": "time.ntp_enabled", "widget": "toggle",
-                         "editable": True, "description": "NTP синхронізація"},
-                        {"key": "time.timezone", "widget": "text_input",
-                         "editable": True, "description": "Часовий пояс (POSIX)",
-                         "api_endpoint": "/api/time"},
-                        {"key": "time.manual_datetime", "widget": "datetime_input",
-                         "editable": True, "description": "Встановити вручну"},
-                        {"key": "_action.time_save", "widget": "time_save",
-                         "label": "Зберегти",
-                         "api_endpoint": "/api/time"},
-                    ],
-                },
                 {
                     "title": "Інформація",
                     "widgets": [
@@ -764,28 +936,7 @@ class UIJsonGenerator:
                     ],
                 },
                 {
-                    "title": "Дії",
-                    "widgets": [
-                        {"key": "_action.restart", "widget": "button",
-                         "label": "Перезавантажити",
-                         "api_endpoint": "/api/restart",
-                         "confirm": "Перезавантажити пристрій?"},
-                    ],
-                },
-            ],
-        }
-
-    def _firmware_page(self):
-        """Firmware update page: current info + file upload."""
-        return {
-            "id": "firmware",
-            "title": "Прошивка",
-            "icon": "download",
-            "order": 95,
-            "system": True,
-            "cards": [
-                {
-                    "title": "Поточна прошивка",
+                    "title": "Прошивка",
                     "widgets": [
                         {"key": "_ota.version", "widget": "value",
                          "description": "Версія"},
@@ -798,7 +949,8 @@ class UIJsonGenerator:
                     ],
                 },
                 {
-                    "title": "Оновлення",
+                    "title": "Оновлення прошивки",
+                    "collapsible": True,
                     "widgets": [
                         {"key": "_ota.upload", "widget": "firmware_upload",
                          "api_endpoint": "/api/ota",
@@ -806,10 +958,38 @@ class UIJsonGenerator:
                          "description": "Завантажити нову прошивку"},
                     ],
                 },
+                {
+                    "title": "Налаштування часу",
+                    "group": "settings",
+                    "collapsible": True,
+                    "widgets": [
+                        {"key": "time.ntp_enabled", "widget": "toggle",
+                         "editable": True, "description": "NTP синхронізація",
+                         "form_only": True},
+                        {"key": "time.timezone", "widget": "text_input",
+                         "editable": True, "description": "Часовий пояс (POSIX)",
+                         "api_endpoint": "/api/time"},
+                        {"key": "time.manual_datetime", "widget": "datetime_input",
+                         "editable": True, "description": "Встановити вручну"},
+                        {"key": "_action.time_save", "widget": "time_save",
+                         "label": "Зберегти",
+                         "api_endpoint": "/api/time"},
+                    ],
+                },
+                {
+                    "title": "Дії",
+                    "widgets": [
+                        {"key": "_action.restart", "widget": "button",
+                         "label": "Перезавантажити",
+                         "api_endpoint": "/api/restart",
+                         "confirm": "Перезавантажити пристрій?"},
+                    ],
+                },
             ],
         }
 
-    def _bindings_page(self, bindings, board, driver_manifests):
+    def _bindings_page(self, bindings, board, driver_manifests,
+                        equip_requires=None):
         """Equipment page: shows current bindings + free hardware."""
         binding_list = bindings.get("bindings", [])
 
@@ -877,6 +1057,34 @@ class UIJsonGenerator:
                 }],
             })
 
+        # Roles metadata для BindingsEditor
+        roles = []
+        for req in (equip_requires or []):
+            drv_name = req["driver"]
+            drv = driver_manifests.get(drv_name, {})
+            roles.append({
+                "role": req["role"],
+                "type": req["type"],
+                "driver": drv_name,
+                "hw_type": drv.get("hardware_type", ""),
+                "requires_address": drv.get("requires_address", False),
+                "label": req.get("label", req["role"]),
+                "optional": req.get("optional", False),
+            })
+
+        # Hardware inventory з board.json (для select options у BindingsEditor)
+        hardware = []
+        for section, hw_type in BOARD_SECTION_TO_HW_TYPE.items():
+            for item in board.get(section, []):
+                hw_entry = {
+                    "id": item.get("id", ""),
+                    "hw_type": hw_type,
+                    "label": item.get("label", item.get("id", "")),
+                }
+                if "gpio" in item:
+                    hw_entry["gpio"] = item["gpio"]
+                hardware.append(hw_entry)
+
         return {
             "id": "bindings",
             "title": "Обладнання",
@@ -885,6 +1093,8 @@ class UIJsonGenerator:
             "system": True,
             "access_level": "service",
             "cards": cards,
+            "roles": roles,
+            "hardware": hardware,
         }
 
 
@@ -918,24 +1128,33 @@ class StateMetaGenerator:
             "",
         ]
 
-        # Only include readwrite keys (read-only don't need validation)
+        # Include readwrite keys AND read-only keys with persist=true
         rw_entries = []
         for m in manifests:
             for key, info in m.get("state", {}).items():
-                if info.get("access") == "readwrite":
+                if info.get("access") == "readwrite" or info.get("persist", False):
                     rw_entries.append((key, info))
 
         lines.append("static constexpr StateMeta STATE_META[] = {")
         if rw_entries:
             for key, info in rw_entries:
                 stype = info.get("type", "float")
+                writable = "true" if info.get("access") == "readwrite" else "false"
                 persist = "true" if info.get("persist", False) else "false"
-                min_v = float(info.get("min", 0.0))
-                max_v = float(info.get("max", 0.0))
-                step_v = float(info.get("step", 1.0))
+                # Для keys з options — min/max обчислюються з values
+                options = info.get("options")
+                if options:
+                    values = [opt["value"] for opt in options]
+                    min_v = float(min(values))
+                    max_v = float(max(values))
+                    step_v = 1.0
+                else:
+                    min_v = float(info.get("min", 0.0))
+                    max_v = float(info.get("max", 0.0))
+                    step_v = float(info.get("step", 1.0))
                 default_v = float(info.get("default", 0.0))
                 lines.append(
-                    f'    {{"{key}", "{stype}", true, {persist}, '
+                    f'    {{"{key}", "{stype}", {writable}, {persist}, '
                     f'{min_v}f, {max_v}f, {step_v}f, {default_v}f}},')
         else:
             # Empty array fallback — avoid zero-size array in C++
@@ -1083,6 +1302,72 @@ class DisplayScreensGenerator:
         return "\n".join(lines)
 
 
+class FeaturesConfigGenerator:
+    """Generates generated/features_config.h — constexpr feature flags."""
+
+    def generate(self, manifests, resolver):
+        """Generate features_config.h with active feature flags."""
+        all_features = resolver.resolve_all(manifests)
+
+        lines = [
+            "#pragma once",
+            "// Auto-generated by generate_ui.py — DO NOT EDIT",
+            "",
+            "#include <cstddef>",
+            "",
+            "namespace modesp::gen {",
+            "",
+            "struct FeatureConfig {",
+            "    const char* module;",
+            "    const char* feature;",
+            "    bool active;",
+            "};",
+            "",
+        ]
+
+        entries = []
+        for mod_name in sorted(all_features.keys()):
+            features = all_features[mod_name]
+            for feat_name in sorted(features.keys()):
+                active = "true" if features[feat_name] else "false"
+                entries.append(
+                    f'    {{"{mod_name}", "{feat_name}", {active}}}')
+
+        lines.append("static constexpr FeatureConfig FEATURES[] = {")
+        if entries:
+            lines.append(",\n".join(entries) + ",")
+        else:
+            lines.append('    {"", "", false},  // placeholder')
+        lines.append("};")
+        lines.append(f"static constexpr size_t FEATURES_COUNT = {max(len(entries), 1) if not entries else len(entries)};")
+        lines.append("")
+
+        # Lookup helper
+        lines.extend([
+            "// Lookup helper — is feature active for module?",
+            "inline bool is_feature_active(const char* module, const char* feature) {",
+            "    for (size_t i = 0; i < FEATURES_COUNT; i++) {",
+            "        // strcmp module",
+            "        const char* a = FEATURES[i].module;",
+            "        const char* b = module;",
+            "        while (*a && *a == *b) { a++; b++; }",
+            "        if (*a != *b) continue;",
+            "        // strcmp feature",
+            "        a = FEATURES[i].feature;",
+            "        b = feature;",
+            "        while (*a && *a == *b) { a++; b++; }",
+            "        if (*a == *b) return FEATURES[i].active;",
+            "    }",
+            "    return false;  // unknown feature → inactive",
+            "}",
+            "",
+            "} // namespace modesp::gen",
+            "",
+        ])
+
+        return "\n".join(lines)
+
+
 # ═══════════════════════════════════════════════════════════════
 #  Main
 # ═══════════════════════════════════════════════════════════════
@@ -1170,11 +1455,31 @@ def main():
         sys.exit(1)
     print("  All checks passed.")
 
+    # Create FeatureResolver if bindings available
+    resolver = None
+    if bindings:
+        equipment_manifest = None
+        for m in manifests:
+            if m.get("module") == "equipment":
+                equipment_manifest = m
+                break
+        if equipment_manifest:
+            resolver = FeatureResolver(bindings, equipment_manifest)
+            all_features = resolver.resolve_all(manifests)
+            print("\nFeatures:")
+            for mod_name, features in sorted(all_features.items()):
+                active = [f for f, v in features.items() if v]
+                inactive = [f for f, v in features.items() if not v]
+                if active:
+                    print(f"  {mod_name}: {', '.join(active)}")
+                if inactive:
+                    print(f"  {mod_name} (disabled): {', '.join(inactive)}")
+
     # Generate ui.json
     print("\nGenerating files...")
     ui_gen = UIJsonGenerator()
     ui_schema = ui_gen.generate(project, manifests, driver_manifests,
-                                board, bindings)
+                                board, bindings, resolver)
 
     data_dir = args.output_data
     gen_dir = args.output_gen
@@ -1220,6 +1525,40 @@ def main():
         f.write(display_h)
     print(f"  + {display_path}")
     files_written += 1
+
+    # 5. features_config.h (only if resolver available)
+    if resolver:
+        feat_gen = FeaturesConfigGenerator()
+        feat_h = feat_gen.generate(manifests, resolver)
+        feat_path = gen_dir / "features_config.h"
+        with open(feat_path, "w", encoding="utf-8") as f:
+            f.write(feat_h)
+        print(f"  + {feat_path}")
+        files_written += 1
+    else:
+        # Generate empty fallback so C++ compiles without bindings
+        feat_path = gen_dir / "features_config.h"
+        with open(feat_path, "w", encoding="utf-8") as f:
+            f.write("#pragma once\n"
+                    "// Auto-generated by generate_ui.py — DO NOT EDIT\n"
+                    "// No bindings.json found — all features default to false\n\n"
+                    "#include <cstddef>\n\n"
+                    "namespace modesp::gen {\n\n"
+                    "struct FeatureConfig {\n"
+                    "    const char* module;\n"
+                    "    const char* feature;\n"
+                    "    bool active;\n"
+                    "};\n\n"
+                    "static constexpr FeatureConfig FEATURES[] = {\n"
+                    '    {"", "", false},  // placeholder\n'
+                    "};\n"
+                    "static constexpr size_t FEATURES_COUNT = 0;\n\n"
+                    "inline bool is_feature_active(const char*, const char*) {\n"
+                    "    return false;\n"
+                    "}\n\n"
+                    "} // namespace modesp::gen\n")
+        print(f"  + {feat_path} (fallback — no bindings)")
+        files_written += 1
 
     # Summary
     total_keys = sum(len(m.get("state", {})) for m in manifests)

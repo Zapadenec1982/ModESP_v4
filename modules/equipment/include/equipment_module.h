@@ -82,11 +82,9 @@ private:
     void apply_outputs();
     void publish_state();
 
-    // Стан сенсорів
+    // Кешовані значення сенсорів
     float air_temp_  = 0.0f;
     float evap_temp_ = 0.0f;
-    bool  has_air_temp_  = false;
-    bool  has_evap_temp_ = false;
 
     // Requests від бізнес-модулів (читаються кожен цикл з SharedState)
     struct Requests {
@@ -115,4 +113,12 @@ private:
         bool cond_fan   = false;
         bool hg_valve   = false;
     } out_;
+
+    // AUDIT-003: Compressor anti-short-cycle на рівні виходу (output-level).
+    // Захищає компресор незалежно від джерела запиту (thermostat/defrost).
+    // Доповнює, а не замінює таймери thermostat (ті працюють для state machine логіки).
+    bool  comp_actual_        = false;   // Фактичний стан компресора
+    uint32_t comp_since_ms_   = 999999;  // Час з останнього перемикання (мс)
+    static constexpr uint32_t COMP_MIN_OFF_MS = 180000;  // 3 хв min OFF
+    static constexpr uint32_t COMP_MIN_ON_MS  = 120000;  // 2 хв min ON
 };

@@ -86,6 +86,7 @@ bool ProtectionModule::on_init() {
 
     ESP_LOGI(TAG, "Initialized (HAL=%.1f°C, LAL=%.1f°C, delay=%lu min)",
              high_limit_, low_limit_, alarm_delay_ms_ / 60000);
+    ESP_LOGI(TAG, "Features: door=%d", has_feature("door_protection"));
     return true;
 }
 
@@ -104,15 +105,31 @@ void ProtectionModule::on_update(uint32_t dt_ms) {
     bool  door_open  = read_bool("equipment.door_open");
     bool  defrost    = read_bool("defrost.active");
 
+    // Визначаємо чи defrost у фазі нагріву (BUG-007 fix)
+    // HAL alarm блокується тільки в heating-фазах: stabilize, valve_open, active, equalize
+    bool defrost_heating = false;
+    if (defrost) {
+        auto phase_val = state_get("defrost.phase");
+        if (phase_val.has_value()) {
+            const auto* sp = etl::get_if<etl::string<32>>(&phase_val.value());
+            if (sp && (*sp == "active" || *sp == "stabilize" ||
+                       *sp == "valve_open" || *sp == "equalize")) {
+                defrost_heating = true;
+            }
+        }
+    }
+
     // 3. Перевіряємо команду скидання аварій
     check_reset_command();
 
     // 4. Оновлюємо монітори
-    update_high_temp(air_temp, sensor1_ok, defrost, dt_ms);
+    update_high_temp(air_temp, sensor1_ok, defrost_heating, dt_ms);
     update_low_temp(air_temp, sensor1_ok, dt_ms);
     update_sensor_alarm(sensor1_, sensor1_ok, "SENSOR1 (ERR1)");
     update_sensor_alarm(sensor2_, sensor2_ok, "SENSOR2 (ERR2)");
-    update_door_alarm(door_open, dt_ms);
+    if (has_feature("door_protection")) {
+        update_door_alarm(door_open, dt_ms);
+    }
 
     // 5. Публікуємо стан аварій
     publish_alarms();

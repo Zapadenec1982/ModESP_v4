@@ -4,13 +4,15 @@
   "description": "Equipment Manager — HAL abstraction layer with arbitration",
 
   "requires": [
-    {"role": "air_temp",    "type": "sensor",   "driver": "ds18b20"},
-    {"role": "evap_temp",   "type": "sensor",   "driver": "ds18b20", "optional": true},
-    {"role": "compressor",  "type": "actuator", "driver": "relay"},
-    {"role": "heater",      "type": "actuator", "driver": "relay", "optional": true},
-    {"role": "evap_fan",    "type": "actuator", "driver": "relay", "optional": true},
-    {"role": "cond_fan",    "type": "actuator", "driver": "relay", "optional": true},
-    {"role": "hg_valve",    "type": "actuator", "driver": "relay", "optional": true}
+    {"role": "air_temp",       "type": "sensor",   "driver": "ds18b20",       "label": "Темп. камери"},
+    {"role": "compressor",     "type": "actuator", "driver": "relay",         "label": "Компресор"},
+    {"role": "evap_temp",      "type": "sensor",   "driver": "ds18b20",       "label": "Темп. випарника",      "optional": true},
+    {"role": "condenser_temp", "type": "sensor",   "driver": "ds18b20",       "label": "Темп. конденсатора",   "optional": true},
+    {"role": "heater",         "type": "actuator", "driver": "relay",         "label": "Тен відтайки",         "optional": true},
+    {"role": "evap_fan",       "type": "actuator", "driver": "relay",         "label": "Вент. випарника",      "optional": true},
+    {"role": "cond_fan",       "type": "actuator", "driver": "relay",         "label": "Вент. конденсатора",   "optional": true},
+    {"role": "hg_valve",       "type": "actuator", "driver": "relay",         "label": "Клапан гарячого газу", "optional": true},
+    {"role": "door_contact",   "type": "sensor",   "driver": "digital_input", "label": "Контакт дверей",       "optional": true}
   ],
 
   "state": {
@@ -26,80 +28,6 @@
     "equipment.door_open":   {"type": "bool",  "access": "read", "description": "Стан дверей"}
   },
 
-  "ui": {
-    "page": "Обладнання",
-    "page_id": "equipment",
-    "icon": "settings",
-    "order": 85,
-    "cards": [
-      {
-        "title": "Сенсори",
-        "widgets": [
-          {
-            "key": "equipment.air_temp",
-            "widget": "value"
-          },
-          {
-            "key": "equipment.evap_temp",
-            "widget": "value"
-          },
-          {
-            "key": "equipment.sensor1_ok",
-            "widget": "indicator",
-            "on_label": "OK",
-            "off_label": "Помилка",
-            "on_color": "#22c55e",
-            "off_color": "#ef4444"
-          },
-          {
-            "key": "equipment.sensor2_ok",
-            "widget": "indicator",
-            "on_label": "OK",
-            "off_label": "Немає",
-            "on_color": "#22c55e",
-            "off_color": "#64748b"
-          }
-        ]
-      },
-      {
-        "title": "Актуатори",
-        "widgets": [
-          {
-            "key": "equipment.compressor",
-            "widget": "indicator",
-            "on_label": "Працює",
-            "off_label": "Вимкнено",
-            "on_color": "#22c55e",
-            "off_color": "#64748b"
-          },
-          {
-            "key": "equipment.heater",
-            "widget": "indicator",
-            "on_label": "Працює",
-            "off_label": "Вимкнено",
-            "on_color": "#f59e0b",
-            "off_color": "#64748b"
-          },
-          {
-            "key": "equipment.evap_fan",
-            "widget": "indicator",
-            "on_label": "Працює",
-            "off_label": "Вимкнено",
-            "on_color": "#22c55e",
-            "off_color": "#64748b"
-          },
-          {
-            "key": "equipment.cond_fan",
-            "widget": "indicator",
-            "on_label": "Працює",
-            "off_label": "Вимкнено",
-            "on_color": "#22c55e",
-            "off_color": "#64748b"
-          }
-        ]
-      }
-    ]
-  },
 
   "mqtt": {
     "publish": [
