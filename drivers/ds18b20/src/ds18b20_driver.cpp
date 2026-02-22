@@ -25,6 +25,7 @@ static const char* TAG = "DS18B20";
 // DS18B20 ROM commands
 // ═══════════════════════════════════════════════════════════════
 static constexpr uint8_t CMD_SKIP_ROM      = 0xCC;
+static constexpr uint8_t CMD_MATCH_ROM     = 0x55;
 static constexpr uint8_t CMD_CONVERT_T     = 0x44;
 static constexpr uint8_t CMD_READ_SCRATCH  = 0xBE;
 
@@ -32,11 +33,21 @@ static constexpr uint8_t CMD_READ_SCRATCH  = 0xBE;
 // Configure (called by DriverManager before init)
 // ═══════════════════════════════════════════════════════════════
 
-void DS18B20Driver::configure(const char* role, gpio_num_t gpio, uint32_t read_interval_ms) {
+void DS18B20Driver::configure(const char* role, gpio_num_t gpio,
+                              uint32_t read_interval_ms, const char* address) {
     role_ = role;
     gpio_ = gpio;
     read_interval_ms_ = read_interval_ms;
     configured_ = true;
+
+    if (address && address[0] != '\0') {
+        if (parse_address(address)) {
+            has_address_ = true;
+            ESP_LOGI(TAG, "[%s] MATCH_ROM address: %s", role, address);
+        } else {
+            ESP_LOGW(TAG, "[%s] Invalid ROM address: %s — using SKIP_ROM", role, address);
+        }
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -70,8 +81,9 @@ bool DS18B20Driver::init() {
         ESP_LOGI(TAG, "DS18B20 detected on GPIO %d", gpio_);
     }
 
-    ESP_LOGI(TAG, "[%s] Initialized (GPIO=%d, interval=%lu ms)",
-             role_.c_str(), gpio_, read_interval_ms_);
+    ESP_LOGI(TAG, "[%s] Initialized (GPIO=%d, interval=%lu ms, %s)",
+             role_.c_str(), gpio_, read_interval_ms_,
+             has_address_ ? "MATCH_ROM" : "SKIP_ROM");
     return true;
 }
 
@@ -213,30 +225,78 @@ uint8_t DS18B20Driver::onewire_read_byte() {
 // DS18B20 operations
 // ═══════════════════════════════════════════════════════════════
 
+void DS18B20Driver::send_rom_command() {
+    // MATCH_ROM адресує конкретний датчик, SKIP_ROM — єдиний на шині
+    if (has_address_) {
+        onewire_write_byte(CMD_MATCH_ROM);
+        for (uint8_t i = 0; i < 8; i++) {
+            onewire_write_byte(rom_address_[i]);
+        }
+    } else {
+        onewire_write_byte(CMD_SKIP_ROM);
+    }
+}
+
 bool DS18B20Driver::start_conversion() {
-    // OneWire тайміни захищені portDISABLE_INTERRUPTS в write_byte/read_byte.
-    // WiFi PS маніпуляція тут не потрібна — вона спричиняла безкінечний цикл
-    // "Set ps type: 2 → 1" в логах при кожному зчитуванні.
     if (!onewire_reset()) {
         return false;
     }
-    onewire_write_byte(CMD_SKIP_ROM);
+    send_rom_command();
     onewire_write_byte(CMD_CONVERT_T);
     return true;
 }
 
 bool DS18B20Driver::read_scratchpad(uint8_t* buf, size_t len) {
-    // OneWire тайміни захищені portDISABLE_INTERRUPTS в write_byte/read_byte.
-    // Цього достатньо для коректних зчитувань навіть з WiFi активним.
     if (!onewire_reset()) {
         return false;
     }
-    onewire_write_byte(CMD_SKIP_ROM);
+    send_rom_command();
     onewire_write_byte(CMD_READ_SCRATCH);
 
     for (size_t i = 0; i < len; i++) {
         buf[i] = onewire_read_byte();
     }
+    return true;
+}
+
+bool DS18B20Driver::parse_address(const char* addr_str) {
+    // Парсимо "28:FF:AA:BB:CC:DD:EE:01" → 8 байт
+    uint8_t addr[8] = {};
+    int idx = 0;
+    const char* p = addr_str;
+
+    while (*p && idx < 8) {
+        // Парсимо hex байт
+        char hi = *p++;
+        if (!*p) return false;
+        char lo = *p++;
+
+        auto hex_val = [](char c) -> int {
+            if (c >= '0' && c <= '9') return c - '0';
+            if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+            if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+            return -1;
+        };
+
+        int h = hex_val(hi);
+        int l = hex_val(lo);
+        if (h < 0 || l < 0) return false;
+
+        addr[idx++] = (uint8_t)((h << 4) | l);
+
+        // Пропускаємо роздільник (':' або '-')
+        if (*p == ':' || *p == '-') p++;
+    }
+
+    if (idx != 8) return false;
+
+    // CRC8 перевірка: байти 0-6, CRC в байті 7
+    if (crc8(addr, 7) != addr[7]) {
+        ESP_LOGW(TAG, "ROM address CRC mismatch");
+        return false;
+    }
+
+    memcpy(rom_address_, addr, 8);
     return true;
 }
 

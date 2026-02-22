@@ -3,5 +3,5 @@ idf_component_register(
     SRCS "src/hal.cpp" "src/driver_manager.cpp"
     INCLUDE_DIRS "include"
     REQUIRES modesp_core driver
-    PRIV_REQUIRES ds18b20 relay
+    PRIV_REQUIRES ds18b20 relay digital_input ntc esp_adc
 )

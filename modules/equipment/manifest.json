@@ -26,6 +26,7 @@
     "equipment.evap_fan":    {"type": "bool",  "access": "read", "description": "Фактичний стан вент. випарника"},
     "equipment.cond_fan":    {"type": "bool",  "access": "read", "description": "Фактичний стан вент. конденсатора"},
     "equipment.hg_valve":    {"type": "bool",  "access": "read", "description": "Фактичний стан клапана ГГ"},
+    "equipment.cond_temp":   {"type": "float", "access": "read", "unit": "°C", "description": "Температура конденсатора"},
     "equipment.door_open":   {"type": "bool",  "access": "read", "description": "Стан дверей"},
     "equipment.night_input": {"type": "bool",  "access": "read", "description": "Дискретний вхід нічного режиму"}
   },
@@ -35,6 +36,7 @@
     "publish": [
       "equipment.air_temp",
       "equipment.evap_temp",
+      "equipment.cond_temp",
       "equipment.compressor",
       "equipment.heater",
       "equipment.sensor1_ok"

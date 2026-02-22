@@ -28,17 +28,31 @@ public:
     /// Find a OneWire bus resource by hardware ID (e.g. "ow_1")
     OneWireBusResource*  find_onewire_bus(etl::string_view id);
 
+    /// Find a GPIO input resource by hardware ID (e.g. "din_1")
+    GpioInputResource*   find_gpio_input(etl::string_view id);
+
+    /// Find an ADC channel resource by hardware ID (e.g. "adc_1")
+    AdcChannelResource*  find_adc_channel(etl::string_view id);
+
     size_t gpio_output_count() const { return gpio_output_count_; }
-    size_t onewire_count() const { return onewire_count_; }
+    size_t onewire_count()     const { return onewire_count_; }
+    size_t gpio_input_count()  const { return gpio_input_count_; }
+    size_t adc_count()         const { return adc_count_; }
 
 private:
-    etl::array<GpioOutputResource, MAX_RELAYS>        gpio_outputs_;
-    etl::array<OneWireBusResource, MAX_ONEWIRE_BUSES> onewire_buses_;
+    etl::array<GpioOutputResource, MAX_RELAYS>         gpio_outputs_;
+    etl::array<OneWireBusResource, MAX_ONEWIRE_BUSES>  onewire_buses_;
+    etl::array<GpioInputResource, MAX_ADC_CHANNELS>    gpio_inputs_;
+    etl::array<AdcChannelResource, MAX_ADC_CHANNELS>   adc_channels_;
     size_t gpio_output_count_ = 0;
     size_t onewire_count_     = 0;
+    size_t gpio_input_count_  = 0;
+    size_t adc_count_         = 0;
 
     bool init_gpio_outputs(const BoardConfig& config);
     bool init_onewire(const BoardConfig& config);
+    bool init_gpio_inputs(const BoardConfig& config);
+    bool init_adc(const BoardConfig& config);
 };
 
 } // namespace modesp

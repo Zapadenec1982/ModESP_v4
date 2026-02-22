@@ -26,8 +26,11 @@ class DS18B20Driver : public modesp::ISensorDriver {
 public:
     DS18B20Driver() = default;
 
-    /// Configure before init (called by DriverManager)
-    void configure(const char* role, gpio_num_t gpio, uint32_t read_interval_ms = 1000);
+    /// Configure before init (called by DriverManager).
+    /// address: optional "28:FF:AA:BB:CC:DD:EE:01" for MATCH_ROM (multi-sensor).
+    void configure(const char* role, gpio_num_t gpio,
+                   uint32_t read_interval_ms = 1000,
+                   const char* address = nullptr);
 
     // ── ISensorDriver interface ──
     bool init() override;
@@ -50,6 +53,8 @@ private:
     bool     start_conversion();
     bool     read_scratchpad(uint8_t* buf, size_t len);
     bool     read_temperature(float& temp_out);
+    void     send_rom_command();    // MATCH_ROM або SKIP_ROM залежно від has_address_
+    bool     parse_address(const char* addr_str);  // "28:FF:..." → rom_address_[]
 
     // ── CRC8 (Dallas/Maxim) ──
     static uint8_t crc8(const uint8_t* data, size_t len);
@@ -74,6 +79,10 @@ private:
     uint8_t  consecutive_errors_  = 0;
     bool     conversion_started_  = false;
     bool     configured_          = false;
+
+    // MATCH_ROM address (multi-sensor)
+    uint8_t  rom_address_[8]      = {};
+    bool     has_address_         = false;
 
     // Validation limits
     static constexpr float MIN_VALID_TEMP  = -55.0f;

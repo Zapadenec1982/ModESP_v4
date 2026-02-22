@@ -360,7 +360,8 @@ void WsService::send_to_all(const char* data, size_t len) {
         auto* ctx = static_cast<AsyncSendCtx*>(
             malloc(sizeof(AsyncSendCtx) + len));
         if (!ctx) {
-            ESP_LOGW(TAG, "No memory for async send to fd=%d", fds[i]);
+            ESP_LOGW(TAG, "No memory for async send to fd=%d — removing client", fds[i]);
+            remove_client(fds[i]);
             continue;
         }
         ctx->server = server_;
@@ -401,7 +402,10 @@ void WsService::send_ping_to_all() {
 
         auto* ctx = static_cast<AsyncSendCtx*>(
             malloc(sizeof(AsyncSendCtx)));
-        if (!ctx) continue;
+        if (!ctx) {
+            remove_client(fds[i]);
+            continue;
+        }
         ctx->server = server_;
         ctx->self   = this;
         ctx->fd     = fds[i];

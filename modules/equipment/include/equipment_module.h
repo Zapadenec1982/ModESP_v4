@@ -67,6 +67,7 @@ private:
     // === Сенсори ===
     modesp::ISensorDriver* sensor_air_  = nullptr;  // Обов'язковий
     modesp::ISensorDriver* sensor_evap_ = nullptr;  // Опціональний
+    modesp::ISensorDriver* sensor_cond_ = nullptr;  // Опціональний (DS18B20 або NTC)
 
     // === Актуатори ===
     modesp::IActuatorDriver* compressor_ = nullptr;  // Обов'язковий
@@ -76,6 +77,7 @@ private:
     modesp::IActuatorDriver* hg_valve_   = nullptr;  // Опціональний
 
     // === Дискретні входи ===
+    modesp::ISensorDriver* door_sensor_  = nullptr;  // Опціональний
     modesp::ISensorDriver* night_sensor_ = nullptr;  // Опціональний
 
     // === Внутрішня логіка ===
@@ -88,6 +90,7 @@ private:
     // Кешовані значення сенсорів
     float air_temp_  = 0.0f;
     float evap_temp_ = 0.0f;
+    float cond_temp_ = 0.0f;
 
     // Requests від бізнес-модулів (читаються кожен цикл з SharedState)
     struct Requests {

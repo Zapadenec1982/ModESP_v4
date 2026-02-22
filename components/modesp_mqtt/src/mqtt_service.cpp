@@ -116,6 +116,20 @@ bool MqttService::on_init() {
 }
 
 void MqttService::on_update(uint32_t dt_ms) {
+    // Deferred reconnect (запит від httpd task — виконуємо в main loop)
+    if (reconnect_requested_) {
+        reconnect_requested_ = false;
+        ESP_LOGI(TAG, "Executing deferred reconnect...");
+        stop_client();
+        if (enabled_ && broker_[0] != '\0') {
+            state_set("mqtt.status", "connecting");
+            start_client();
+        } else if (!enabled_) {
+            state_set("mqtt.status", "disabled");
+        }
+        return;
+    }
+
     // Deferred start: чекаємо WiFi перед першим підключенням
     if (!client_ && enabled_ && broker_[0] != '\0' && state_) {
         auto wifi_val = state_->get("wifi.connected");
@@ -218,13 +232,10 @@ void MqttService::stop_client() {
 }
 
 void MqttService::reconnect() {
-    stop_client();
-    if (enabled_ && broker_[0] != '\0') {
-        state_set("mqtt.status", "connecting");
-        start_client();
-    } else if (!enabled_) {
-        state_set("mqtt.status", "disabled");
-    }
+    // Тільки ставимо прапорець — реальний reconnect відбудеться в on_update()
+    // (main loop task), щоб уникнути race condition з httpd task
+    ESP_LOGI(TAG, "Reconnect requested (deferred to main loop)");
+    reconnect_requested_ = true;
 }
 
 // ── MQTT event handler (static callback) ────────────────────────

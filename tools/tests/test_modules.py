@@ -104,9 +104,9 @@ class TestEquipmentManifest:
         """Модуль називається 'equipment'."""
         assert equipment["module"] == "equipment"
 
-    def test_has_11_state_keys(self, equipment):
-        """Equipment має 11 state keys (сенсори + актуатори + night_input)."""
-        assert len(equipment["state"]) == 11
+    def test_has_12_state_keys(self, equipment):
+        """Equipment має 12 state keys (сенсори + актуатори + night_input + cond_temp)."""
+        assert len(equipment["state"]) == 12
 
     def test_all_keys_readonly(self, equipment):
         """Всі state keys equipment — read-only."""
@@ -514,9 +514,9 @@ class TestCrossModuleValidation:
         assert len(therm_errors) == 0, f"Thermostat errors: {therm_errors}"
 
     def test_total_state_keys(self, all_manifests):
-        """Всього 80 state keys у 4 модулях."""
+        """Всього 81 state keys у 4 модулях."""
         total = sum(len(m.get("state", {})) for m in all_manifests)
-        assert total == 80
+        assert total == 81
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -672,8 +672,8 @@ class TestMqttTopicsFullProject:
         """Загальна кількість MQTT publish topics."""
         gen = MqttTopicsGenerator()
         result = gen.generate(all_manifests)
-        # equipment=5, protection=8, thermostat=10, defrost=10 = 33
-        assert "MQTT_PUBLISH_COUNT = 33" in result
+        # equipment=6, protection=8, thermostat=10, defrost=10 = 34
+        assert "MQTT_PUBLISH_COUNT = 34" in result
 
     def test_subscribe_count(self, all_manifests):
         """Загальна кількість MQTT subscribe topics."""

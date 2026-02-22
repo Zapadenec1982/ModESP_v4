@@ -1,6 +1,9 @@
 /**
  * @file wifi_service.cpp
  * @brief WiFi STA/AP management implementation
+ *
+ * WiFi стек ініціалізується ОДИН раз в on_init().
+ * start_sta() / start_ap() тільки змінюють режим і конфіг.
  */
 
 #include "modesp/net/wifi_service.h"
@@ -35,13 +38,15 @@ void WiFiService::handle_wifi_event(int32_t event_id, void* event_data) {
             break;
 
         case WIFI_EVENT_STA_DISCONNECTED: {
+            auto* dis = static_cast<wifi_event_sta_disconnected_t*>(event_data);
             connected_ = false;
             ip_str_[0] = '\0';
             state_set("wifi.connected", false);
             state_set("wifi.ip", "");
+            ESP_LOGW(TAG, "Disconnected from '%.*s', reason=%d",
+                     dis->ssid_len, dis->ssid, dis->reason);
             if (!ap_mode_) {
                 reconnect_pending_ = true;
-                ESP_LOGW(TAG, "Disconnected, will retry (attempt %d)", retry_count_ + 1);
             }
             break;
         }
@@ -86,29 +91,63 @@ void WiFiService::handle_ip_event(int32_t event_id, void* event_data) {
 bool WiFiService::on_init() {
     ESP_LOGI(TAG, "Initializing WiFi...");
 
-    // Initialize TCP/IP and event loop (safe to call multiple times)
+    // TCP/IP та event loop — один раз
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    // Register event handlers
+    // Ініціалізуємо WiFi драйвер один раз (netif створюється лениво)
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    // Встановлюємо country code — UA (канали 1-13, max TX 20dBm)
+    // Без цього ESP32 за замовчуванням сканує тільки канали 1-11,
+    // що не бачить AP на каналах 12-13 (часто використовуються Xiaomi, TP-Link тощо)
+    wifi_country_t country = {};
+    country.cc[0] = 'U'; country.cc[1] = 'A'; country.cc[2] = '\0';
+    country.schan = 1;
+    country.nchan = 13;
+    country.max_tx_power = 80;  // 20 dBm (значення в 0.25 dBm)
+    country.policy = WIFI_COUNTRY_POLICY_MANUAL;
+    esp_wifi_set_country(&country);
+
+    // Реєструємо event handlers
     ESP_ERROR_CHECK(esp_event_handler_instance_register(
         WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, this, nullptr));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(
         IP_EVENT, IP_EVENT_STA_GOT_IP, &event_handler, this, nullptr));
 
-    // Try to load credentials from NVS
+    // Стартуємо в потрібному режимі
     if (load_credentials()) {
-        ESP_LOGI(TAG, "Credentials found, starting STA mode (SSID: %s)", ssid_);
+        ESP_LOGI(TAG, "Credentials found, starting STA mode (SSID: '%s', pass_len: %d)",
+                 ssid_, (int)strlen(password_));
         state_set("wifi.ssid", ssid_);
         return start_sta();
     } else {
-        ESP_LOGW(TAG, "No credentials, starting AP mode");
+        ESP_LOGW(TAG, "No credentials found in NVS, starting AP mode");
         return start_ap();
     }
 }
 
 void WiFiService::on_update(uint32_t dt_ms) {
-    // Reconnect logic (STA mode only)
+    // Deferred reconnect (after save_credentials HTTP response was sent)
+    if (deferred_reconnect_) {
+        deferred_reconnect_timer_ += dt_ms;
+        if (deferred_reconnect_timer_ >= DEFERRED_RECONNECT_DELAY_MS) {
+            deferred_reconnect_ = false;
+            deferred_reconnect_timer_ = 0;
+
+            ESP_LOGI(TAG, "Executing deferred reconnect (current: %s)", ap_mode_ ? "AP" : "STA");
+            esp_wifi_disconnect();
+            esp_wifi_stop();
+            wifi_started_ = false;
+            ap_mode_ = false;
+            connected_ = false;
+            start_sta();
+            return;
+        }
+    }
+
+    // Reconnect логіка (тільки STA mode)
     if (reconnect_pending_ && !ap_mode_) {
         reconnect_timer_ += dt_ms;
         if (reconnect_timer_ >= reconnect_interval_) {
@@ -117,7 +156,6 @@ void WiFiService::on_update(uint32_t dt_ms) {
             if (retry_count_ >= MAX_RETRIES) {
                 ESP_LOGW(TAG, "Max retries reached, switching to AP mode");
                 reconnect_pending_ = false;
-                esp_wifi_stop();
                 start_ap();
                 return;
             }
@@ -178,20 +216,10 @@ bool WiFiService::save_credentials(const char* ssid, const char* password) {
 }
 
 void WiFiService::request_reconnect() {
-    if (ap_mode_) {
-        // Switch back to STA if credentials exist
-        if (ssid_[0] != '\0') {
-            esp_wifi_stop();
-            ap_mode_ = false;
-            start_sta();
-        }
-    } else {
-        esp_wifi_disconnect();
-        retry_count_ = 0;
-        reconnect_interval_ = 2000;
-        reconnect_pending_ = true;
-        reconnect_timer_ = reconnect_interval_; // trigger immediate reconnect
-    }
+    ESP_LOGI(TAG, "Reconnect requested — deferred by %d ms to let HTTP response reach client",
+             (int)DEFERRED_RECONNECT_DELAY_MS);
+    deferred_reconnect_ = true;
+    deferred_reconnect_timer_ = 0;
 }
 
 // ── WiFi Scan ───────────────────────────────────────────────────
@@ -199,45 +227,59 @@ void WiFiService::request_reconnect() {
 bool WiFiService::start_scan() {
     scan_done_ = false;
 
-    // Scanning requires STA (or APSTA) mode.
-    // If we're in pure AP mode, temporarily switch to APSTA.
-    wifi_mode_t mode = WIFI_MODE_NULL;
-    esp_wifi_get_mode(&mode);
-
-    bool switched_to_apsta = false;
-    if (mode == WIFI_MODE_AP) {
-        ESP_LOGI(TAG, "Switching to APSTA mode for scan...");
-        esp_err_t err = esp_wifi_set_mode(WIFI_MODE_APSTA);
-        if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to switch to APSTA: %s", esp_err_to_name(err));
-            return false;
-        }
-        switched_to_apsta = true;
-    } else if (mode == WIFI_MODE_NULL) {
+    if (!wifi_started_) {
         ESP_LOGW(TAG, "Cannot scan: WiFi not started");
         return false;
+    }
+
+    // Перевірка heap — APSTA + scan потребує ~30-40KB додатково
+    size_t free_heap = esp_get_free_heap_size();
+    ESP_LOGI(TAG, "Scan requested (heap: %u)", (unsigned)free_heap);
+    if (free_heap < 50000) {
+        ESP_LOGW(TAG, "Cannot scan: low memory (%u bytes free, need 50000)", (unsigned)free_heap);
+        return false;
+    }
+
+    // В AP mode потрібно переключитись в APSTA для сканування.
+    // Порожній STA config щоб STA не почала connecting.
+    bool was_ap_only = false;
+    if (ap_mode_) {
+        wifi_mode_t current_mode;
+        esp_wifi_get_mode(&current_mode);
+        if (current_mode == WIFI_MODE_AP) {
+            ensure_sta_netif();
+            ESP_LOGI(TAG, "Switching AP -> APSTA for scan");
+            esp_err_t mode_err = esp_wifi_set_mode(WIFI_MODE_APSTA);
+            if (mode_err != ESP_OK) {
+                ESP_LOGW(TAG, "Cannot switch to APSTA: %s", esp_err_to_name(mode_err));
+                return false;
+            }
+            wifi_config_t sta_cfg = {};
+            esp_wifi_set_config(WIFI_IF_STA, &sta_cfg);
+            was_ap_only = true;
+            vTaskDelay(pdMS_TO_TICKS(100));
+        }
     }
 
     wifi_scan_config_t scan_config = {};
     scan_config.show_hidden = false;
     scan_config.scan_type = WIFI_SCAN_TYPE_ACTIVE;
-    scan_config.scan_time.active.min = 100;
-    scan_config.scan_time.active.max = 300;
+    scan_config.scan_time.active.min = 120;
+    scan_config.scan_time.active.max = 500;  // 500ms per channel — більше шансів знайти всі AP
 
     esp_err_t err = esp_wifi_scan_start(&scan_config, true);  // blocking scan
 
-    // Restore AP-only mode if we switched
-    if (switched_to_apsta) {
-        esp_wifi_set_mode(WIFI_MODE_AP);
-    }
-
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Scan start failed: %s", esp_err_to_name(err));
+        ESP_LOGW(TAG, "Scan failed: %s (heap: %u)", esp_err_to_name(err),
+                 (unsigned)esp_get_free_heap_size());
+        esp_wifi_scan_stop();
+        if (was_ap_only) esp_wifi_set_mode(WIFI_MODE_AP);
         return false;
     }
 
     scan_done_ = true;
-    ESP_LOGI(TAG, "WiFi scan completed");
+    restore_ap_after_scan_ = was_ap_only;
+    ESP_LOGI(TAG, "WiFi scan completed (heap: %u)", (unsigned)esp_get_free_heap_size());
     return true;
 }
 
@@ -246,14 +288,13 @@ int WiFiService::get_scan_results(ScanResult* out, size_t max_results) {
 
     uint16_t ap_count = 0;
     esp_wifi_scan_get_ap_num(&ap_count);
-    if (ap_count == 0) return 0;
 
-    if (ap_count > MAX_SCAN_RESULTS) ap_count = MAX_SCAN_RESULTS;
+    // Обмежуємо до 10 щоб не жерти пам'ять — stack allocation замість heap
+    if (ap_count > 10) ap_count = 10;
     if (ap_count > max_results) ap_count = static_cast<uint16_t>(max_results);
 
-    wifi_ap_record_t* ap_records = new (std::nothrow) wifi_ap_record_t[ap_count];
-    if (!ap_records) return 0;
-
+    // Stack allocation — ~800 bytes для 10 записів, без heap fragmentation
+    wifi_ap_record_t ap_records[10];
     esp_wifi_scan_get_ap_records(&ap_count, ap_records);
 
     for (uint16_t i = 0; i < ap_count; i++) {
@@ -263,18 +304,40 @@ int WiFiService::get_scan_results(ScanResult* out, size_t max_results) {
         out[i].authmode = static_cast<uint8_t>(ap_records[i].authmode);
     }
 
-    delete[] ap_records;
     scan_done_ = false;
+
+    // Повертаємо AP mode ПІСЛЯ зчитування результатів —
+    // esp_wifi_scan_get_ap_records() звільняє внутрішні буфери ESP-IDF
+    if (restore_ap_after_scan_) {
+        ESP_LOGI(TAG, "Restoring AP mode after scan results read (heap: %u)",
+                 (unsigned)esp_get_free_heap_size());
+        esp_wifi_set_mode(WIFI_MODE_AP);
+        restore_ap_after_scan_ = false;
+    }
+
     return static_cast<int>(ap_count);
+}
+
+// ── Lazy netif creation ──────────────────────────────────────────
+
+void WiFiService::ensure_sta_netif() {
+    if (!sta_netif_) {
+        sta_netif_ = esp_netif_create_default_wifi_sta();
+        ESP_LOGI(TAG, "STA netif created (heap: %u)", (unsigned)esp_get_free_heap_size());
+    }
+}
+
+void WiFiService::ensure_ap_netif() {
+    if (!ap_netif_) {
+        ap_netif_ = esp_netif_create_default_wifi_ap();
+        ESP_LOGI(TAG, "AP netif created (heap: %u)", (unsigned)esp_get_free_heap_size());
+    }
 }
 
 // ── STA / AP ────────────────────────────────────────────────────
 
 bool WiFiService::start_sta() {
-    esp_netif_create_default_wifi_sta();
-
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    ensure_sta_netif();
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
 
     wifi_config_t wifi_config = {};
@@ -284,19 +347,32 @@ bool WiFiService::start_sta() {
             password_, sizeof(wifi_config.sta.password) - 1);
     wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
 
+    ESP_LOGI(TAG, "Starting STA: SSID='%s' pass_len=%d",
+             ssid_, (int)strlen(password_));
+
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 
     ap_mode_ = false;
+    wifi_started_ = true;
+    retry_count_ = 0;
+    reconnect_interval_ = 2000;
+    reconnect_timer_ = 0;
+    reconnect_pending_ = false;
     state_set("wifi.mode", "sta");
     return true;
 }
 
 bool WiFiService::start_ap() {
-    esp_netif_create_default_wifi_ap();
+    ensure_ap_netif();
 
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    // Зупиняємо якщо працює (переключення STA→AP)
+    if (wifi_started_) {
+        esp_wifi_disconnect();
+        esp_wifi_stop();
+        wifi_started_ = false;
+    }
+
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
 
     // Спочатку генеруємо дефолтний SSID з MAC
@@ -339,9 +415,11 @@ bool WiFiService::start_ap() {
     ESP_ERROR_CHECK(esp_wifi_start());
 
     ap_mode_ = true;
+    wifi_started_ = true;
     connected_ = false;
+    reconnect_pending_ = false;
 
-    // AP mode IP is always 192.168.4.1
+    // AP IP завжди 192.168.4.1
     strncpy(ip_str_, "192.168.4.1", sizeof(ip_str_));
     state_set("wifi.mode", "ap");
     state_set("wifi.ssid", ap_ssid);

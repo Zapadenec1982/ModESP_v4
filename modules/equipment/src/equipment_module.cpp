@@ -33,12 +33,19 @@ void EquipmentModule::bind_drivers(modesp::DriverManager& dm) {
     sensor_air_  = dm.find_sensor("air_temp");
     compressor_  = dm.find_actuator("compressor");
 
-    // Опціональні
+    // Опціональні сенсори
     sensor_evap_ = dm.find_sensor("evap_temp");
+    sensor_cond_ = dm.find_sensor("condenser_temp");
+
+    // Актуатори
     heater_      = dm.find_actuator("heater");
     evap_fan_    = dm.find_actuator("evap_fan");
     cond_fan_    = dm.find_actuator("cond_fan");
     hg_valve_    = dm.find_actuator("hg_valve");
+
+    // Дискретні входи
+    door_sensor_  = dm.find_sensor("door_contact");
+    night_sensor_ = dm.find_sensor("night_input");
 
     if (!sensor_air_) {
         ESP_LOGE(TAG, "Sensor 'air_temp' not found — REQUIRED");
@@ -47,13 +54,12 @@ void EquipmentModule::bind_drivers(modesp::DriverManager& dm) {
         ESP_LOGE(TAG, "Actuator 'compressor' not found — REQUIRED");
     }
     if (sensor_evap_) ESP_LOGI(TAG, "Evaporator sensor bound");
+    if (sensor_cond_) ESP_LOGI(TAG, "Condenser sensor bound");
     if (heater_)      ESP_LOGI(TAG, "Heater bound");
     if (evap_fan_)    ESP_LOGI(TAG, "Evaporator fan bound");
     if (cond_fan_)    ESP_LOGI(TAG, "Condenser fan bound");
     if (hg_valve_)    ESP_LOGI(TAG, "Hot gas valve bound");
-
-    // Дискретні входи
-    night_sensor_ = dm.find_sensor("night_input");
+    if (door_sensor_) ESP_LOGI(TAG, "Door contact bound");
     if (night_sensor_) ESP_LOGI(TAG, "Night input bound");
 }
 
@@ -74,6 +80,7 @@ bool EquipmentModule::on_init() {
     // Якщо датчик не сконфігурований — теж true (не помилка).
     state_set("equipment.air_temp", 0.0f);
     state_set("equipment.evap_temp", 0.0f);
+    state_set("equipment.cond_temp", 0.0f);
     state_set("equipment.sensor1_ok", true);
     state_set("equipment.sensor2_ok", true);
     state_set("equipment.compressor", false);
@@ -154,6 +161,22 @@ void EquipmentModule::read_sensors() {
             state_set("equipment.evap_temp", evap_temp_);
         }
         state_set("equipment.sensor2_ok", sensor_evap_->is_healthy());
+    }
+
+    // Датчик конденсатора (опціональний — DS18B20 або NTC)
+    if (sensor_cond_) {
+        float temp = 0.0f;
+        if (sensor_cond_->read(temp)) {
+            cond_temp_ = temp;
+            state_set("equipment.cond_temp", cond_temp_);
+        }
+    }
+
+    // Контакт дверей (опціональний — digital_input)
+    if (door_sensor_) {
+        float val = 0.0f;
+        door_sensor_->read(val);
+        state_set("equipment.door_open", val > 0.5f);
     }
 
     // Дискретний вхід нічного режиму (опціональний)

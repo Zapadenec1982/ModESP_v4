@@ -6,13 +6,17 @@
  * Each binding maps a hardware resource to a driver type and role.
  *
  * Driver types:
- *   "ds18b20" → DS18B20Driver (sensor)
- *   "relay"   → RelayDriver   (actuator)
+ *   "ds18b20"       → DS18B20Driver       (sensor, OneWire)
+ *   "digital_input" → DigitalInputDriver   (sensor, GPIO)
+ *   "ntc"           → NtcDriver            (sensor, ADC)
+ *   "relay"         → RelayDriver          (actuator, GPIO)
  */
 
 #include "modesp/hal/driver_manager.h"
 #include "ds18b20_driver.h"
 #include "relay_driver.h"
+#include "digital_input_driver.h"
+#include "ntc_driver.h"
 #include "esp_log.h"
 
 static const char* TAG = "DriverMgr";
@@ -25,6 +29,12 @@ namespace modesp {
 
 static DS18B20Driver ds18b20_pool[MAX_SENSORS];
 static size_t ds18b20_count = 0;
+
+static DigitalInputDriver di_pool[MAX_SENSORS];
+static size_t di_count = 0;
+
+static NtcDriver ntc_pool[MAX_SENSORS];
+static size_t ntc_count = 0;
 
 static RelayDriver relay_pool[MAX_ACTUATORS];
 static size_t relay_count = 0;
@@ -39,31 +49,43 @@ bool DriverManager::init(const BindingTable& bindings, HAL& hal) {
 
     // Reset pools
     ds18b20_count = 0;
+    di_count = 0;
+    ntc_count = 0;
     relay_count = 0;
     sensors_.clear();
     actuators_.clear();
     sensor_count_ = 0;
     actuator_count_ = 0;
 
+    // Лямбда для реєстрації сенсора
+    auto add_sensor = [this](ISensorDriver* drv, const Binding& b) -> bool {
+        if (!drv) return false;
+        SensorEntry entry;
+        entry.driver = drv;
+        entry.role = b.role;
+        entry.module = b.module_name;
+        sensors_.push_back(entry);
+        sensor_count_++;
+        ESP_LOGI(TAG, "  Sensor '%s' [%s] -> module '%s'",
+                 b.role.c_str(), b.driver_type.c_str(), b.module_name.c_str());
+        return true;
+    };
+
     // Phase 1: Create drivers from bindings
     for (const auto& binding : bindings.bindings) {
         if (binding.driver_type == "ds18b20") {
-            ISensorDriver* drv = create_sensor(binding, hal);
-            if (drv) {
-                SensorEntry entry;
-                entry.driver = drv;
-                entry.role = binding.role;
-                entry.module = binding.module_name;
-                sensors_.push_back(entry);
-                sensor_count_++;
-
-                ESP_LOGI(TAG, "  Sensor '%s' [%s] -> module '%s'",
-                         binding.role.c_str(),
-                         binding.driver_type.c_str(),
-                         binding.module_name.c_str());
-            } else {
-                ESP_LOGE(TAG, "  Failed to create sensor '%s'",
-                         binding.role.c_str());
+            if (!add_sensor(create_sensor(binding, hal), binding)) {
+                ESP_LOGE(TAG, "  Failed to create sensor '%s'", binding.role.c_str());
+                return false;
+            }
+        } else if (binding.driver_type == "digital_input") {
+            if (!add_sensor(create_di_sensor(binding, hal), binding)) {
+                ESP_LOGE(TAG, "  Failed to create DI sensor '%s'", binding.role.c_str());
+                return false;
+            }
+        } else if (binding.driver_type == "ntc") {
+            if (!add_sensor(create_ntc_sensor(binding, hal), binding)) {
+                ESP_LOGE(TAG, "  Failed to create NTC sensor '%s'", binding.role.c_str());
                 return false;
             }
         } else if (binding.driver_type == "relay") {
@@ -132,11 +154,48 @@ ISensorDriver* DriverManager::create_sensor(const Binding& binding, HAL& hal) {
         }
 
         auto& drv = ds18b20_pool[ds18b20_count++];
-        drv.configure(binding.role.c_str(), ow_res->gpio, 1000);
+        drv.configure(binding.role.c_str(), ow_res->gpio, 1000,
+                      binding.address.empty() ? nullptr : binding.address.c_str());
         return &drv;
     }
 
     return nullptr;
+}
+
+ISensorDriver* DriverManager::create_di_sensor(const Binding& binding, HAL& hal) {
+    if (di_count >= MAX_SENSORS) {
+        ESP_LOGE(TAG, "DigitalInput pool exhausted");
+        return nullptr;
+    }
+
+    auto* gpio_res = hal.find_gpio_input(
+        etl::string_view(binding.hardware_id.c_str(), binding.hardware_id.size()));
+    if (!gpio_res) {
+        ESP_LOGE(TAG, "GPIO input '%s' not found in HAL", binding.hardware_id.c_str());
+        return nullptr;
+    }
+
+    auto& drv = di_pool[di_count++];
+    drv.configure(binding.role.c_str(), gpio_res->gpio, gpio_res->pull_up);
+    return &drv;
+}
+
+ISensorDriver* DriverManager::create_ntc_sensor(const Binding& binding, HAL& hal) {
+    if (ntc_count >= MAX_SENSORS) {
+        ESP_LOGE(TAG, "NTC pool exhausted");
+        return nullptr;
+    }
+
+    auto* adc_res = hal.find_adc_channel(
+        etl::string_view(binding.hardware_id.c_str(), binding.hardware_id.size()));
+    if (!adc_res) {
+        ESP_LOGE(TAG, "ADC channel '%s' not found in HAL", binding.hardware_id.c_str());
+        return nullptr;
+    }
+
+    auto& drv = ntc_pool[ntc_count++];
+    drv.configure(binding.role.c_str(), adc_res->gpio, adc_res->atten);
+    return &drv;
 }
 
 IActuatorDriver* DriverManager::create_actuator(const Binding& binding, HAL& hal) {

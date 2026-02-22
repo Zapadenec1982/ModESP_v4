@@ -468,7 +468,10 @@ esp_err_t HttpService::handle_post_wifi(httpd_req_t* req) {
     set_cors_headers(req);
     httpd_resp_set_type(req, "application/json");
     if (ok) {
-        httpd_resp_sendstr(req, "{\"ok\":true,\"msg\":\"Credentials saved. Restart to apply.\"}");
+        httpd_resp_sendstr(req, "{\"ok\":true,\"msg\":\"Credentials saved. Restart to connect.\"}");
+        // Не робимо reconnect автоматично — UI каже користувачу перезавантажити.
+        // Якщо робити reconnect тут — AP зникає і клієнт втрачає з'єднання
+        // ще до отримання HTTP response.
     } else {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to save");
     }

@@ -93,11 +93,13 @@ bool ConfigService::on_init() {
         return false;
     }
 
-    ESP_LOGI(TAG, "Board: %s v%s (%d gpio_out, %d ow_buses)",
+    ESP_LOGI(TAG, "Board: %s v%s (%d gpio_out, %d ow, %d gpio_in, %d adc)",
              board_config_.board_name.c_str(),
              board_config_.board_version.c_str(),
              (int)board_config_.gpio_outputs.size(),
-             (int)board_config_.onewire_buses.size());
+             (int)board_config_.onewire_buses.size(),
+             (int)board_config_.gpio_inputs.size(),
+             (int)board_config_.adc_channels.size());
     ESP_LOGI(TAG, "Loaded %d bindings",
              (int)binding_table_.bindings.size());
 
@@ -245,6 +247,85 @@ bool ConfigService::parse_board_json() {
                 }
             }
             i = j;
+        } else if (jsoneq(buf, &tokens[i], "gpio_inputs")) {
+            if (tokens[i + 1].type != JSMN_ARRAY) {
+                ESP_LOGE(TAG, "board.json: 'gpio_inputs' is not array");
+                return false;
+            }
+            int arr_size = tokens[i + 1].size;
+            int j = i + 2;
+
+            for (int elem = 0; elem < arr_size; elem++) {
+                if (tokens[j].type != JSMN_OBJECT) {
+                    ESP_LOGE(TAG, "board.json: gpio_input entry is not object");
+                    return false;
+                }
+                int obj_keys = tokens[j].size;
+                j++;
+
+                GpioInputConfig cfg = {};
+                cfg.pull_up = true;  // default
+                for (int k = 0; k < obj_keys; k++) {
+                    if (jsoneq(buf, &tokens[j], "id")) {
+                        tok_to_str(buf, &tokens[j + 1], tmp, sizeof(tmp));
+                        cfg.id = tmp;
+                        j += 2;
+                    } else if (jsoneq(buf, &tokens[j], "gpio")) {
+                        cfg.gpio = (gpio_num_t)tok_to_int(buf, &tokens[j + 1]);
+                        j += 2;
+                    } else if (jsoneq(buf, &tokens[j], "pull")) {
+                        tok_to_str(buf, &tokens[j + 1], tmp, sizeof(tmp));
+                        cfg.pull_up = (strcmp(tmp, "up") == 0);
+                        j += 2;
+                    } else {
+                        j += 2;
+                    }
+                }
+
+                if (!board_config_.gpio_inputs.full()) {
+                    board_config_.gpio_inputs.push_back(cfg);
+                }
+            }
+            i = j;
+        } else if (jsoneq(buf, &tokens[i], "adc_channels")) {
+            if (tokens[i + 1].type != JSMN_ARRAY) {
+                ESP_LOGE(TAG, "board.json: 'adc_channels' is not array");
+                return false;
+            }
+            int arr_size = tokens[i + 1].size;
+            int j = i + 2;
+
+            for (int elem = 0; elem < arr_size; elem++) {
+                if (tokens[j].type != JSMN_OBJECT) {
+                    ESP_LOGE(TAG, "board.json: adc_channel entry is not object");
+                    return false;
+                }
+                int obj_keys = tokens[j].size;
+                j++;
+
+                AdcChannelConfig cfg = {};
+                cfg.atten = 11;  // default: 0-3.3V
+                for (int k = 0; k < obj_keys; k++) {
+                    if (jsoneq(buf, &tokens[j], "id")) {
+                        tok_to_str(buf, &tokens[j + 1], tmp, sizeof(tmp));
+                        cfg.id = tmp;
+                        j += 2;
+                    } else if (jsoneq(buf, &tokens[j], "gpio")) {
+                        cfg.gpio = (gpio_num_t)tok_to_int(buf, &tokens[j + 1]);
+                        j += 2;
+                    } else if (jsoneq(buf, &tokens[j], "atten")) {
+                        cfg.atten = (uint8_t)tok_to_int(buf, &tokens[j + 1]);
+                        j += 2;
+                    } else {
+                        j += 2;
+                    }
+                }
+
+                if (!board_config_.adc_channels.full()) {
+                    board_config_.adc_channels.push_back(cfg);
+                }
+            }
+            i = j;
         } else {
             // Пропустити невідомий ключ + значення (масиви/об'єкти коректно)
             i++;  // skip key
@@ -321,6 +402,10 @@ bool ConfigService::parse_bindings_json() {
                     } else if (jsoneq(buf, &tokens[j], "module")) {
                         tok_to_str(buf, &tokens[j + 1], tmp, sizeof(tmp));
                         binding.module_name = tmp;
+                        j += 2;
+                    } else if (jsoneq(buf, &tokens[j], "address")) {
+                        tok_to_str(buf, &tokens[j + 1], tmp, sizeof(tmp));
+                        binding.address = tmp;
                         j += 2;
                     } else {
                         j += 2;

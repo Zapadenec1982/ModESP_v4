@@ -58,6 +58,7 @@ private:
 
     // State tracking
     bool connected_ = false;
+    bool reconnect_requested_ = false;  // Deferred reconnect (set by httpd, executed by on_update)
     uint32_t last_version_ = 0;
     uint32_t publish_timer_ = 0;
     static constexpr uint32_t PUBLISH_INTERVAL_MS = 1000;

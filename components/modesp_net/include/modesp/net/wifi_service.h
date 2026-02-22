@@ -12,6 +12,7 @@
 #include "modesp/base_module.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
+#include "esp_netif.h"
 
 namespace modesp {
 
@@ -38,28 +39,37 @@ public:
         int8_t rssi;
         uint8_t authmode;  // wifi_auth_mode_t
     };
-    /// Start async scan. Returns true if scan was initiated.
     bool start_scan();
-    /// Get scan results. Returns number of entries filled (0 if scan not done).
     int  get_scan_results(ScanResult* out, size_t max_results);
     bool is_scan_done() const { return scan_done_; }
 
 private:
     bool connected_ = false;
     bool ap_mode_ = false;
+    bool wifi_started_ = false;
     char ip_str_[16] = {};
     char ssid_[33] = {};
     char password_[65] = {};
 
+    // Netif handles (створюються один раз)
+    esp_netif_t* sta_netif_ = nullptr;
+    esp_netif_t* ap_netif_  = nullptr;
+
     // Scan state
     bool scan_done_ = false;
+    bool restore_ap_after_scan_ = false;  // AP mode restore deferred until results read
+
+    // Deferred reconnect (give HTTP response time to reach client)
+    bool deferred_reconnect_ = false;
+    uint32_t deferred_reconnect_timer_ = 0;
+    static constexpr uint32_t DEFERRED_RECONNECT_DELAY_MS = 1500;
 
     // Reconnect logic
     uint32_t reconnect_timer_ = 0;
     uint32_t reconnect_interval_ = 2000;
     uint8_t  retry_count_ = 0;
     bool     reconnect_pending_ = false;
-    static constexpr uint8_t MAX_RETRIES = 10;
+    static constexpr uint8_t MAX_RETRIES = 3;
     static constexpr uint32_t MAX_BACKOFF_MS = 32000;
 
     // RSSI update throttle
@@ -69,6 +79,8 @@ private:
     bool load_credentials();
     bool start_sta();
     bool start_ap();
+    void ensure_sta_netif();
+    void ensure_ap_netif();
 
     // ESP event handler (static because ESP-IDF API requires function pointer)
     static void event_handler(void* arg, esp_event_base_t base,

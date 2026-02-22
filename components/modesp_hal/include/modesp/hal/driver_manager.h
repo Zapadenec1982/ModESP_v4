@@ -18,6 +18,8 @@
 // Forward declarations — concrete drivers included only in .cpp
 class DS18B20Driver;
 class RelayDriver;
+class DigitalInputDriver;
+class NtcDriver;
 
 namespace modesp {
 
@@ -58,6 +60,8 @@ private:
     size_t actuator_count_ = 0;
 
     ISensorDriver*   create_sensor(const Binding& binding, HAL& hal);
+    ISensorDriver*   create_di_sensor(const Binding& binding, HAL& hal);
+    ISensorDriver*   create_ntc_sensor(const Binding& binding, HAL& hal);
     IActuatorDriver* create_actuator(const Binding& binding, HAL& hal);
 };
 

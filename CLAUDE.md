@@ -97,7 +97,7 @@ board.json + bindings.json ─┘
 - **disabled + disabled_reason:** widgets для неактивних features показуються як disabled в UI
 - **features_config.h:** constexpr масив + `is_feature_active(module, feature)` inline lookup
 - **has_feature():** метод BaseModule для runtime guards в C++ модулях
-- **Drivers:** ds18b20 (sensor), relay (actuator), digital_input (sensor, GPIO input)
+- **Drivers:** ds18b20 (sensor, MATCH_ROM multi-sensor), relay (actuator), digital_input (sensor, GPIO input), ntc (sensor, ADC thermistor)
 - **Validation:** V14 (controls_settings exist), V15 (requires_roles exist), V16 (requires_feature exist), V17 (options int), V18 (options→select)
 - **209 pytest тестів** (43 нових у test_features.py + 4 binding fixtures)
 
@@ -169,10 +169,14 @@ ModESP_v4/
 │   └── jsmn/                  # Lightweight JSON parser (header-only)
 ├── drivers/
 │   └── digital_input/
-│   │   └── manifest.json      # ⭐ Driver manifest (sensor, gpio_input, 1 setting)
+│   │   ├── manifest.json      # ⭐ Driver manifest (sensor, gpio_input, 1 setting)
+│   │   └── src/...            # GPIO input with 50ms debounce
 │   ├── ds18b20/
 │   │   ├── manifest.json      # ⭐ Driver manifest (sensor, onewire_bus, 3 settings)
-│   │   └── src/...            # Dallas DS18B20 temperature sensor (OneWire)
+│   │   └── src/...            # Dallas DS18B20 (SKIP_ROM + MATCH_ROM multi-sensor)
+│   ├── ntc/
+│   │   ├── manifest.json      # ⭐ Driver manifest (sensor, adc_channel, 5 settings)
+│   │   └── src/...            # NTC thermistor via ADC (B-parameter equation)
 │   └── relay/
 │       ├── manifest.json      # ⭐ Driver manifest (actuator, gpio_output, 2 settings)
 │       └── src/...            # GPIO relay with min on/off time protection
@@ -302,6 +306,11 @@ ModESP_v4/
 | `next_prompt.md` | Промпт для наступної сесії | В кінці поточної сесії |
 
 ## Changelog
+- 2026-02-22 — Phase 11b DONE: Multi DS18B20 (MATCH_ROM + CRC8 validation), NTC/ADC driver (B-parameter),
+  DigitalInput C++ driver (50ms debounce). HAL: Binding.address, GpioInputConfig, AdcChannelConfig.
+  config_service: parse address/gpio_inputs/adc_channels. DriverManager: digital_input + ntc pools.
+  Equipment: condenser_temp (NTC/DS18B20) + door_contact (DigitalInput). 5 drivers.
+  81 state keys (was 80), 39 STATE_META, 34 MQTT pub, 38 MQTT sub. 206 tests green.
 - 2026-02-21 — Phase 11a DONE: Night Setback (4 modes, SNTP schedule, DI, manual),
   Post-defrost alarm suppression (0-120 min timer), Display during defrost (real/frozen/-d-).
   Equipment: night_input role + digital input binding. Thermostat: effective_setpoint, display_temp,
