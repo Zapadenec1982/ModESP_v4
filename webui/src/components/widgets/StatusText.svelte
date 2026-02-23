@@ -27,13 +27,13 @@
 
 <div class="widget-row">
   <span class="label">{config.description || config.key}</span>
-  <span class="badge" style="color: {badgeColor}; border-color: {badgeColor}">{display}</span>
+  <span class="badge" style="color: {badgeColor}; border-color: {badgeColor}; background: color-mix(in srgb, {badgeColor} 12%, transparent)">{display}</span>
 </div>
 
 <style>
   .widget-row {
     display: flex; align-items: center; justify-content: space-between;
-    min-height: 40px; padding: 4px 0;
+    min-height: var(--widget-min-h, 44px); padding: var(--widget-pad, 6px 0);
   }
   .label { font-size: 14px; color: var(--fg-muted); }
   .badge {

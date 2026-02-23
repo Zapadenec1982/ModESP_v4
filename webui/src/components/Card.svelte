@@ -4,7 +4,7 @@
   export let title = '';
   export let collapsible = false;
 
-  let collapsed = collapsible;
+  let collapsed = false;
 
   function toggle() {
     if (collapsible) collapsed = !collapsed;
@@ -43,16 +43,18 @@
     border: 1px solid var(--border);
     margin-bottom: 16px;
     overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.03);
   }
 
   .card-title {
-    font-size: 11px;
+    font-size: var(--text-sm, 13px);
     font-weight: 700;
-    color: var(--fg-muted);
+    color: var(--fg);
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 0.8px;
     padding: 14px 18px;
     border-bottom: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
     display: flex;
     align-items: center;
     gap: 6px;

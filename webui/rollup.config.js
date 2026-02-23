@@ -26,7 +26,7 @@ export default {
       dedupe: ['svelte']
     }),
     commonjs(),
-    production && terser()
+    production && terser({ compress: { passes: 2 }, mangle: { toplevel: true } })
   ],
   watch: {
     clearScreen: false

@@ -36,7 +36,7 @@
 </div>
 
 <style>
-  .btn-widget { padding: 4px 0; }
+  .btn-widget { padding: var(--widget-pad, 6px 0); }
   .action-btn {
     background: linear-gradient(135deg, var(--accent), #0369a1);
     color: #fff; border: none;

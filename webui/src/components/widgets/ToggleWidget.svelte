@@ -27,7 +27,7 @@
 <style>
   .widget-row {
     display: flex; align-items: center; justify-content: space-between;
-    min-height: 40px; padding: 4px 0;
+    min-height: var(--widget-min-h, 44px); padding: var(--widget-pad, 6px 0);
   }
   .label { font-size: 14px; color: var(--fg-muted); }
   .toggle {

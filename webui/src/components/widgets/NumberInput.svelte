@@ -49,11 +49,11 @@
 </div>
 
 <style>
-  .number-widget { padding: 4px 0; }
+  .number-widget { padding: var(--widget-pad, 6px 0); }
   .number-label { font-size: 14px; color: var(--fg-muted); margin-bottom: 8px; }
   .number-row { display: flex; align-items: center; gap: 6px; }
   .num-btn {
-    width: 36px; height: 36px; border-radius: 8px;
+    width: 44px; height: 44px; border-radius: 10px;
     border: 1px solid var(--border);
     background: var(--border);
     color: var(--fg);

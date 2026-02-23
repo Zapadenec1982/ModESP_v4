@@ -52,18 +52,49 @@
 
 <style>
   :global(:root) {
+    /* Base palette */
     --bg: #0f172a;
     --bg2: #1e293b;
-    --card: #1e293b;
+    --card: #1f2a3d;
+    --card-hover: #253347;
     --border: #334155;
+    --border-light: #3d4f67;
     --bg-hover: rgba(59, 130, 246, 0.1);
+
+    /* Text */
     --fg: #f1f5f9;
     --fg-muted: #94a3b8;
+    --fg-dim: #64748b;
+
+    /* Accent */
     --accent: #3b82f6;
-    --accent-bg: rgba(59, 130, 246, 0.15);
+    --accent-light: #60a5fa;
+    --accent-bg: rgba(59, 130, 246, 0.12);
+
+    /* Semantic */
     --success: #22c55e;
     --warning: #f59e0b;
     --error: #ef4444;
+
+    /* Type scale */
+    --text-xs: 11px;
+    --text-sm: 13px;
+    --text-base: 14px;
+    --text-lg: 16px;
+    --text-xl: 18px;
+    --text-2xl: 24px;
+
+    /* Spacing */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+
+    /* Widget */
+    --widget-min-h: 44px;
+    --widget-pad: 6px 0;
   }
 
   :global(*) {

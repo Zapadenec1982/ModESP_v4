@@ -9,6 +9,7 @@
   $: max = config.max ?? 0;
   $: step = config.step ?? 0.5;
   $: display = value !== undefined && value !== null ? value : '—';
+  $: pct = typeof value === 'number' ? ((value - min) / (max - min)) * 100 : 0;
 
   function onChange(e) {
     const v = parseFloat(e.target.value);
@@ -28,11 +29,12 @@
     value={value ?? min}
     on:change={onChange}
     on:input={e => { display = e.target.value; }}
+    style="background: linear-gradient(to right, var(--accent) {pct}%, var(--border) {pct}%)"
   />
 </div>
 
 <style>
-  .slider-wrap { padding: 4px 0; }
+  .slider-wrap { padding: var(--widget-pad, 6px 0); }
   .slider-header {
     display: flex;
     justify-content: space-between;
@@ -50,8 +52,8 @@
     -webkit-appearance: none;
     appearance: none;
     width: 100%;
-    height: 6px;
-    border-radius: 3px;
+    height: 8px;
+    border-radius: 4px;
     background: var(--border);
     outline: none;
     cursor: pointer;
