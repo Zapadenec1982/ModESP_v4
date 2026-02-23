@@ -669,6 +669,166 @@ esp_err_t HttpService::handle_post_factory_reset(httpd_req_t* req) {
     return ESP_OK; // never reached
 }
 
+// ── Backup / Restore ────────────────────────────────────────────
+
+esp_err_t HttpService::handle_get_backup(httpd_req_t* req) {
+    auto* self = static_cast<HttpService*>(req->user_ctx);
+
+    // Серіалізуємо тільки persist:true ключі з STATE_META
+    char buf[2048];
+    size_t pos = 0;
+    pos += snprintf(buf, sizeof(buf), "{\"modesp_backup\":1,\"keys\":{");
+
+    bool first = true;
+    for (size_t i = 0; i < gen::STATE_META_COUNT; i++) {
+        const auto& meta = gen::STATE_META[i];
+        if (!meta.persist) continue;
+
+        auto val = self->state_->get(meta.key);
+        if (!val.has_value()) continue;
+
+        size_t rem = sizeof(buf) - pos;
+        if (rem < 64) break;
+
+        const char* sep = first ? "" : ",";
+        first = false;
+
+        if (strcmp(meta.type, "float") == 0) {
+            const auto* fp = etl::get_if<float>(&val.value());
+            if (fp) {
+                pos += snprintf(buf + pos, rem, "%s\"%s\":%.2f",
+                                sep, meta.key, static_cast<double>(*fp));
+            }
+        } else if (strcmp(meta.type, "int") == 0) {
+            const auto* ip = etl::get_if<int32_t>(&val.value());
+            if (ip) {
+                pos += snprintf(buf + pos, rem, "%s\"%s\":%ld",
+                                sep, meta.key, (long)*ip);
+            }
+        } else if (strcmp(meta.type, "bool") == 0) {
+            const auto* bp = etl::get_if<bool>(&val.value());
+            if (bp) {
+                pos += snprintf(buf + pos, rem, "%s\"%s\":%s",
+                                sep, meta.key, *bp ? "true" : "false");
+            }
+        }
+    }
+
+    pos += snprintf(buf + pos, sizeof(buf) - pos, "}}");
+
+    set_cors_headers(req);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Content-Disposition",
+                       "attachment; filename=\"modesp_backup.json\"");
+    httpd_resp_send(req, buf, (ssize_t)pos);
+    return ESP_OK;
+}
+
+esp_err_t HttpService::handle_post_restore(httpd_req_t* req) {
+    auto* self = static_cast<HttpService*>(req->user_ctx);
+
+    char buf[2048];
+    int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (len <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty body");
+        return ESP_FAIL;
+    }
+    buf[len] = '\0';
+
+    // Парсимо JSON — шукаємо об'єкт "keys"
+    jsmn_parser parser;
+    jsmntok_t tokens[128];  // ~33 persist ключів × 2 + envelope
+    jsmn_init(&parser);
+    int r = jsmn_parse(&parser, buf, len, tokens, 128);
+    if (r < 1 || tokens[0].type != JSMN_OBJECT) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+        return ESP_FAIL;
+    }
+
+    // Знаходимо "keys" об'єкт
+    int keys_tok = -1;
+    for (int i = 1; i + 1 < r; i += 2) {
+        if (tokens[i].type != JSMN_STRING) continue;
+        int klen = tokens[i].end - tokens[i].start;
+        if (klen == 4 && strncmp(buf + tokens[i].start, "keys", 4) == 0) {
+            keys_tok = i + 1;
+            break;
+        }
+        // Пропускаємо значення (може бути вкладений об'єкт)
+        if (tokens[i + 1].type == JSMN_OBJECT || tokens[i + 1].type == JSMN_ARRAY) {
+            int skip = tokens[i + 1].size * 2;
+            i += skip;
+        }
+    }
+
+    if (keys_tok < 0 || tokens[keys_tok].type != JSMN_OBJECT) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing 'keys' object");
+        return ESP_FAIL;
+    }
+
+    int restored = 0;
+    int skipped = 0;
+    int key_count = tokens[keys_tok].size;
+
+    // Ітеруємо пари ключ:значення всередині "keys"
+    int j = keys_tok + 1;
+    for (int k = 0; k < key_count && j + 1 < r; k++, j += 2) {
+        if (tokens[j].type != JSMN_STRING) continue;
+
+        buf[tokens[j].end] = '\0';
+        buf[tokens[j + 1].end] = '\0';
+        const char* key_str = buf + tokens[j].start;
+        const char* val_str = buf + tokens[j + 1].start;
+
+        // Валідація: тільки persist ключі
+        const auto* meta = gen::find_state_meta(key_str);
+        if (!meta || !meta->persist) {
+            skipped++;
+            continue;
+        }
+
+        if (tokens[j + 1].type == JSMN_PRIMITIVE) {
+            if (val_str[0] == 't' || val_str[0] == 'f') {
+                self->state_->set(key_str, val_str[0] == 't');
+                restored++;
+            } else if (strcmp(meta->type, "float") == 0) {
+                float fval = static_cast<float>(atof(val_str));
+                if (fval < meta->min_val) fval = meta->min_val;
+                if (fval > meta->max_val) fval = meta->max_val;
+                self->state_->set(key_str, fval);
+                restored++;
+            } else {
+                int32_t ival = static_cast<int32_t>(atoi(val_str));
+                if (static_cast<float>(ival) < meta->min_val)
+                    ival = static_cast<int32_t>(meta->min_val);
+                if (static_cast<float>(ival) > meta->max_val)
+                    ival = static_cast<int32_t>(meta->max_val);
+                self->state_->set(key_str, ival);
+                restored++;
+            }
+        }
+    }
+
+    ESP_LOGI(TAG, "Restore: %d restored, %d skipped", restored, skipped);
+
+    // Flush NVS перед рестартом
+    if (self->persist_) {
+        self->persist_->flush_now();
+    }
+
+    set_cors_headers(req);
+    httpd_resp_set_type(req, "application/json");
+    char resp[96];
+    snprintf(resp, sizeof(resp),
+             "{\"ok\":true,\"restored\":%d,\"skipped\":%d}", restored, skipped);
+    httpd_resp_sendstr(req, resp);
+
+    // Перезавантаження для застосування налаштувань
+    vTaskDelay(pdMS_TO_TICKS(500));
+    esp_restart();
+    return ESP_OK;
+}
+
 // ── OTA Handlers ────────────────────────────────────────────────
 
 esp_err_t HttpService::handle_get_ota(httpd_req_t* req) {
@@ -1098,6 +1258,8 @@ void HttpService::register_api_handlers() {
         {"/api/wifi/ap",    HTTP_POST, handle_post_wifi_ap},
         {"/api/restart",    HTTP_POST, handle_post_restart},
         {"/api/factory-reset", HTTP_POST, handle_post_factory_reset},
+        {"/api/backup",  HTTP_GET,  handle_get_backup},
+        {"/api/restore", HTTP_POST, handle_post_restore},
         {"/api/ota",        HTTP_GET,  handle_get_ota},
         {"/api/time",       HTTP_GET,  handle_get_time},
         {"/api/time",       HTTP_POST, handle_post_time},

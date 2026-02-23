@@ -18,6 +18,7 @@
   import ApSave from './widgets/ApSave.svelte';
   import TimezoneSelect from './widgets/TimezoneSelect.svelte';
   import DefrostToggle from './widgets/DefrostToggle.svelte';
+  import FileUploadWidget from './widgets/FileUploadWidget.svelte';
 
   export let widget;
   export let value;
@@ -41,7 +42,8 @@
     wifi_scan: WifiScan,
     ap_save: ApSave,
     timezone_select: TimezoneSelect,
-    defrost_toggle: DefrostToggle
+    defrost_toggle: DefrostToggle,
+    file_upload: FileUploadWidget
   };
 
   $: component = widgetMap[widget.widget] || ValueWidget;

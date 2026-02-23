@@ -83,6 +83,8 @@ private:
     static esp_err_t handle_post_wifi_ap(httpd_req_t* req);
     static esp_err_t handle_post_restart(httpd_req_t* req);
     static esp_err_t handle_post_factory_reset(httpd_req_t* req);
+    static esp_err_t handle_get_backup(httpd_req_t* req);
+    static esp_err_t handle_post_restore(httpd_req_t* req);
     static esp_err_t handle_get_ota(httpd_req_t* req);
     static esp_err_t handle_post_ota(httpd_req_t* req);
     static esp_err_t handle_get_time(httpd_req_t* req);

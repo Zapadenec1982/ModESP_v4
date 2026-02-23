@@ -1018,6 +1018,21 @@ class UIJsonGenerator:
                     ],
                 },
                 {
+                    "title": "Бекап налаштувань",
+                    "collapsible": True,
+                    "widgets": [
+                        {"key": "_action.backup", "widget": "button",
+                         "label": "Завантажити бекап",
+                         "api_endpoint": "/api/backup",
+                         "download": True},
+                        {"key": "_action.restore", "widget": "file_upload",
+                         "label": "Відновити з бекапу",
+                         "api_endpoint": "/api/restore",
+                         "accept": ".json",
+                         "confirm": "Відновити налаштування з файлу? Пристрій перезавантажиться."},
+                    ],
+                },
+                {
                     "title": "Дії",
                     "widgets": [
                         {"key": "_action.restart", "widget": "button",

@@ -9,7 +9,20 @@
     if (config.confirm && !confirm(config.confirm)) return;
     loading = true;
     try {
-      if (config.api_endpoint) {
+      if (config.download && config.api_endpoint) {
+        // Завантаження файлу (backup тощо)
+        const r = await fetch(config.api_endpoint);
+        if (!r.ok) throw new Error(`GET ${config.api_endpoint}: ${r.status}`);
+        const blob = await r.blob();
+        const cd = r.headers.get('Content-Disposition') || '';
+        const m = cd.match(/filename="?([^";\s]+)"?/);
+        const fname = m ? m[1] : 'download.json';
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = fname;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      } else if (config.api_endpoint) {
         // Прямий API виклик (restart, ota тощо)
         await apiPost(config.api_endpoint, {});
       } else if (config.key) {
