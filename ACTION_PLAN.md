@@ -42,23 +42,23 @@
 | ID | Опис | Примітка |
 |----|------|----------|
 | ~~AUDIT-011~~ | ~~Post-defrost alarm suppression timer (30-60 хв)~~ | **FIXED** (Phase 11a) |
-| AUDIT-012 | Separate alarm_delay для HAL і LAL | |
+| ~~AUDIT-012~~ | ~~Separate alarm_delay для HAL і LAL~~ | **FIXED** — high_alarm_delay + low_alarm_delay |
 | ~~AUDIT-013~~ | ~~Door sensor hardcoded false в equipment_module~~ | **FIXED** (Phase 11b: DigitalInput driver + door_contact binding) |
 | ~~AUDIT-019~~ | ~~protection.reset_alarms — немає UI widget~~ | **FIXED** — кнопка в manifest UI |
 | ~~AUDIT-020~~ | ~~WS broadcast: malloc в hot path~~ | **CLOSED** — broadcast = stack buffer |
 | ~~AUDIT-021~~ | ~~Серіалізаційний буфер 3072~~ | **FIXED** — збільшено до 4096 (запас до ~115 ключів) |
 
 **Пріоритет 3 (commercial viability):**
-| ID | Опис |
-|----|------|
-| AUDIT-030 | HTTP автентифікація (Basic Auth) |
-| AUDIT-031 | HP/LP pressure switch digital inputs |
-| AUDIT-032 | Scheduled defrost (за часом доби) |
-| AUDIT-033 | Alarm relay output для BMS |
-| AUDIT-034 | Password protection для параметрів |
-| AUDIT-035 | °C/°F вибір одиниць |
-| AUDIT-036 | Compressor lockout після N коротких циклів |
-| AUDIT-037 | Cache-Control headers для static files |
+| ID | Опис | Статус |
+|----|------|--------|
+| AUDIT-030 | HTTP автентифікація (Basic Auth) | |
+| AUDIT-031 | HP/LP pressure switch digital inputs | |
+| AUDIT-032 | Scheduled defrost (за часом доби) | |
+| AUDIT-033 | Alarm relay output для BMS | |
+| AUDIT-034 | Password protection для параметрів | |
+| AUDIT-035 | °C/°F вибір одиниць | |
+| ~~AUDIT-036~~ | ~~Compressor lockout після N коротких циклів~~ | **CLOSED** — REDUNDANT, COMP_MIN_OFF=180s+COMP_MIN_ON=120s вже захищають |
+| ~~AUDIT-037~~ | ~~Cache-Control headers для static files~~ | **FIXED** — .gz=max-age=86400, html=no-cache |
 
 ### Перенесені задачі
 - MQTT auto-discovery (Home Assistant) — не критично
