@@ -384,6 +384,10 @@
           {
             "key": "thermostat.setpoint",
             "widget": "slider"
+          },
+          {
+            "key": "thermostat.differential",
+            "widget": "number_input"
           }
         ]
       },
@@ -411,21 +415,6 @@
             "key": "thermostat.comp_off_time",
             "widget": "value",
             "label": "Час простою"
-          }
-        ]
-      },
-      {
-        "title": "Уставки",
-        "group": "settings",
-        "collapsible": true,
-        "widgets": [
-          {
-            "key": "thermostat.setpoint",
-            "widget": "number_input"
-          },
-          {
-            "key": "thermostat.differential",
-            "widget": "number_input"
           }
         ]
       },
@@ -512,17 +501,6 @@
             "key": "thermostat.night_end",
             "widget": "number_input",
             "visible_when": {"key": "thermostat.night_mode", "eq": 1}
-          }
-        ]
-      },
-      {
-        "title": "Дисплей",
-        "group": "settings",
-        "collapsible": true,
-        "widgets": [
-          {
-            "key": "thermostat.display_defrost",
-            "widget": "select"
           }
         ]
       }

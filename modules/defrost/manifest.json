@@ -27,6 +27,12 @@
       "type": "bool",
       "description": "Аварійна зупинка від Protection",
       "optional": true
+    },
+    "thermostat.display_defrost": {
+      "source_module": "thermostat",
+      "type": "int",
+      "description": "Що показувати на дисплеї під час відтайки",
+      "optional": true
     }
   },
 
@@ -395,6 +401,10 @@
             "key": "defrost.fad_temp",
             "widget": "number_input",
             "visible_when": {"key": "defrost.initiation", "in": [1, 2]}
+          },
+          {
+            "key": "thermostat.display_defrost",
+            "widget": "select"
           }
         ]
       },
