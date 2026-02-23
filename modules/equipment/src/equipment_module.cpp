@@ -3,11 +3,15 @@
  * @brief Equipment Manager — єдиний власник HAL drivers
  *
  * Потік даних кожен цикл:
- *   1. apply_outputs()     — застосовує relay з ПОПЕРЕДНЬОГО циклу
- *   2. read_sensors()      — читає сенсори → SharedState
- *   3. read_requests()     — читає req.* від бізнес-модулів
- *   4. apply_arbitration() — арбітраж + інтерлоки → нові outputs
+ *   1. read_sensors()      — читає сенсори → SharedState
+ *   2. read_requests()     — читає req.* від бізнес-модулів
+ *   3. apply_arbitration() — арбітраж + інтерлоки → визначає outputs
+ *   4. apply_outputs()     — застосовує outputs ДО реле (той самий цикл)
  *   5. publish_state()     — публікує фактичний стан актуаторів
+ *
+ * ВАЖЛИВО: apply_outputs() після apply_arbitration() в тому самому циклі.
+ * Попередній порядок (apply_outputs першим) створював осциляцію через
+ * однотактову затримку між рішенням арбітражу та його застосуванням.
  */
 
 #include "equipment_module.h"
@@ -110,17 +114,20 @@ void EquipmentModule::on_update(uint32_t dt_ms) {
     comp_since_ms_ += dt_ms;
     if (comp_since_ms_ > 999999) comp_since_ms_ = 999999;  // Запобігаємо overflow
 
-    // 1. Застосовуємо relay стани з попереднього циклу
-    apply_outputs();
-
-    // 2. Читаємо сенсори → SharedState
+    // 1. Читаємо сенсори → SharedState
     read_sensors();
 
-    // 3. Читаємо requests від бізнес-модулів
+    // 2. Читаємо requests від бізнес-модулів
     read_requests();
 
-    // 4. Арбітраж + інтерлоки → визначаємо нові outputs
+    // 3. Арбітраж + інтерлоки → визначаємо outputs
     apply_arbitration();
+
+    // 4. Застосовуємо outputs до реле (в тому самому циклі!)
+    //    Раніше apply_outputs() був першим і застосовував out_ з ПОПЕРЕДНЬОГО циклу.
+    //    Це створювало осциляцію: anti-short-cycle блокував ON → out_=false,
+    //    але relay вже ввімкнулось з попереднього out_=true → toggle кожен цикл.
+    apply_outputs();
 
     // 5. Публікуємо фактичний стан актуаторів
     publish_state();
