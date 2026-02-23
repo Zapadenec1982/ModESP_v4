@@ -15,6 +15,7 @@
 
 #include "esp_log.h"
 #include "esp_system.h"
+#include "nvs_flash.h"
 #include "esp_mac.h"
 #include "esp_ota_ops.h"
 #include "esp_app_format.h"
@@ -649,6 +650,25 @@ esp_err_t HttpService::handle_post_restart(httpd_req_t* req) {
     return ESP_OK; // never reached
 }
 
+esp_err_t HttpService::handle_post_factory_reset(httpd_req_t* req) {
+    set_cors_headers(req);
+    httpd_resp_set_type(req, "application/json");
+
+    ESP_LOGW("HTTP", "FACTORY RESET — erasing NVS partition...");
+    esp_err_t err = nvs_flash_erase();
+    if (err != ESP_OK) {
+        ESP_LOGE("HTTP", "NVS erase failed: %s", esp_err_to_name(err));
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "NVS erase failed");
+        return ESP_FAIL;
+    }
+
+    httpd_resp_sendstr(req, "{\"ok\":true,\"msg\":\"Factory reset. Restarting...\"}");
+
+    vTaskDelay(pdMS_TO_TICKS(500));
+    esp_restart();
+    return ESP_OK; // never reached
+}
+
 // ── OTA Handlers ────────────────────────────────────────────────
 
 esp_err_t HttpService::handle_get_ota(httpd_req_t* req) {
@@ -1077,6 +1097,7 @@ void HttpService::register_api_handlers() {
         {"/api/wifi/ap",    HTTP_GET,  handle_get_wifi_ap},
         {"/api/wifi/ap",    HTTP_POST, handle_post_wifi_ap},
         {"/api/restart",    HTTP_POST, handle_post_restart},
+        {"/api/factory-reset", HTTP_POST, handle_post_factory_reset},
         {"/api/ota",        HTTP_GET,  handle_get_ota},
         {"/api/time",       HTTP_GET,  handle_get_time},
         {"/api/time",       HTTP_POST, handle_post_time},
