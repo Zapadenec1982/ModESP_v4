@@ -64,13 +64,13 @@ board.json + bindings.json ─┘
 ### Protection (Phase 9.3 + 11a)
 
 - **5 незалежних моніторів аварій:** High Temp, Low Temp, Sensor1, Sensor2, Door
-- **Delayed alarms:** High/Low temp і Door з затримкою (alarm_delay хвилини, door_delay хвилини)
+- **Delayed alarms:** High temp (high_alarm_delay), Low temp (low_alarm_delay), Door (door_delay) — окремі затримки в хвилинах
 - **Instant alarms:** Sensor1, Sensor2 — без затримки
 - **Defrost blocking:** High Temp alarm блокується під час heating-фаз defrost (скидається pending)
 - **Post-defrost suppression:** High Temp alarm блокується на post_defrost_delay хвилин після відтайки
 - **Auto-clear:** аварія знімається автоматично при поверненні в норму (якщо manual_reset=false)
 - **Manual reset:** `protection.reset_alarms` = true → скидає всі аварії (WebUI/API)
-- **6 persist параметрів:** high_limit, low_limit, alarm_delay, door_delay, manual_reset, post_defrost_delay
+- **7 persist параметрів:** high_limit, low_limit, high_alarm_delay, low_alarm_delay, door_delay, manual_reset, post_defrost_delay
 - **protection.lockout = false** завжди (зарезервовано для Phase 10+)
 - Порядок update: Equipment(0) → **Protection(1)** → Thermostat(2)
 
@@ -347,6 +347,10 @@ feat(module): короткий опис
 | `next_prompt.md` | Промпт для наступної сесії | В кінці поточної сесії |
 
 ## Changelog
+- 2026-02-24 — Tech debt: TIMER_SATISFIED constant (types.h, replaces magic 999999 in 4 files),
+  Cache-Control headers (.gz=max-age=86400, html=no-cache), AUDIT-012 separate alarm delays
+  (high_alarm_delay + low_alarm_delay), AUDIT-036 CLOSED (REDUNDANT). 86 state keys, 41 STATE_META,
+  39 MQTT sub, 207 тестів. EMA filter (equipment.filter_coeff) from previous session.
 - 2026-02-23 — Phase 13a DONE: Runtime UI visibility (visible_when + requires_state). Manifests: constraints
   з disabled_hint, visible_when на defrost/thermostat/protection cards/widgets. Generator: resolve_constraints()
   зберігає ВСІ options + requires_state (FEATURE_TO_STATE mapping), visible_when passthrough, V19 validation.
