@@ -1325,7 +1325,7 @@ void HttpService::register_static_handler() {
 bool HttpService::start_server() {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
-    config.max_uri_handlers = 40;
+    config.max_uri_handlers = 48;
     config.max_open_sockets = 4;   // lwIP has only 10 sockets globally; leave room for WiFi/DNS/SNTP
     config.stack_size = 8192;
 
