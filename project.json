@@ -6,7 +6,8 @@
     "equipment",
     "protection",
     "thermostat",
-    "defrost"
+    "defrost",
+    "datalogger"
   ],
   "system": {
     "device_name": "ModESP",

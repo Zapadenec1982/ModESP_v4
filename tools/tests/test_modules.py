@@ -72,8 +72,13 @@ def defrost():
 
 
 @pytest.fixture
-def all_manifests(equipment, protection, thermostat, defrost):
-    return [equipment, protection, thermostat, defrost]
+def datalogger():
+    return load_manifest("datalogger")
+
+
+@pytest.fixture
+def all_manifests(equipment, protection, thermostat, defrost, datalogger):
+    return [equipment, protection, thermostat, defrost, datalogger]
 
 
 @pytest.fixture
@@ -518,9 +523,9 @@ class TestCrossModuleValidation:
         assert len(therm_errors) == 0, f"Thermostat errors: {therm_errors}"
 
     def test_total_state_keys(self, all_manifests):
-        """Всього 86 state keys у 4 модулях."""
+        """Всього 92 state keys у 5 модулях."""
         total = sum(len(m.get("state", {})) for m in all_manifests)
-        assert total == 86
+        assert total == 92
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -537,8 +542,8 @@ class TestUIJsonFullProject:
         assert "pages" in result
         assert isinstance(result["pages"], list)
 
-    def test_7_pages(self, project, all_manifests):
-        """7 сторінок: Dashboard + 3 module + Bindings + Network + System."""
+    def test_pages(self, project, all_manifests):
+        """Сторінки: Dashboard + 4 module + Bindings + Network + System."""
         gen = UIJsonGenerator()
         result = gen.generate(project, all_manifests)
         page_ids = [p["id"] for p in result["pages"]]
@@ -546,6 +551,7 @@ class TestUIJsonFullProject:
         assert "thermostat" in page_ids
         assert "defrost" in page_ids
         assert "protection" in page_ids
+        assert "chart" in page_ids
         assert "network" in page_ids
         assert "system" in page_ids
         # equipment UI видалено — статус на сторінці bindings
@@ -638,7 +644,7 @@ class TestStateMetaFullProject:
         #   demand_temp, drip_time, fan_delay, fad_temp, stabilize_time, valve_delay,
         #   equalize_time, manual_start, manual_stop = 15 rw
         # Total: 1 + 8 + 17 + 15 = 41
-        assert "STATE_META_COUNT = 41" in result
+        assert "STATE_META_COUNT = 44" in result
 
     def test_persist_true_for_setpoint(self, all_manifests):
         """thermostat.setpoint — writable=true, persist=true."""
@@ -677,14 +683,14 @@ class TestMqttTopicsFullProject:
         gen = MqttTopicsGenerator()
         result = gen.generate(all_manifests)
         # equipment=6, protection=8, thermostat=10, defrost=10 = 34
-        assert "MQTT_PUBLISH_COUNT = 34" in result
+        assert "MQTT_PUBLISH_COUNT = 37" in result
 
     def test_subscribe_count(self, all_manifests):
         """Загальна кількість MQTT subscribe topics."""
         gen = MqttTopicsGenerator()
         result = gen.generate(all_manifests)
         # equipment=0, protection=8, thermostat=17, defrost=14 = 39
-        assert "MQTT_SUBSCRIBE_COUNT = 39" in result
+        assert "MQTT_SUBSCRIBE_COUNT = 42" in result
 
     def test_contains_all_module_topics(self, all_manifests):
         """Містить topics від усіх модулів."""

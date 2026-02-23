@@ -45,6 +45,7 @@
 #include "protection_module.h"
 #include "thermostat_module.h"
 #include "defrost_module.h"
+#include "datalogger_module.h"
 
 #include "esp_log.h"
 #include "esp_task_wdt.h"
@@ -87,6 +88,9 @@ static ProtectionModule        protection;
 // Business modules (NORMAL priority — work through SharedState)
 static ThermostatModule        thermostat;
 static DefrostModule           defrost;
+
+// DataLogger (LOW priority — logging, runs after business logic)
+static DataLoggerModule        datalogger;
 
 // ═══════════════════════════════════════════════════════════════
 // Entry point
@@ -198,6 +202,9 @@ extern "C" void app_main(void)
     // Defrost — цикл розморозки (NORMAL priority, EM арбітрує requests)
     app.modules().register_module(defrost);
 
+    // DataLogger — логування температури та подій (LOW priority)
+    app.modules().register_module(datalogger);
+
     ESP_LOGI(TAG, "Phase 2: Initializing WiFi + business modules...");
     app.modules().init_all(app.state());
 
@@ -230,6 +237,7 @@ extern "C" void app_main(void)
     http_service.set_wifi(&wifi_service);
     http_service.set_persist(&persist_service);
     http_service.set_hal(&hal);
+    http_service.set_datalogger(&datalogger);
 
     ws_service.set_state(&app.state());
 

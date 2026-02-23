@@ -25,6 +25,8 @@
 #include "modesp/base_module.h"
 #include "esp_http_server.h"
 
+class DataLoggerModule;  // forward declaration (modules/datalogger)
+
 namespace modesp {
 
 class SharedState;
@@ -48,6 +50,7 @@ public:
     void set_wifi(WiFiService* wifi) { wifi_ = wifi; }
     void set_persist(PersistService* persist) { persist_ = persist; }
     void set_hal(HAL* hal) { hal_ = hal; }
+    void set_datalogger(DataLoggerModule* dl) { datalogger_ = dl; }
 
     // Server handle (needed by WsService)
     httpd_handle_t server() const { return server_; }
@@ -65,6 +68,7 @@ private:
     WiFiService* wifi_ = nullptr;
     PersistService* persist_ = nullptr;
     HAL* hal_ = nullptr;
+    DataLoggerModule* datalogger_ = nullptr;
 
     bool start_server();
     void register_api_handlers();
@@ -90,6 +94,8 @@ private:
     static esp_err_t handle_get_time(httpd_req_t* req);
     static esp_err_t handle_post_time(httpd_req_t* req);
     static esp_err_t handle_get_ow_scan(httpd_req_t* req);
+    static esp_err_t handle_get_log(httpd_req_t* req);
+    static esp_err_t handle_get_log_summary(httpd_req_t* req);
     static esp_err_t handle_static(httpd_req_t* req);
 
     // CORS

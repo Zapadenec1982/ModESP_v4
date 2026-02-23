@@ -12,6 +12,7 @@
 #include "modesp/hal/hal.h"
 #include "modesp/types.h"
 #include "ds18b20_driver.h"
+#include "datalogger_module.h"
 
 #include "esp_log.h"
 #include "esp_system.h"
@@ -1158,6 +1159,51 @@ esp_err_t HttpService::handle_get_ow_scan(httpd_req_t* req) {
     return httpd_resp_send(req, json, pos);
 }
 
+// ── DataLogger API ──────────────────────────────────────────────
+
+esp_err_t HttpService::handle_get_log(httpd_req_t* req) {
+    auto* self = static_cast<HttpService*>(req->user_ctx);
+    set_cors_headers(req);
+
+    if (!self->datalogger_) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "DataLogger not available");
+        return ESP_FAIL;
+    }
+
+    // Парсимо ?hours=24
+    int hours = 24;
+    char query[32];
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
+        char val[8];
+        if (httpd_query_key_value(query, "hours", val, sizeof(val)) == ESP_OK) {
+            int h = atoi(val);
+            if (h > 0 && h <= 168) hours = h;
+        }
+    }
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
+    return self->datalogger_->serialize_log_chunked(req, hours);
+}
+
+esp_err_t HttpService::handle_get_log_summary(httpd_req_t* req) {
+    auto* self = static_cast<HttpService*>(req->user_ctx);
+    set_cors_headers(req);
+
+    if (!self->datalogger_) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "DataLogger not available");
+        return ESP_FAIL;
+    }
+
+    char buf[128];
+    if (self->datalogger_->serialize_summary(buf, sizeof(buf))) {
+        httpd_resp_set_type(req, "application/json");
+        return httpd_resp_send(req, buf, strlen(buf));
+    }
+    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Serialize failed");
+    return ESP_FAIL;
+}
+
 // ── Static file handler ─────────────────────────────────────────
 
 static const char* get_content_type(const char* path) {
@@ -1267,6 +1313,8 @@ void HttpService::register_api_handlers() {
         {"/api/time",       HTTP_GET,  handle_get_time},
         {"/api/time",       HTTP_POST, handle_post_time},
         {"/api/onewire/scan", HTTP_GET, handle_get_ow_scan},
+        {"/api/log",         HTTP_GET, handle_get_log},
+        {"/api/log/summary", HTTP_GET, handle_get_log_summary},
     };
 
     // Реєструємо handlers + OPTIONS для CORS preflight

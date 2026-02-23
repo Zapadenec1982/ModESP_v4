@@ -112,6 +112,10 @@ class ManifestValidator:
                 wkey = w.get("key", "")
                 wtype = w.get("widget", "")
 
+                # Chart widget використовує data_source, не state key
+                if wtype == "chart":
+                    continue
+
                 # Check key exists in state or inputs (cross-module)
                 if wkey in state:
                     state_type = state[wkey].get("type", "")

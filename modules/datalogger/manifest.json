@@ -1,0 +1,85 @@
+{
+  "manifest_version": 1,
+  "module": "datalogger",
+  "description": "Temperature and event logger with LittleFS storage",
+
+  "state": {
+    "datalogger.enabled": {
+      "type": "bool", "access": "readwrite", "default": true,
+      "persist": true, "description": "Логування увімкнено"
+    },
+    "datalogger.retention_hours": {
+      "type": "int", "access": "readwrite", "persist": true,
+      "min": 12, "max": 168, "step": 12, "default": 48,
+      "description": "Глибина зберігання (год)"
+    },
+    "datalogger.sample_interval": {
+      "type": "int", "access": "readwrite", "persist": true,
+      "min": 30, "max": 300, "step": 30, "default": 60,
+      "description": "Інтервал семплювання (с)"
+    },
+    "datalogger.records_count": {
+      "type": "int", "access": "read",
+      "description": "Записів температури"
+    },
+    "datalogger.events_count": {
+      "type": "int", "access": "read",
+      "description": "Подій"
+    },
+    "datalogger.flash_used": {
+      "type": "int", "access": "read",
+      "description": "Flash (KB)"
+    }
+  },
+
+  "ui": {
+    "page": "Графік",
+    "page_id": "chart",
+    "icon": "chart",
+    "order": 3,
+    "cards": [
+      {
+        "title": "Температура",
+        "widgets": [
+          {
+            "key": "datalogger.chart",
+            "widget": "chart",
+            "label": "Графік температури",
+            "data_source": "/api/log",
+            "default_hours": 24
+          }
+        ]
+      },
+      {
+        "title": "Статистика",
+        "widgets": [
+          {"key": "datalogger.records_count", "widget": "value", "label": "Записів"},
+          {"key": "datalogger.events_count",  "widget": "value", "label": "Подій"},
+          {"key": "datalogger.flash_used",    "widget": "value", "label": "Flash (KB)"}
+        ]
+      },
+      {
+        "title": "Налаштування",
+        "collapsible": true,
+        "widgets": [
+          {"key": "datalogger.enabled",         "widget": "toggle"},
+          {"key": "datalogger.retention_hours",  "widget": "number_input"},
+          {"key": "datalogger.sample_interval",  "widget": "number_input"}
+        ]
+      }
+    ]
+  },
+
+  "mqtt": {
+    "publish": [
+      "datalogger.records_count",
+      "datalogger.events_count",
+      "datalogger.flash_used"
+    ],
+    "subscribe": [
+      "datalogger.enabled",
+      "datalogger.retention_hours",
+      "datalogger.sample_interval"
+    ]
+  }
+}
