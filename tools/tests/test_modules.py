@@ -104,14 +104,17 @@ class TestEquipmentManifest:
         """Модуль називається 'equipment'."""
         assert equipment["module"] == "equipment"
 
-    def test_has_15_state_keys(self, equipment):
-        """Equipment має 15 state keys (12 base + 3 has_*)."""
-        assert len(equipment["state"]) == 15
+    def test_has_16_state_keys(self, equipment):
+        """Equipment має 16 state keys (12 base + 3 has_* + filter_coeff)."""
+        assert len(equipment["state"]) == 16
 
-    def test_all_keys_readonly(self, equipment):
-        """Всі state keys equipment — read-only."""
+    def test_sensor_keys_readonly(self, equipment):
+        """Sensor/actuator state keys — read-only, filter_coeff — readwrite."""
         for key, info in equipment["state"].items():
-            assert info["access"] == "read", f"{key} не read-only"
+            if key == "equipment.filter_coeff":
+                assert info["access"] == "readwrite", f"{key} не readwrite"
+            else:
+                assert info["access"] == "read", f"{key} не read-only"
 
     def test_sensor_keys(self, equipment):
         """Має ключі сенсорів."""
@@ -173,9 +176,9 @@ class TestProtectionManifest:
         assert result is True, f"Errors: {v.errors}"
         assert len(v.errors) == 0
 
-    def test_has_15_state_keys(self, protection):
-        """Protection має 15 state keys."""
-        assert len(protection["state"]) == 15
+    def test_has_16_state_keys(self, protection):
+        """Protection має 16 state keys."""
+        assert len(protection["state"]) == 16
 
     def test_alarm_readonly_keys(self, protection):
         """Alarm keys — read-only."""
@@ -189,8 +192,8 @@ class TestProtectionManifest:
     def test_settings_readwrite_keys(self, protection):
         """Settings keys — readwrite з persist."""
         rw_keys = ["protection.high_limit", "protection.low_limit",
-                    "protection.alarm_delay", "protection.door_delay",
-                    "protection.manual_reset"]
+                    "protection.high_alarm_delay", "protection.low_alarm_delay",
+                    "protection.door_delay", "protection.manual_reset"]
         for key in rw_keys:
             info = protection["state"][key]
             assert info["access"] == "readwrite", f"{key} не readwrite"
@@ -203,10 +206,11 @@ class TestProtectionManifest:
         assert info["max"] == 99.0
 
     def test_alarm_delay_range(self, protection):
-        """alarm_delay: min=5, max=120."""
-        info = protection["state"]["protection.alarm_delay"]
-        assert info["min"] == 5
-        assert info["max"] == 120
+        """high_alarm_delay: min=0, max=120; low_alarm_delay: min=0, max=120."""
+        for key in ["protection.high_alarm_delay", "protection.low_alarm_delay"]:
+            info = protection["state"][key]
+            assert info["min"] == 0
+            assert info["max"] == 120
 
     def test_has_5_inputs(self, protection):
         """Protection має 5 inputs."""
@@ -227,17 +231,17 @@ class TestProtectionManifest:
         """MQTT публікує 8 alarm keys."""
         assert len(protection["mqtt"]["publish"]) == 8
 
-    def test_mqtt_7_subscribe(self, protection):
-        """MQTT підписка на 7 settings keys."""
-        assert len(protection["mqtt"]["subscribe"]) == 7
+    def test_mqtt_8_subscribe(self, protection):
+        """MQTT підписка на 8 settings keys."""
+        assert len(protection["mqtt"]["subscribe"]) == 8
 
     def test_display_main_value(self, protection):
         """Display main_value — alarm_code."""
         assert protection["display"]["main_value"]["key"] == "protection.alarm_code"
 
-    def test_display_4_menu_items(self, protection):
-        """Display має 4 menu items (HAL, LAL, dAd, Door)."""
-        assert len(protection["display"]["menu_items"]) == 4
+    def test_display_5_menu_items(self, protection):
+        """Display має 5 menu items (HAL, LAL, dAd_high, dAd_low, Door)."""
+        assert len(protection["display"]["menu_items"]) == 5
 
     def test_reset_alarms_key(self, protection):
         """reset_alarms — readwrite trigger без persist."""
@@ -514,9 +518,9 @@ class TestCrossModuleValidation:
         assert len(therm_errors) == 0, f"Thermostat errors: {therm_errors}"
 
     def test_total_state_keys(self, all_manifests):
-        """Всього 84 state keys у 4 модулях (81 + 3 equipment.has_*)."""
+        """Всього 86 state keys у 4 модулях."""
         total = sum(len(m.get("state", {})) for m in all_manifests)
-        assert total == 84
+        assert total == 86
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -623,9 +627,9 @@ class TestStateMetaFullProject:
         """STATE_META_COUNT = readwrite keys only (no readonly persist)."""
         gen = StateMetaGenerator()
         result = gen.generate(all_manifests)
-        # Рахуємо: equipment=0rw, protection=7rw, thermostat=17rw, defrost=15rw(14+manual_start)
-        # protection: high_limit, low_limit, alarm_delay, door_delay, manual_reset,
-        #   reset_alarms, post_defrost_delay = 7
+        # Рахуємо: equipment=0rw, protection=8rw, thermostat=17rw, defrost=15rw(14+manual_start)
+        # protection: high_limit, low_limit, high_alarm_delay, low_alarm_delay,
+        #   door_delay, manual_reset, reset_alarms, post_defrost_delay = 8
         # thermostat: setpoint, differential, min_off_time, min_on_time, startup_delay,
         #   evap_fan_mode, fan_stop_temp, fan_stop_hyst, cond_fan_delay, safety_run_on,
         #   safety_run_off, night_setback, night_mode, night_start, night_end,
@@ -633,8 +637,8 @@ class TestStateMetaFullProject:
         # defrost: type, interval, counter_mode, initiation, end_temp, max_duration,
         #   demand_temp, drip_time, fan_delay, fad_temp, stabilize_time, valve_delay,
         #   equalize_time, manual_start, manual_stop = 15 rw
-        # Total: 0 + 7 + 17 + 15 = 39
-        assert "STATE_META_COUNT = 39" in result
+        # Total: 1 + 8 + 17 + 15 = 41
+        assert "STATE_META_COUNT = 41" in result
 
     def test_persist_true_for_setpoint(self, all_manifests):
         """thermostat.setpoint — writable=true, persist=true."""
@@ -679,8 +683,8 @@ class TestMqttTopicsFullProject:
         """Загальна кількість MQTT subscribe topics."""
         gen = MqttTopicsGenerator()
         result = gen.generate(all_manifests)
-        # equipment=0, protection=7, thermostat=17, defrost=14 = 38
-        assert "MQTT_SUBSCRIBE_COUNT = 38" in result
+        # equipment=0, protection=8, thermostat=17, defrost=14 = 39
+        assert "MQTT_SUBSCRIBE_COUNT = 39" in result
 
     def test_contains_all_module_topics(self, all_manifests):
         """Містить topics від усіх модулів."""
@@ -721,7 +725,7 @@ class TestDisplayScreensFullProject:
         assert '"defrost.state"' in result
 
     def test_menu_items_count(self, all_manifests):
-        """Сума menu items: equipment=0, protection=4, thermostat=5, defrost=4 = 13."""
+        """Сума menu items: equipment=0, protection=5, thermostat=5, defrost=4 = 14."""
         gen = DisplayScreensGenerator()
         result = gen.generate(all_manifests)
-        assert "MENU_ITEMS_COUNT = 13" in result
+        assert "MENU_ITEMS_COUNT = 14" in result

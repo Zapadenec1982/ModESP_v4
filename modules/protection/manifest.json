@@ -43,8 +43,8 @@
       "always_active": true,
       "controls_settings": [
         "protection.high_limit", "protection.low_limit",
-        "protection.alarm_delay", "protection.manual_reset",
-        "protection.post_defrost_delay"
+        "protection.high_alarm_delay", "protection.low_alarm_delay",
+        "protection.manual_reset", "protection.post_defrost_delay"
       ]
     },
     "door_protection": {
@@ -117,16 +117,27 @@
       "persist": true,
       "description": "Нижня межа температури"
     },
-    "protection.alarm_delay": {
+    "protection.high_alarm_delay": {
       "type": "int",
       "unit": "хв",
       "access": "readwrite",
-      "min": 5,
+      "min": 0,
       "max": 120,
       "step": 1,
       "default": 30,
       "persist": true,
-      "description": "Затримка спрацювання аварії"
+      "description": "Затримка аварії високої T"
+    },
+    "protection.low_alarm_delay": {
+      "type": "int",
+      "unit": "хв",
+      "access": "readwrite",
+      "min": 0,
+      "max": 120,
+      "step": 1,
+      "default": 30,
+      "persist": true,
+      "description": "Затримка аварії низької T"
     },
     "protection.door_delay": {
       "type": "int",
@@ -238,7 +249,11 @@
             "widget": "number_input"
           },
           {
-            "key": "protection.alarm_delay",
+            "key": "protection.high_alarm_delay",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.low_alarm_delay",
             "widget": "number_input"
           },
           {
@@ -269,7 +284,8 @@
     "subscribe": [
       "protection.high_limit",
       "protection.low_limit",
-      "protection.alarm_delay",
+      "protection.high_alarm_delay",
+      "protection.low_alarm_delay",
       "protection.door_delay",
       "protection.manual_reset",
       "protection.post_defrost_delay",
@@ -285,7 +301,8 @@
     "menu_items": [
       {"label": "Верхня межа",  "key": "protection.high_limit"},
       {"label": "Нижня межа",  "key": "protection.low_limit"},
-      {"label": "Затримка",    "key": "protection.alarm_delay"},
+      {"label": "Затр. HAL",   "key": "protection.high_alarm_delay"},
+      {"label": "Затр. LAL",   "key": "protection.low_alarm_delay"},
       {"label": "Двері",       "key": "protection.door_delay"}
     ]
   }

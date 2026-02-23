@@ -3,8 +3,8 @@
  * @brief Protection module — alarm monitoring and signaling (spec_v3 §2.7)
  *
  * Monitors:
- *   1. High Temp (HAL) — delayed (dAd), blocked during defrost
- *   2. Low Temp (LAL)  — delayed (dAd), always active
+ *   1. High Temp (HAL) — delayed (high_alarm_delay), blocked during defrost
+ *   2. Low Temp (LAL)  — delayed (low_alarm_delay), always active
  *   3. Sensor1 (ERR1)  — instant, air sensor failure
  *   4. Sensor2 (ERR2)  — instant, evap sensor failure (info only)
  *   5. Door open       — delayed (door_delay), info only
@@ -33,8 +33,9 @@ void ProtectionModule::sync_settings() {
     high_limit_ = read_float("protection.high_limit", high_limit_);
     low_limit_  = read_float("protection.low_limit", low_limit_);
 
-    // Хвилини → мілісекунди
-    alarm_delay_ms_ = static_cast<uint32_t>(read_int("protection.alarm_delay", 30)) * 60000;
+    // Хвилини → мілісекунди (окремі затримки для HAL і LAL)
+    high_alarm_delay_ms_ = static_cast<uint32_t>(read_int("protection.high_alarm_delay", 30)) * 60000;
+    low_alarm_delay_ms_  = static_cast<uint32_t>(read_int("protection.low_alarm_delay", 30)) * 60000;
     door_delay_ms_  = static_cast<uint32_t>(read_int("protection.door_delay", 5)) * 60000;
 
     manual_reset_ = read_bool("protection.manual_reset", manual_reset_);
@@ -63,8 +64,9 @@ bool ProtectionModule::on_init() {
     state_set("protection.door_alarm", false);
     state_set("protection.reset_alarms", false);
 
-    ESP_LOGI(TAG, "Initialized (HAL=%.1f°C, LAL=%.1f°C, delay=%lu min)",
-             high_limit_, low_limit_, alarm_delay_ms_ / 60000);
+    ESP_LOGI(TAG, "Initialized (HAL=%.1f°C/%lumin, LAL=%.1f°C/%lumin)",
+             high_limit_, high_alarm_delay_ms_ / 60000,
+             low_limit_, low_alarm_delay_ms_ / 60000);
     ESP_LOGI(TAG, "Features: door=%d", has_feature("door_protection"));
     return true;
 }
@@ -166,11 +168,11 @@ void ProtectionModule::update_high_temp(float temp, bool sensor_ok,
         if (!high_temp_.active) {
             high_temp_.pending = true;
             high_temp_.pending_ms += dt_ms;
-            if (high_temp_.pending_ms >= alarm_delay_ms_) {
+            if (high_temp_.pending_ms >= high_alarm_delay_ms_) {
                 high_temp_.active = true;
                 high_temp_.pending = false;
                 ESP_LOGW(TAG, "HIGH TEMP ALARM: %.1f > %.1f (delay %lu min)",
-                         temp, high_limit_, alarm_delay_ms_ / 60000);
+                         temp, high_limit_, high_alarm_delay_ms_ / 60000);
             }
         }
     } else {
@@ -201,11 +203,11 @@ void ProtectionModule::update_low_temp(float temp, bool sensor_ok, uint32_t dt_m
         if (!low_temp_.active) {
             low_temp_.pending = true;
             low_temp_.pending_ms += dt_ms;
-            if (low_temp_.pending_ms >= alarm_delay_ms_) {
+            if (low_temp_.pending_ms >= low_alarm_delay_ms_) {
                 low_temp_.active = true;
                 low_temp_.pending = false;
                 ESP_LOGW(TAG, "LOW TEMP ALARM: %.1f < %.1f (delay %lu min)",
-                         temp, low_limit_, alarm_delay_ms_ / 60000);
+                         temp, low_limit_, low_alarm_delay_ms_ / 60000);
             }
         }
     } else {

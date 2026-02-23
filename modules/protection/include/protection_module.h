@@ -74,7 +74,8 @@ private:
     // Налаштування (з SharedState, persist)
     float    high_limit_      = 12.0f;     // °C (HAL)
     float    low_limit_       = -35.0f;    // °C (LAL)
-    uint32_t alarm_delay_ms_  = 1800000;   // 30 хв (dAd)
+    uint32_t high_alarm_delay_ms_ = 1800000;  // 30 хв (dAd для HAL)
+    uint32_t low_alarm_delay_ms_  = 1800000;  // 30 хв (dAd для LAL)
     uint32_t door_delay_ms_   = 300000;    // 5 хв
     bool     manual_reset_    = false;
 
