@@ -39,10 +39,10 @@ void ThermostatModule::sync_settings() {
     setpoint_     = read_float("thermostat.setpoint", setpoint_);
     differential_ = read_float("thermostat.differential", differential_);
 
-    // Цілочисельні параметри (секунди → мілісекунди)
-    min_off_ms_       = static_cast<uint32_t>(read_int("thermostat.min_off_time", 180)) * 1000;
-    min_on_ms_        = static_cast<uint32_t>(read_int("thermostat.min_on_time", 60)) * 1000;
-    startup_delay_ms_ = static_cast<uint32_t>(read_int("thermostat.startup_delay", 60)) * 1000;
+    // Цілочисельні параметри (хвилини → мілісекунди)
+    min_off_ms_       = static_cast<uint32_t>(read_int("thermostat.min_off_time", 3)) * 60000;
+    min_on_ms_        = static_cast<uint32_t>(read_int("thermostat.min_on_time", 2)) * 60000;
+    startup_delay_ms_ = static_cast<uint32_t>(read_int("thermostat.startup_delay", 1)) * 60000;
     evap_fan_mode_    = read_int("thermostat.evap_fan_mode", 1);
     fan_stop_temp_    = read_float("thermostat.fan_stop_temp", fan_stop_temp_);
     fan_stop_hyst_    = read_float("thermostat.fan_stop_hyst", fan_stop_hyst_);
@@ -199,8 +199,8 @@ bool ThermostatModule::on_init() {
 
     ESP_LOGI(TAG, "Initialized (setpoint=%.1f°C, differential=%.1f°C, state=startup)",
              setpoint_, differential_);
-    ESP_LOGI(TAG, "  min_off=%lus, min_on=%lus, startup_delay=%lus",
-             min_off_ms_ / 1000, min_on_ms_ / 1000, startup_delay_ms_ / 1000);
+    ESP_LOGI(TAG, "  min_off=%lumin, min_on=%lumin, startup_delay=%lumin",
+             min_off_ms_ / 60000, min_on_ms_ / 60000, startup_delay_ms_ / 60000);
     ESP_LOGI(TAG, "  evap_fan_mode=%ld, cond_fan_delay=%lus",
              evap_fan_mode_, cond_fan_delay_ms_ / 1000);
     ESP_LOGI(TAG, "Features: fan=%d, fan_temp=%d, cond_fan=%d",
