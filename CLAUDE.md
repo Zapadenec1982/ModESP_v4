@@ -97,7 +97,7 @@ board.json + bindings.json ─┘
 - **disabled + disabled_reason:** widgets для неактивних features показуються як disabled в UI
 - **features_config.h:** constexpr масив + `is_feature_active(module, feature)` inline lookup
 - **has_feature():** метод BaseModule для runtime guards в C++ модулях
-- **Drivers:** ds18b20 (sensor, MATCH_ROM multi-sensor), relay (actuator), digital_input (sensor, GPIO input), ntc (sensor, ADC thermistor)
+- **Drivers:** ds18b20 (sensor, MATCH_ROM multi-sensor, SEARCH_ROM scan), relay (actuator), digital_input (sensor, GPIO input), ntc (sensor, ADC thermistor)
 - **Validation:** V14 (controls_settings exist), V15 (requires_roles exist), V16 (requires_feature exist), V17 (options int), V18 (options→select)
 - **209 pytest тестів** (43 нових у test_features.py + 4 binding fixtures)
 
@@ -253,6 +253,7 @@ ModESP_v4/
 | /api/wifi/scan | GET | WiFi scan results |
 | /api/ota | GET | Firmware version/partition info |
 | /api/ota | POST | OTA firmware upload (.bin) |
+| /api/onewire/scan | GET | Scan OneWire bus (SEARCH_ROM), return devices with T |
 | /api/restart | POST | ESP restart |
 | /ws | WS | Real-time state broadcast |
 | /* | GET | Static files (LittleFS) |
@@ -271,6 +272,30 @@ ModESP_v4/
 ---
 
 ## Правила документування (ОБОВ'ЯЗКОВО)
+
+### Git — коміти після кожної сесії
+
+Після завершення задачі Claude Code ПОВИНЕН:
+1. `git add -A`
+2. `git commit` — conventional commits, опис українською, деталізація в body
+3. `git push origin main`
+
+Формат commit message:
+```
+feat(module): короткий опис
+
+- Деталь 1
+- Деталь 2
+- Closes BUG-XXX (якщо є)
+```
+
+Приклади:
+- `feat(defrost): runtime validation — fallback to natural without hg_valve`
+- `fix(wifi): country code UA (channels 1-13), scan time 500ms`
+- `refactor(equipment): publish has_heater, has_hg_valve to SharedState`
+- `docs: CLAUDE_TASK_13a — settings validation 3 levels`
+
+Якщо зміни великі — кілька атомарних комітів замість одного великого.
 
 ### Після кожної сесії Claude Code ПОВИНЕН:
 
@@ -306,6 +331,9 @@ ModESP_v4/
 | `next_prompt.md` | Промпт для наступної сесії | В кінці поточної сесії |
 
 ## Changelog
+- 2026-02-23 — Phase 11b COMPLETE: SEARCH_ROM (Maxim AN187 binary search), GET /api/onewire/scan endpoint
+  (scan bus → devices with temperature + assigned status), WebUI OneWire Discovery in BindingsEditor
+  (scan button, device list, role assignment). HttpService: set_hal() injection for scan.
 - 2026-02-22 — Phase 11b DONE: Multi DS18B20 (MATCH_ROM + CRC8 validation), NTC/ADC driver (B-parameter),
   DigitalInput C++ driver (50ms debounce). HAL: Binding.address, GpioInputConfig, AdcChannelConfig.
   config_service: parse address/gpio_inputs/adc_channels. DriverManager: digital_input + ntc pools.

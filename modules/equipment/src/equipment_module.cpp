@@ -91,6 +91,11 @@ bool EquipmentModule::on_init() {
     state_set("equipment.door_open", false);
     state_set("equipment.night_input", false);
 
+    // Публікуємо наявність опціональних актуаторів —
+    // бізнес-модулі (Defrost) перевіряють перед запуском
+    state_set("equipment.has_heater", heater_ != nullptr);
+    state_set("equipment.has_hg_valve", hg_valve_ != nullptr);
+
     ESP_LOGI(TAG, "Initialized (air_sensor=%s, compressor=%s)",
              sensor_air_ ? "OK" : "MISSING",
              compressor_ ? "OK" : "MISSING");

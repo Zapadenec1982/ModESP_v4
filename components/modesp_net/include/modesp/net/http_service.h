@@ -14,6 +14,7 @@
  *   GET  /api/wifi/scan — scan available WiFi networks
  *   GET  /api/wifi/ap   — current AP configuration
  *   POST /api/wifi/ap   — save AP configuration
+ *   GET  /api/onewire/scan — scan OneWire bus for DS18B20 devices
  *   POST /api/restart  — restart ESP32
  *   GET  /[path]       — static files from LittleFS /data/www/
  */
@@ -30,6 +31,7 @@ class ConfigService;
 class ModuleManager;
 class WiFiService;
 class PersistService;
+class HAL;
 
 class HttpService : public BaseModule {
 public:
@@ -44,6 +46,7 @@ public:
     void set_modules(ModuleManager* modules) { modules_ = modules; }
     void set_wifi(WiFiService* wifi) { wifi_ = wifi; }
     void set_persist(PersistService* persist) { persist_ = persist; }
+    void set_hal(HAL* hal) { hal_ = hal; }
 
     // Server handle (needed by WsService)
     httpd_handle_t server() const { return server_; }
@@ -60,6 +63,7 @@ private:
     ModuleManager* modules_ = nullptr;
     WiFiService* wifi_ = nullptr;
     PersistService* persist_ = nullptr;
+    HAL* hal_ = nullptr;
 
     bool start_server();
     void register_api_handlers();
@@ -81,6 +85,7 @@ private:
     static esp_err_t handle_post_ota(httpd_req_t* req);
     static esp_err_t handle_get_time(httpd_req_t* req);
     static esp_err_t handle_post_time(httpd_req_t* req);
+    static esp_err_t handle_get_ow_scan(httpd_req_t* req);
     static esp_err_t handle_static(httpd_req_t* req);
 
     // CORS

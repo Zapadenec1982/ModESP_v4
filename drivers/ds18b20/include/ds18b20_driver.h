@@ -41,6 +41,21 @@ public:
     const char* type() const override { return "ds18b20"; }
     uint32_t error_count() const override { return consecutive_errors_; }
 
+    // ── Scan API (статичні — не потребують instance) ──
+    struct RomAddress {
+        uint8_t bytes[8];   // family + serial + CRC
+    };
+    static constexpr size_t MAX_DEVICES_PER_BUS = 8;
+
+    /// Сканує OneWire шину, повертає кількість знайдених пристроїв
+    static size_t scan_bus(gpio_num_t gpio, RomAddress* results, size_t max_results);
+
+    /// Читає температуру з конкретного датчика по адресі (для preview)
+    static bool read_temp_by_address(gpio_num_t gpio, const RomAddress& addr, float& temp_out);
+
+    /// Форматує адресу в "28:FF:AA:BB:CC:DD:EE:01"
+    static void format_address(const uint8_t* addr, char* out, size_t out_size);
+
 private:
     // ── OneWire low-level ──
     bool     onewire_reset();
@@ -55,6 +70,13 @@ private:
     bool     read_temperature(float& temp_out);
     void     send_rom_command();    // MATCH_ROM або SKIP_ROM залежно від has_address_
     bool     parse_address(const char* addr_str);  // "28:FF:..." → rom_address_[]
+
+    // ── Static OneWire helpers (для scan — без instance) ──
+    static bool     ow_reset(gpio_num_t gpio);
+    static void     ow_write_byte(gpio_num_t gpio, uint8_t data);
+    static uint8_t  ow_read_byte(gpio_num_t gpio);
+    static void     ow_write_bit(gpio_num_t gpio, uint8_t bit);
+    static uint8_t  ow_read_bit(gpio_num_t gpio);
 
     // ── CRC8 (Dallas/Maxim) ──
     static uint8_t crc8(const uint8_t* data, size_t len);

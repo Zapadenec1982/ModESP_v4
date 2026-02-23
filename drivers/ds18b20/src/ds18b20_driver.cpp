@@ -331,6 +331,246 @@ bool DS18B20Driver::read_temperature(float& temp_out) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Static OneWire helpers (для scan_bus — без instance)
+// Ті ж таймінги що й instance-методи, але з gpio параметром
+// ═══════════════════════════════════════════════════════════════
+
+bool DS18B20Driver::ow_reset(gpio_num_t gpio) {
+    gpio_set_level(gpio, 0);
+    ets_delay_us(480);
+
+    portDISABLE_INTERRUPTS();
+    gpio_set_level(gpio, 1);
+    ets_delay_us(70);
+    int presence = gpio_get_level(gpio);
+    portENABLE_INTERRUPTS();
+
+    ets_delay_us(410);
+    return (presence == 0);
+}
+
+void DS18B20Driver::ow_write_bit(gpio_num_t gpio, uint8_t bit) {
+    if (bit & 1) {
+        gpio_set_level(gpio, 0);
+        ets_delay_us(6);
+        gpio_set_level(gpio, 1);
+        ets_delay_us(64);
+    } else {
+        gpio_set_level(gpio, 0);
+        ets_delay_us(60);
+        gpio_set_level(gpio, 1);
+        ets_delay_us(10);
+    }
+}
+
+uint8_t DS18B20Driver::ow_read_bit(gpio_num_t gpio) {
+    gpio_set_level(gpio, 0);
+    ets_delay_us(3);
+    gpio_set_level(gpio, 1);
+    ets_delay_us(9);
+    uint8_t bit = gpio_get_level(gpio) ? 1 : 0;
+    ets_delay_us(56);
+    return bit;
+}
+
+void DS18B20Driver::ow_write_byte(gpio_num_t gpio, uint8_t data) {
+    portDISABLE_INTERRUPTS();
+    for (uint8_t i = 0; i < 8; i++) {
+        ow_write_bit(gpio, data & 0x01);
+        data >>= 1;
+    }
+    portENABLE_INTERRUPTS();
+}
+
+uint8_t DS18B20Driver::ow_read_byte(gpio_num_t gpio) {
+    uint8_t data = 0;
+    portDISABLE_INTERRUPTS();
+    for (uint8_t i = 0; i < 8; i++) {
+        data |= (ow_read_bit(gpio) << i);
+    }
+    portENABLE_INTERRUPTS();
+    return data;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SEARCH_ROM — Maxim AN187 binary search algorithm
+// ═══════════════════════════════════════════════════════════════
+
+size_t DS18B20Driver::scan_bus(gpio_num_t gpio, RomAddress* results, size_t max_results) {
+    // Налаштувати GPIO для OneWire (open-drain + pull-up)
+    gpio_config_t io_conf = {};
+    io_conf.pin_bit_mask = (1ULL << gpio);
+    io_conf.mode = GPIO_MODE_INPUT_OUTPUT_OD;
+    io_conf.pull_up_en = GPIO_PULLUP_ENABLE;
+    io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+    io_conf.intr_type = GPIO_INTR_DISABLE;
+    gpio_config(&io_conf);
+    gpio_set_level(gpio, 1);
+
+    // Стабілізація шини після конфігурації
+    vTaskDelay(pdMS_TO_TICKS(10));
+
+    size_t found = 0;
+    uint8_t last_discrepancy = 0;    // Bit position of last conflict (1-based)
+    bool last_device = false;
+    uint8_t prev_rom[8] = {};        // ROM з попереднього проходу
+
+    // Захист від нескінченного циклу при шумній шині
+    static constexpr int MAX_SEARCH_PASSES = 24;  // 3x max devices
+    int passes = 0;
+
+    while (!last_device && found < max_results && passes < MAX_SEARCH_PASSES) {
+        passes++;
+
+        // 1. Reset bus
+        if (!ow_reset(gpio)) break;  // Ніхто не відповів
+
+        // 2. Send SEARCH ROM command (0xF0)
+        ow_write_byte(gpio, 0xF0);
+
+        uint8_t rom[8] = {};
+        uint8_t new_discrepancy = 0;  // Нова позиція конфлікту
+        bool search_ok = true;
+
+        // 3. 64-bit search loop
+        // Кожен triplet (read + complement + direction write) в одному critical section
+        // ~210µs на позицію (менше ніж ~560µs для write_byte)
+        for (uint8_t bit_pos = 1; bit_pos <= 64; bit_pos++) {
+            uint8_t byte_idx = (bit_pos - 1) / 8;
+            uint8_t bit_mask = 1 << ((bit_pos - 1) % 8);
+
+            uint8_t bit_val, bit_comp, direction;
+
+            portDISABLE_INTERRUPTS();
+            bit_val  = ow_read_bit(gpio);
+            bit_comp = ow_read_bit(gpio);
+
+            if (bit_val == 1 && bit_comp == 1) {
+                // Ніхто не відповів
+                portENABLE_INTERRUPTS();
+                search_ok = false;
+                break;
+            }
+
+            if (bit_val != bit_comp) {
+                // Всі пристрої мають однаковий біт — немає конфлікту
+                direction = bit_val;
+            } else {
+                // Конфлікт: bit=0, comp=0 → є пристрої і з 0, і з 1
+                if (bit_pos == last_discrepancy) {
+                    direction = 1;
+                } else if (bit_pos > last_discrepancy) {
+                    direction = 0;
+                } else {
+                    direction = (prev_rom[byte_idx] & bit_mask) ? 1 : 0;
+                }
+
+                if (direction == 0) {
+                    new_discrepancy = bit_pos;
+                }
+            }
+
+            // Записуємо напрямок в ROM
+            if (direction) {
+                rom[byte_idx] |= bit_mask;
+            }
+
+            // Повідомляємо шину обраний напрямок
+            ow_write_bit(gpio, direction);
+            portENABLE_INTERRUPTS();
+        }
+
+        if (!search_ok) break;
+
+        // 4. Валідація знайденої адреси
+        if (crc8(rom, 7) != rom[7]) {
+            // CRC failed — НЕ оновлюємо prev_rom/last_discrepancy,
+            // повторюємо з тими ж параметрами
+            ESP_LOGW(TAG, "CRC mismatch during bus scan (pass %d/%d)",
+                     passes, MAX_SEARCH_PASSES);
+            vTaskDelay(pdMS_TO_TICKS(5));  // Пауза для стабілізації шини
+            continue;
+        }
+
+        // Family code validation: DS18B20=0x28, DS18S20=0x10, DS1822=0x22
+        if (rom[0] != 0x28 && rom[0] != 0x10 && rom[0] != 0x22) {
+            ESP_LOGW(TAG, "Unknown family code 0x%02X — not a DS18x20, skipping", rom[0]);
+            // Адреса з правильним CRC але невідомий тип — пропускаємо,
+            // але оновлюємо search state щоб продовжити пошук
+            memcpy(prev_rom, rom, 8);
+            last_discrepancy = new_discrepancy;
+            if (last_discrepancy == 0) last_device = true;
+            continue;
+        }
+
+        memcpy(results[found].bytes, rom, 8);
+        found++;
+        ESP_LOGI(TAG, "Found DS18x20: %02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X",
+                 rom[0], rom[1], rom[2], rom[3],
+                 rom[4], rom[5], rom[6], rom[7]);
+
+        // 5. Оновлюємо search state ТІЛЬКИ при успішній валідації
+        memcpy(prev_rom, rom, 8);
+        last_discrepancy = new_discrepancy;
+        if (last_discrepancy == 0) {
+            last_device = true;  // Всі гілки дерева пройдені
+        }
+    }
+
+    if (passes >= MAX_SEARCH_PASSES) {
+        ESP_LOGW(TAG, "Bus scan aborted after %d passes — noisy bus?", passes);
+    }
+
+    ESP_LOGI(TAG, "Bus scan complete: %d device(s) on GPIO %d", (int)found, gpio);
+    return found;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// read_temp_by_address — для preview під час сканування
+// ═══════════════════════════════════════════════════════════════
+
+bool DS18B20Driver::read_temp_by_address(gpio_num_t gpio,
+                                          const RomAddress& addr, float& temp_out) {
+    // Start conversion з MATCH_ROM
+    if (!ow_reset(gpio)) return false;
+    ow_write_byte(gpio, CMD_MATCH_ROM);
+    for (int i = 0; i < 8; i++) ow_write_byte(gpio, addr.bytes[i]);
+    ow_write_byte(gpio, CMD_CONVERT_T);
+
+    // Чекаємо 750ms на конвертацію
+    vTaskDelay(pdMS_TO_TICKS(800));
+
+    // Read scratchpad з MATCH_ROM
+    if (!ow_reset(gpio)) return false;
+    ow_write_byte(gpio, CMD_MATCH_ROM);
+    for (int i = 0; i < 8; i++) ow_write_byte(gpio, addr.bytes[i]);
+    ow_write_byte(gpio, CMD_READ_SCRATCH);
+
+    uint8_t scratchpad[9];
+    for (int i = 0; i < 9; i++) scratchpad[i] = ow_read_byte(gpio);
+
+    // CRC8 scratchpad check
+    if (crc8(scratchpad, 8) != scratchpad[8]) return false;
+
+    // Decode temperature
+    int16_t raw = (static_cast<int16_t>(scratchpad[1]) << 8) | scratchpad[0];
+    if (raw == 0x0550) return false;  // Power-on reset (85°C)
+
+    temp_out = raw / 16.0f;
+    return true;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// format_address — "28:FF:AA:BB:CC:DD:EE:01"
+// ═══════════════════════════════════════════════════════════════
+
+void DS18B20Driver::format_address(const uint8_t* addr, char* out, size_t out_size) {
+    snprintf(out, out_size, "%02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X",
+             addr[0], addr[1], addr[2], addr[3],
+             addr[4], addr[5], addr[6], addr[7]);
+}
+
+// ═══════════════════════════════════════════════════════════════
 // CRC8 (Dallas/Maxim polynomial: x^8 + x^5 + x^4 + 1)
 // ═══════════════════════════════════════════════════════════════
 

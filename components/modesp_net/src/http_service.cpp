@@ -9,7 +9,9 @@
 #include "modesp/services/config_service.h"
 #include "modesp/services/persist_service.h"
 #include "modesp/net/wifi_service.h"
+#include "modesp/hal/hal.h"
 #include "modesp/types.h"
+#include "ds18b20_driver.h"
 
 #include "esp_log.h"
 #include "esp_system.h"
@@ -865,6 +867,117 @@ esp_err_t HttpService::handle_post_time(httpd_req_t* req) {
     return ESP_OK;
 }
 
+// ── OneWire Scan Handler ────────────────────────────────────────
+
+esp_err_t HttpService::handle_get_ow_scan(httpd_req_t* req) {
+    auto* self = static_cast<HttpService*>(req->user_ctx);
+    set_cors_headers(req);
+
+    if (!self->hal_ || !self->config_) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "HAL not available");
+        return ESP_FAIL;
+    }
+
+    // 1. Отримати bus_id з query string
+    char query[64] = {};
+    char bus_id[16] = {};
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing query: ?bus=ow_1");
+        return ESP_FAIL;
+    }
+    if (httpd_query_key_value(query, "bus", bus_id, sizeof(bus_id)) != ESP_OK) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing 'bus' parameter");
+        return ESP_FAIL;
+    }
+
+    // 2. Знайти GPIO для шини через HAL
+    auto* ow_res = self->hal_->find_onewire_bus(
+        etl::string_view(bus_id, strlen(bus_id)));
+    if (!ow_res) {
+        httpd_resp_send_err(req, HTTPD_404_NOT_FOUND, "Bus not found");
+        return ESP_FAIL;
+    }
+
+    // 3. Scan bus
+    DS18B20Driver::RomAddress devices[DS18B20Driver::MAX_DEVICES_PER_BUS];
+    size_t count = DS18B20Driver::scan_bus(ow_res->gpio, devices,
+                                            DS18B20Driver::MAX_DEVICES_PER_BUS);
+
+    // 4. Побудувати JSON — для кожного пристрою: адреса, температура, role
+    const auto& bindings = self->config_->binding_table().bindings;
+
+    // Збираємо SKIP_ROM bindings на цій шині (без адреси)
+    // Вони вже "займають" пристрій на шині, навіть без конкретної адреси
+    struct SkipRomBinding { const char* role; bool matched; };
+    SkipRomBinding skip_rom[4] = {};
+    size_t skip_rom_count = 0;
+    for (const auto& b : bindings) {
+        if (b.address.empty() &&
+            b.driver_type == "ds18b20" &&
+            b.hardware_id.size() == strlen(bus_id) &&
+            strncmp(b.hardware_id.c_str(), bus_id, b.hardware_id.size()) == 0 &&
+            skip_rom_count < 4) {
+            skip_rom[skip_rom_count++] = { b.role.c_str(), false };
+        }
+    }
+
+    char json[1536];
+    int pos = snprintf(json, sizeof(json),
+        "{\"bus\":\"%s\",\"gpio\":%d,\"devices\":[", bus_id, ow_res->gpio);
+
+    for (size_t i = 0; i < count; i++) {
+        char addr_str[24];
+        DS18B20Driver::format_address(devices[i].bytes, addr_str, sizeof(addr_str));
+
+        float temp = 0;
+        bool has_temp = DS18B20Driver::read_temp_by_address(ow_res->gpio, devices[i], temp);
+
+        // Пошук в bindings: спочатку по адресі
+        const char* role = nullptr;
+        for (const auto& b : bindings) {
+            if (!b.address.empty() &&
+                b.address.size() == strlen(addr_str) &&
+                strncmp(b.address.c_str(), addr_str, b.address.size()) == 0) {
+                role = b.role.c_str();
+                break;
+            }
+        }
+
+        // Якщо не знайдено по адресі — перевіряємо SKIP_ROM bindings на цій шині
+        if (!role) {
+            for (size_t s = 0; s < skip_rom_count; s++) {
+                if (!skip_rom[s].matched) {
+                    role = skip_rom[s].role;
+                    skip_rom[s].matched = true;
+                    break;
+                }
+            }
+        }
+
+        if (i > 0) pos += snprintf(json + pos, sizeof(json) - pos, ",");
+        pos += snprintf(json + pos, sizeof(json) - pos,
+            "{\"address\":\"%s\"", addr_str);
+        if (has_temp) {
+            pos += snprintf(json + pos, sizeof(json) - pos,
+                ",\"temperature\":%.1f", static_cast<double>(temp));
+        }
+        if (role) {
+            pos += snprintf(json + pos, sizeof(json) - pos,
+                ",\"role\":\"%s\",\"status\":\"assigned\"", role);
+        } else {
+            pos += snprintf(json + pos, sizeof(json) - pos,
+                ",\"role\":null,\"status\":\"new\"");
+        }
+        pos += snprintf(json + pos, sizeof(json) - pos, "}");
+
+        if (pos >= (int)sizeof(json) - 128) break;  // Захист від overflow
+    }
+    pos += snprintf(json + pos, sizeof(json) - pos, "]}");
+
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_send(req, json, pos);
+}
+
 // ── Static file handler ─────────────────────────────────────────
 
 static const char* get_content_type(const char* path) {
@@ -967,6 +1080,7 @@ void HttpService::register_api_handlers() {
         {"/api/ota",        HTTP_GET,  handle_get_ota},
         {"/api/time",       HTTP_GET,  handle_get_time},
         {"/api/time",       HTTP_POST, handle_post_time},
+        {"/api/onewire/scan", HTTP_GET, handle_get_ow_scan},
     };
 
     // Реєструємо handlers + OPTIONS для CORS preflight

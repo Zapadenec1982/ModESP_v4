@@ -147,7 +147,8 @@ NTC через ADC, кілька DS18B20, DigitalInput driver.
 
 ## Changelog
 
-- 2026-02-22 — Phase 11b DONE: Multi DS18B20 (MATCH_ROM), NTC/ADC driver, DigitalInput C++ driver. HAL: GpioInputConfig, AdcChannelConfig, Binding.address. Equipment: condenser_temp + door_contact. 81 state keys, 206 тестів, idf.py build OK.
+- 2026-02-23 — Phase 11b COMPLETE: SEARCH_ROM (Maxim AN187), GET /api/onewire/scan endpoint, WebUI OneWire Discovery (scan + assign in BindingsEditor). HttpService: set_hal() for scan. 206 тестів.
+- 2026-02-22 — Phase 11b: Multi DS18B20 (MATCH_ROM), NTC/ADC driver, DigitalInput C++ driver. HAL: GpioInputConfig, AdcChannelConfig, Binding.address. Equipment: condenser_temp + door_contact. 81 state keys, 206 тестів.
 - 2026-02-21 — Phase 11a DONE: Night Setback (4 modes: off/schedule/DI/manual), Post-defrost alarm suppression (0-120 хв), Display during defrost (real/frozen/-d-). Equipment: night_input role. 80 state keys, 206 тестів, WebUI deployed.
 - 2026-02-21 — BUG-022 FIXED: компресор не стартує після відтайки. Причина: thermostat залишався в COOLING з compressor_on_=false, enter_state(COOLING) блокувався re-entry guard. Фікс: force state→IDLE після defrost.
 - 2026-02-21 — Bugfix batch: BUG-006 (re-entry guard), BUG-021 (WS mutex), BUG-014 (flush_now), BUG-013 (read helpers→BaseModule), BUG-018 (ESP_LOGE+counter), AUDIT-019 (reset_alarms button), AUDIT-021 (buffer 4096). 0 OPEN bugs, 206 тестів зелені.

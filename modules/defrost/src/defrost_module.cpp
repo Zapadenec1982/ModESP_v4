@@ -339,6 +339,21 @@ bool DefrostModule::check_demand_trigger() {
 void DefrostModule::start_defrost(const char* reason) {
     // Кешуємо тип defrost на весь цикл — зміна через WebUI не впливає mid-cycle (BUG-002 fix)
     active_defrost_type_ = defrost_type_;
+
+    // BUG-011: Валідація наявності обладнання для обраного типу дефросту.
+    // Якщо обрано hotgas але hg_valve не сконфігурований — fallback на natural.
+    // Якщо обрано heater але heater не сконфігурований — fallback на natural.
+    // Без цього компресор працює під час "дефросту" без перенаправлення газу,
+    // і холодильник фактично продовжує охолодження.
+    if (active_defrost_type_ == 2 && !read_bool("equipment.has_hg_valve")) {
+        ESP_LOGW(TAG, "Hotgas defrost selected but hg_valve NOT configured — fallback to NATURAL");
+        active_defrost_type_ = 0;
+    }
+    if (active_defrost_type_ == 1 && !read_bool("equipment.has_heater")) {
+        ESP_LOGW(TAG, "Heater defrost selected but heater NOT configured — fallback to NATURAL");
+        active_defrost_type_ = 0;
+    }
+
     ESP_LOGI(TAG, "Starting defrost (%s), type=%ld", reason, static_cast<long>(active_defrost_type_));
     interval_timer_ms_ = 0;
 

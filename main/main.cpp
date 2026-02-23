@@ -229,6 +229,7 @@ extern "C" void app_main(void)
     http_service.set_modules(&app.modules());
     http_service.set_wifi(&wifi_service);
     http_service.set_persist(&persist_service);
+    http_service.set_hal(&hal);
 
     ws_service.set_state(&app.state());
 
