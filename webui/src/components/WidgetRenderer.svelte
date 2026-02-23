@@ -19,6 +19,7 @@
   import TimezoneSelect from './widgets/TimezoneSelect.svelte';
   import DefrostToggle from './widgets/DefrostToggle.svelte';
   import FileUploadWidget from './widgets/FileUploadWidget.svelte';
+  import ChartWidget from './widgets/ChartWidget.svelte';
 
   export let widget;
   export let value;
@@ -43,7 +44,8 @@
     ap_save: ApSave,
     timezone_select: TimezoneSelect,
     defrost_toggle: DefrostToggle,
-    file_upload: FileUploadWidget
+    file_upload: FileUploadWidget,
+    chart: ChartWidget
   };
 
   $: component = widgetMap[widget.widget] || ValueWidget;
