@@ -132,7 +132,7 @@ private:
     // Захищає компресор незалежно від джерела запиту (thermostat/defrost).
     // Доповнює, а не замінює таймери thermostat (ті працюють для state machine логіки).
     bool  comp_actual_        = false;   // Фактичний стан компресора
-    uint32_t comp_since_ms_   = 999999;  // Час з останнього перемикання (мс)
+    uint32_t comp_since_ms_   = modesp::TIMER_SATISFIED;  // Час з останнього перемикання
     static constexpr uint32_t COMP_MIN_OFF_MS = 180000;  // 3 хв min OFF
     static constexpr uint32_t COMP_MIN_ON_MS  = 120000;  // 2 хв min ON
 };

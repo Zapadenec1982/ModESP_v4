@@ -120,7 +120,7 @@ private:
 
     uint32_t state_timer_ms_   = 0;        // Час в поточному стані
     uint32_t comp_on_time_ms_  = 0;        // Час з моменту ON
-    uint32_t comp_off_time_ms_ = 999999;   // Час з моменту OFF (великий для першого старту)
+    uint32_t comp_off_time_ms_ = modesp::TIMER_SATISFIED;   // Час з моменту OFF (великий для першого старту)
     uint32_t cond_fan_off_timer_ms_ = 0;   // Таймер затримки вимкнення вент. конд.
     bool     cond_fan_delay_active_ = false;
 

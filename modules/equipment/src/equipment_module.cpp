@@ -112,7 +112,7 @@ bool EquipmentModule::on_init() {
 void EquipmentModule::on_update(uint32_t dt_ms) {
     // AUDIT-003: оновлюємо таймер компресора
     comp_since_ms_ += dt_ms;
-    if (comp_since_ms_ > 999999) comp_since_ms_ = 999999;  // Запобігаємо overflow
+    if (comp_since_ms_ > modesp::TIMER_SATISFIED) comp_since_ms_ = modesp::TIMER_SATISFIED;
 
     // 1. Читаємо сенсори → SharedState
     read_sensors();

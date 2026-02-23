@@ -1219,6 +1219,9 @@ esp_err_t HttpService::handle_static(httpd_req_t* req) {
     httpd_resp_set_type(req, get_content_type(filepath));
     if (use_gz) {
         httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
+        httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=86400");
+    } else {
+        httpd_resp_set_hdr(req, "Cache-Control", "no-cache");
     }
 
     // Stream file in chunks

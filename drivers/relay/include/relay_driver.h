@@ -17,6 +17,7 @@
 #pragma once
 
 #include "modesp/hal/driver_interfaces.h"
+#include "modesp/types.h"
 #include "driver/gpio.h"
 #include "etl/string.h"
 
@@ -49,5 +50,5 @@ private:
     bool initialized_          = false;
     bool configured_           = false;
     uint32_t cycles_           = 0;
-    uint32_t since_last_switch_ms_ = 999999;
+    uint32_t since_last_switch_ms_ = modesp::TIMER_SATISFIED;
 };

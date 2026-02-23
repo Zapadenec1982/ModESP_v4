@@ -121,4 +121,12 @@ namespace msg_id {
     constexpr etl::message_id_t DEFROST_END        = 171;
 } // namespace msg_id
 
+// ═══════════════════════════════════════════════════════════════
+// Спільні константи таймерів
+// ═══════════════════════════════════════════════════════════════
+
+/// Початкове значення таймера — "достатньо часу пройшло, дозволяємо дію".
+/// Використовується для anti-short-cycle, min_on/off, relay min_switch.
+static constexpr uint32_t TIMER_SATISFIED = 999999;
+
 } // namespace modesp
