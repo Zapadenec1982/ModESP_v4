@@ -155,11 +155,17 @@ void EquipmentModule::on_stop() {
 // ═══════════════════════════════════════════════════════════════
 
 void EquipmentModule::read_sensors() {
+    // Коефіцієнт цифрового фільтра (0 = вимкнено, 1-10 = EMA)
+    int coeff = read_int("equipment.filter_coeff", 4);
+    float alpha = (coeff > 0) ? 1.0f / (coeff + 1) : 1.0f;
+
     // Датчик камери (обов'язковий)
     if (sensor_air_) {
         float temp = 0.0f;
         if (sensor_air_->read(temp)) {
-            air_temp_ = temp;
+            if (!ema_air_init_) { ema_air_ = temp; ema_air_init_ = true; }
+            else { ema_air_ += (temp - ema_air_) * alpha; }
+            air_temp_ = ema_air_;
             state_set("equipment.air_temp", air_temp_);
         }
         // is_healthy() враховує consecutive_errors (драйвер відстежує).
@@ -172,7 +178,9 @@ void EquipmentModule::read_sensors() {
     if (sensor_evap_) {
         float temp = 0.0f;
         if (sensor_evap_->read(temp)) {
-            evap_temp_ = temp;
+            if (!ema_evap_init_) { ema_evap_ = temp; ema_evap_init_ = true; }
+            else { ema_evap_ += (temp - ema_evap_) * alpha; }
+            evap_temp_ = ema_evap_;
             state_set("equipment.evap_temp", evap_temp_);
         }
         state_set("equipment.sensor2_ok", sensor_evap_->is_healthy());
@@ -182,7 +190,9 @@ void EquipmentModule::read_sensors() {
     if (sensor_cond_) {
         float temp = 0.0f;
         if (sensor_cond_->read(temp)) {
-            cond_temp_ = temp;
+            if (!ema_cond_init_) { ema_cond_ = temp; ema_cond_init_ = true; }
+            else { ema_cond_ += (temp - ema_cond_) * alpha; }
+            cond_temp_ = ema_cond_;
             state_set("equipment.cond_temp", cond_temp_);
         }
     }

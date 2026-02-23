@@ -92,6 +92,14 @@ private:
     float evap_temp_ = 0.0f;
     float cond_temp_ = 0.0f;
 
+    // EMA фільтр температури (цифровий фільтр, аналог FiL у Dixell)
+    float ema_air_  = 0.0f;
+    float ema_evap_ = 0.0f;
+    float ema_cond_ = 0.0f;
+    bool  ema_air_init_  = false;
+    bool  ema_evap_init_ = false;
+    bool  ema_cond_init_ = false;
+
     // Requests від бізнес-модулів (читаються кожен цикл з SharedState)
     struct Requests {
         // Thermostat
