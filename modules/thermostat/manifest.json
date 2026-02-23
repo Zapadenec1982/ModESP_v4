@@ -115,7 +115,7 @@
       "values": {
         "0": {"always": true},
         "1": {"always": true},
-        "2": {"requires_feature": "fan_temp_control"}
+        "2": {"requires_feature": "fan_temp_control", "disabled_hint": "Потрібен датчик випарника (evap_temp)"}
       }
     },
     "thermostat.night_mode": {
@@ -123,7 +123,7 @@
       "values": {
         "0": {"always": true},
         "1": {"always": true},
-        "2": {"requires_feature": "night_di"},
+        "2": {"requires_feature": "night_di", "disabled_hint": "Потрібен дискретний вхід (night_input)"},
         "3": {"always": true}
       }
     }
@@ -459,15 +459,18 @@
           },
           {
             "key": "thermostat.fan_stop_temp",
-            "widget": "number_input"
+            "widget": "number_input",
+            "visible_when": {"key": "thermostat.evap_fan_mode", "eq": 2}
           },
           {
             "key": "thermostat.fan_stop_hyst",
-            "widget": "number_input"
+            "widget": "number_input",
+            "visible_when": {"key": "thermostat.evap_fan_mode", "eq": 2}
           },
           {
             "key": "thermostat.cond_fan_delay",
-            "widget": "number_input"
+            "widget": "number_input",
+            "visible_when": {"key": "equipment.has_cond_fan", "eq": true}
           }
         ]
       },
@@ -497,15 +500,18 @@
           },
           {
             "key": "thermostat.night_setback",
-            "widget": "number_input"
+            "widget": "number_input",
+            "visible_when": {"key": "thermostat.night_mode", "in": [1, 2, 3]}
           },
           {
             "key": "thermostat.night_start",
-            "widget": "number_input"
+            "widget": "number_input",
+            "visible_when": {"key": "thermostat.night_mode", "eq": 1}
           },
           {
             "key": "thermostat.night_end",
-            "widget": "number_input"
+            "widget": "number_input",
+            "visible_when": {"key": "thermostat.night_mode", "eq": 1}
           }
         ]
       },

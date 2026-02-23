@@ -189,6 +189,33 @@ class ManifestValidator:
                         f"[{name}] State key '{wkey}' has options but "
                         f"widget is '{wtype}' (expected 'select')")
 
+        # V19: visible_when format validation (cards + widgets)
+        def _validate_visible_when(vw, context):
+            if not isinstance(vw, dict):
+                self.errors.append(f"[{name}] {context}: visible_when must be object")
+                return
+            if "key" not in vw or not isinstance(vw["key"], str):
+                self.errors.append(f"[{name}] {context}: visible_when must have 'key' (string)")
+                return
+            ops = [op for op in ("eq", "neq", "in") if op in vw]
+            if len(ops) != 1:
+                self.errors.append(
+                    f"[{name}] {context}: visible_when must have exactly one operator "
+                    f"(eq/neq/in), found: {ops}")
+                return
+            op = ops[0]
+            if op == "in" and not isinstance(vw["in"], list):
+                self.errors.append(f"[{name}] {context}: visible_when 'in' must be array")
+
+        for card in ui.get("cards", []):
+            if "visible_when" in card:
+                _validate_visible_when(card["visible_when"],
+                                       f"card '{card.get('title', '?')}'")
+            for w in card.get("widgets", []):
+                if "visible_when" in w:
+                    _validate_visible_when(w["visible_when"],
+                                           f"widget '{w.get('key', '?')}'")
+
         return len(self.errors) == 0
 
     def validate_cross_module(self, manifests, active_modules=None):
@@ -588,9 +615,18 @@ class FeatureResolver:
             result[m.get("module", "?")] = self.resolve_module(m)
         return result
 
+    # Маппінг feature → equipment.has_* state key (для runtime disabled options)
+    FEATURE_TO_STATE = {
+        "defrost_electric":  "equipment.has_heater",
+        "defrost_hot_gas":   "equipment.has_hg_valve",
+        "defrost_by_sensor": "equipment.has_evap_temp",
+        "fan_temp_control":  "equipment.has_evap_temp",
+        "night_di":          "equipment.has_night_input",
+    }
+
     def resolve_constraints(self, module_manifest, active_features):
-        """Фільтрує options за constraints + active features.
-        Повертає dict {setting_key: [filtered_options]}."""
+        """Повертає ВСІ options + requires_state/disabled_hint для runtime перевірки.
+        Повертає dict {setting_key: [options_with_requires_state]}."""
         constraints = module_manifest.get("constraints", {})
         state = module_manifest.get("state", {})
         result = {}
@@ -601,17 +637,17 @@ class FeatureResolver:
             original_options = state.get(key, {}).get("options", [])
             if not original_options:
                 continue
-            # Фільтруємо за constraints
+            # Додаємо ВСІ options + requires_state для runtime disabled
             filtered = []
             for opt in original_options:
                 val_str = str(opt["value"])
                 rule = constraint.get("values", {}).get(val_str, {})
-                if rule.get("always", False):
-                    filtered.append(opt)
-                elif rule.get("requires_feature"):
-                    if active_features.get(rule["requires_feature"], False):
-                        filtered.append(opt)
-                # Якщо немає правила для цього value — пропускаємо
+                new_opt = dict(opt)
+                feat = rule.get("requires_feature")
+                if feat and feat in self.FEATURE_TO_STATE:
+                    new_opt["requires_state"] = self.FEATURE_TO_STATE[feat]
+                    new_opt["disabled_hint"] = rule.get("disabled_hint", "Недоступно")
+                filtered.append(new_opt)
             result[key] = filtered
         return result
 
@@ -733,6 +769,8 @@ class UIJsonGenerator:
                 page_card["group"] = card["group"]
             if card.get("collapsible"):
                 page_card["collapsible"] = True
+            if "visible_when" in card:
+                page_card["visible_when"] = card["visible_when"]
 
             for w in card.get("widgets", []):
                 widget = self._build_widget(w, manifest)
@@ -788,6 +826,9 @@ class UIJsonGenerator:
                      "api_endpoint", "confirm"):
             if prop in w:
                 widget[prop] = w[prop]
+        # visible_when passthrough
+        if "visible_when" in w:
+            widget["visible_when"] = w["visible_when"]
         return widget
 
     def _dashboard_page(self, manifests):

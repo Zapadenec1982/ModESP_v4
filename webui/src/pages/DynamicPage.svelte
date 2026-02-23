@@ -1,6 +1,7 @@
 <script>
   import { pages } from '../stores/ui.js';
   import { state } from '../stores/state.js';
+  import { isVisible } from '../lib/visibility.js';
   import Card from '../components/Card.svelte';
   import WidgetRenderer from '../components/WidgetRenderer.svelte';
 
@@ -12,11 +13,15 @@
 {#if page}
   <div class="page-grid">
     {#each page.cards as card}
-      <Card title={card.title} collapsible={card.collapsible || false}>
-        {#each card.widgets as widget}
-          <WidgetRenderer {widget} value={$state[widget.key]} />
-        {/each}
-      </Card>
+      {#if isVisible(card.visible_when, $state)}
+        <Card title={card.title} collapsible={card.collapsible || false}>
+          {#each card.widgets as widget}
+            {#if isVisible(widget.visible_when, $state)}
+              <WidgetRenderer {widget} value={$state[widget.key]} />
+            {/if}
+          {/each}
+        </Card>
+      {/if}
     {/each}
   </div>
 {:else}

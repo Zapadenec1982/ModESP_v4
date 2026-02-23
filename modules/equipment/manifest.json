@@ -27,8 +27,11 @@
     "equipment.cond_fan":    {"type": "bool",  "access": "read", "description": "Фактичний стан вент. конденсатора"},
     "equipment.hg_valve":    {"type": "bool",  "access": "read", "description": "Фактичний стан клапана ГГ"},
     "equipment.cond_temp":   {"type": "float", "access": "read", "unit": "°C", "description": "Температура конденсатора"},
-    "equipment.door_open":   {"type": "bool",  "access": "read", "description": "Стан дверей"},
-    "equipment.night_input": {"type": "bool",  "access": "read", "description": "Дискретний вхід нічного режиму"}
+    "equipment.door_open":        {"type": "bool",  "access": "read", "description": "Стан дверей"},
+    "equipment.night_input":      {"type": "bool",  "access": "read", "description": "Дискретний вхід нічного режиму"},
+    "equipment.has_cond_fan":     {"type": "bool",  "access": "read", "description": "Вент. конденсатора доступний"},
+    "equipment.has_door_contact": {"type": "bool",  "access": "read", "description": "Контакт дверей доступний"},
+    "equipment.has_evap_temp":    {"type": "bool",  "access": "read", "description": "Датчик випарника доступний"}
   },
 
 

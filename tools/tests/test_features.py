@@ -173,18 +173,42 @@ class TestFeatureResolver:
 class TestConstraintsResolver:
     """Тести фільтрації options за constraints."""
 
-    def test_defrost_no_constraints(self, equipment, defrost):
-        """Defrost constraints removed — all options always visible."""
+    def test_defrost_constraints_with_requires_state(self, equipment, defrost):
+        """Defrost constraints — всі options є, disabled мають requires_state."""
         bindings = load_fixture("bindings_minimal.json")
         resolver = FeatureResolver(bindings, equipment)
         active = resolver.resolve_module(defrost)
         constraints = resolver.resolve_constraints(defrost, active)
-        # No constraint filtering — options come from state definition directly
-        assert "defrost.type" not in constraints
-        assert "defrost.initiation" not in constraints
+        # defrost.type має constraints → всі 3 options в результаті
+        assert "defrost.type" in constraints
+        type_opts = constraints["defrost.type"]
+        assert len(type_opts) == 3
+        # Option 0 (за часом) — без requires_state
+        assert "requires_state" not in type_opts[0]
+        # Option 1 (електрична) — requires_state = equipment.has_heater
+        assert type_opts[1]["requires_state"] == "equipment.has_heater"
+        assert "disabled_hint" in type_opts[1]
+        # Option 2 (гарячий газ) — requires_state = equipment.has_hg_valve
+        assert type_opts[2]["requires_state"] == "equipment.has_hg_valve"
+
+    def test_defrost_initiation_constraints(self, equipment, defrost):
+        """Defrost initiation constraints — sensor options мають requires_state."""
+        bindings = load_fixture("bindings_minimal.json")
+        resolver = FeatureResolver(bindings, equipment)
+        active = resolver.resolve_module(defrost)
+        constraints = resolver.resolve_constraints(defrost, active)
+        assert "defrost.initiation" in constraints
+        init_opts = constraints["defrost.initiation"]
+        assert len(init_opts) == 4
+        # Option 0 (таймер) та 3 (вимкнено) — без requires_state
+        assert "requires_state" not in init_opts[0]
+        assert "requires_state" not in init_opts[3]
+        # Option 1, 2 — requires_state = equipment.has_evap_temp
+        assert init_opts[1]["requires_state"] == "equipment.has_evap_temp"
+        assert init_opts[2]["requires_state"] == "equipment.has_evap_temp"
 
     def test_fan_mode_without_evap_temp(self, equipment, thermostat):
-        """evap_fan без evap_temp → mode 0,1 доступні, mode 2 ні."""
+        """evap_fan без evap_temp → всі options є, mode 2 має requires_state."""
         bindings = {"bindings": [
             {"role": "compressor"}, {"role": "air_temp"}, {"role": "evap_fan"}
         ]}
@@ -194,7 +218,11 @@ class TestConstraintsResolver:
         values = [o["value"] for o in constraints["thermostat.evap_fan_mode"]]
         assert 0 in values
         assert 1 in values
-        assert 2 not in values
+        assert 2 in values  # Тепер всі присутні
+        # mode 2 має requires_state
+        mode2 = [o for o in constraints["thermostat.evap_fan_mode"] if o["value"] == 2][0]
+        assert mode2["requires_state"] == "equipment.has_evap_temp"
+        assert "disabled_hint" in mode2
 
     def test_fan_mode_full(self, equipment, thermostat):
         """evap_fan+evap_temp → всі 3 режими."""

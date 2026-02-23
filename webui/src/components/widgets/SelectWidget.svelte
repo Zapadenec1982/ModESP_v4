@@ -1,6 +1,7 @@
 <script>
   import { apiPost } from '../../lib/api.js';
   import { setStateKey } from '../../stores/state.js';
+  import { state } from '../../stores/state.js';
 
   export let config;
   export let value;
@@ -8,6 +9,16 @@
   $: options = config.options || [];
   $: disabled = config.disabled || false;
   $: current = value !== undefined && value !== null ? value : '';
+
+  // Runtime: перевірка requires_state через $state
+  $: enriched = options.map(opt => ({
+    ...opt,
+    isDisabled: opt.requires_state ? !$state[opt.requires_state] : false
+  }));
+
+  // Hint для поточного disabled значення (якщо NVS має старе значення)
+  $: currentOpt = enriched.find(o => o.value === current);
+  $: hint = currentOpt?.isDisabled ? currentOpt.disabled_hint : null;
 
   function onChange(e) {
     const nv = parseInt(e.target.value);
@@ -21,10 +32,15 @@
 <div class="select-widget" class:disabled>
   <div class="select-label">{config.description || config.key}</div>
   <select class="select-input" value={current} on:change={onChange} {disabled}>
-    {#each options as opt}
-      <option value={opt.value}>{opt.label}</option>
+    {#each enriched as opt}
+      <option value={opt.value} disabled={opt.isDisabled}>
+        {opt.label}{opt.isDisabled ? ' ⊘' : ''}
+      </option>
     {/each}
   </select>
+  {#if hint}
+    <div class="disabled-hint">{hint}</div>
+  {/if}
   {#if disabled && config.disabled_reason}
     <div class="disabled-reason">{config.disabled_reason}</div>
   {/if}
@@ -47,5 +63,6 @@
   }
   .select-input:disabled { cursor: not-allowed; }
   .select-input:focus { outline: none; border-color: var(--accent); }
+  .disabled-hint { font-size: 11px; color: var(--warning, #f39c12); margin-top: 4px; }
   .disabled-reason { font-size: 11px; color: var(--danger, #e74c3c); margin-top: 4px; }
 </style>

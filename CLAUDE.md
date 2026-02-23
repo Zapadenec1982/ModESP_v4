@@ -98,8 +98,21 @@ board.json + bindings.json ─┘
 - **features_config.h:** constexpr масив + `is_feature_active(module, feature)` inline lookup
 - **has_feature():** метод BaseModule для runtime guards в C++ модулях
 - **Drivers:** ds18b20 (sensor, MATCH_ROM multi-sensor, SEARCH_ROM scan), relay (actuator), digital_input (sensor, GPIO input), ntc (sensor, ADC thermistor)
-- **Validation:** V14 (controls_settings exist), V15 (requires_roles exist), V16 (requires_feature exist), V17 (options int), V18 (options→select)
-- **209 pytest тестів** (43 нових у test_features.py + 4 binding fixtures)
+- **Validation:** V14 (controls_settings exist), V15 (requires_roles exist), V16 (requires_feature exist), V17 (options int), V18 (options→select), V19 (visible_when format)
+
+### Runtime UI Visibility (Phase 13a)
+
+- **visible_when:** cards та widgets ховаються/показуються на основі state key значень
+  - Формат: `{"key": "state.key", "eq": value}` або `"neq"` або `"in": [...]`
+  - Маніфести: defrost (hot gas card, end_temp, demand_temp, fad_temp), thermostat (fan/night params), protection (door_delay)
+  - `isVisible(vw, $state)` — утиліта в `webui/src/lib/visibility.js`
+- **requires_state (per-option disabled):** select options завжди присутні в ui.json, але недоступні якщо hardware відсутнє
+  - resolve_constraints() тепер зберігає ВСІ options + додає `requires_state` та `disabled_hint`
+  - FEATURE_TO_STATE mapping: feature name → `equipment.has_*` state key
+  - SelectWidget перевіряє `$state[opt.requires_state]` реактивно
+- **equipment.has_* state keys:** `has_heater`, `has_hg_valve`, `has_cond_fan`, `has_door_contact`, `has_evap_temp`
+- **Runtime ланцюг:** Bindings page → Save → Restart → equipment.has_* = true → option enabled / card visible
+- **178 pytest тестів**
 
 ### Файли які МОЖНА редагувати
 - `modules/*/manifest.json` — опис модулів (UI, state, mqtt, display, features, constraints)
@@ -152,8 +165,9 @@ board.json + bindings.json ─┘
 
 ### Options (select widgets)
 - State key з полем `options: [{value, label}, ...]` → widget "select" в UI
-- `constraints` секція фільтрує options: `enum_filter` → requires_feature → active features
-- Приклад: defrost.type options фільтруються — без heater → тільки "За часом"
+- `constraints` секція: `enum_filter` → requires_feature → FEATURE_TO_STATE → requires_state на option
+- Всі options завжди присутні в ui.json; недоступні показуються як disabled з hint
+- Приклад: defrost.type "Гарячий газ" має `requires_state: "equipment.has_hg_valve"` — disabled поки не підключений
 
 ## Структура проекту
 
@@ -273,12 +287,14 @@ ModESP_v4/
 
 ## Правила документування (ОБОВ'ЯЗКОВО)
 
-### Git — коміти після кожної сесії
+### Git — коміти та push після КОЖНОЇ зміни
 
-Після завершення задачі Claude Code ПОВИНЕН:
-1. `git add -A`
+**ОБОВ'ЯЗКОВО:** після завершення кожної задачі або логічного блоку змін Claude Code ПОВИНЕН:
+1. `git add` — додати змінені файли
 2. `git commit` — conventional commits, опис українською, деталізація в body
-3. `git push origin main`
+3. `git push origin main` — ЗАВЖДИ пушити на remote
+
+Не відкладай push на "потім". Кожен коміт = push.
 
 Формат commit message:
 ```
@@ -331,6 +347,11 @@ feat(module): короткий опис
 | `next_prompt.md` | Промпт для наступної сесії | В кінці поточної сесії |
 
 ## Changelog
+- 2026-02-23 — Phase 13a DONE: Runtime UI visibility (visible_when + requires_state). Manifests: constraints
+  з disabled_hint, visible_when на defrost/thermostat/protection cards/widgets. Generator: resolve_constraints()
+  зберігає ВСІ options + requires_state (FEATURE_TO_STATE mapping), visible_when passthrough, V19 validation.
+  Svelte: isVisible() utility, SelectWidget per-option disabled, DynamicPage visible_when. Equipment: +3 has_* keys
+  (has_cond_fan, has_door_contact, has_evap_temp). 84 state keys, 178 тестів. Runtime: Bindings→Save→Restart→enabled.
 - 2026-02-23 — Phase 11b COMPLETE: SEARCH_ROM (Maxim AN187 binary search), GET /api/onewire/scan endpoint
   (scan bus → devices with temperature + assigned status), WebUI OneWire Discovery in BindingsEditor
   (scan button, device list, role assignment). HttpService: set_hal() injection for scan.

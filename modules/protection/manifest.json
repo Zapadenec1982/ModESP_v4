@@ -243,7 +243,8 @@
           },
           {
             "key": "protection.door_delay",
-            "widget": "number_input"
+            "widget": "number_input",
+            "visible_when": {"key": "equipment.has_door_contact", "eq": true}
           },
           {
             "key": "protection.post_defrost_delay",

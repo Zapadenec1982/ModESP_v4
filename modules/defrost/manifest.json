@@ -62,7 +62,25 @@
     }
   },
 
-  "constraints": {},
+  "constraints": {
+    "defrost.type": {
+      "type": "enum_filter",
+      "values": {
+        "0": {"always": true},
+        "1": {"requires_feature": "defrost_electric", "disabled_hint": "Потрібен тен (heater)"},
+        "2": {"requires_feature": "defrost_hot_gas", "disabled_hint": "Потрібен клапан ГГ (hg_valve)"}
+      }
+    },
+    "defrost.initiation": {
+      "type": "enum_filter",
+      "values": {
+        "0": {"always": true},
+        "1": {"requires_feature": "defrost_by_sensor", "disabled_hint": "Потрібен датчик випарника (evap_temp)"},
+        "2": {"requires_feature": "defrost_by_sensor", "disabled_hint": "Потрібен датчик випарника (evap_temp)"},
+        "3": {"always": true}
+      }
+    }
+  },
 
   "state": {
     "defrost.active": {
@@ -353,7 +371,8 @@
           },
           {
             "key": "defrost.end_temp",
-            "widget": "number_input"
+            "widget": "number_input",
+            "visible_when": {"key": "defrost.initiation", "in": [1, 2]}
           },
           {
             "key": "defrost.max_duration",
@@ -361,7 +380,8 @@
           },
           {
             "key": "defrost.demand_temp",
-            "widget": "number_input"
+            "widget": "number_input",
+            "visible_when": {"key": "defrost.initiation", "in": [1, 2]}
           },
           {
             "key": "defrost.drip_time",
@@ -373,7 +393,8 @@
           },
           {
             "key": "defrost.fad_temp",
-            "widget": "number_input"
+            "widget": "number_input",
+            "visible_when": {"key": "defrost.initiation", "in": [1, 2]}
           }
         ]
       },
@@ -381,6 +402,7 @@
         "title": "Гарячий газ",
         "group": "settings",
         "collapsible": true,
+        "visible_when": {"key": "defrost.type", "eq": 2},
         "widgets": [
           {
             "key": "defrost.stabilize_time",
