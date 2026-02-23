@@ -112,7 +112,18 @@ board.json + bindings.json ─┘
   - SelectWidget перевіряє `$state[opt.requires_state]` реактивно
 - **equipment.has_* state keys:** `has_heater`, `has_hg_valve`, `has_cond_fan`, `has_door_contact`, `has_evap_temp`
 - **Runtime ланцюг:** Bindings page → Save → Restart → equipment.has_* = true → option enabled / card visible
-- **178 pytest тестів**
+
+### DataLogger (Phase 14)
+
+- **Append-only logging:** температура семплюється кожні N секунд (default 60), події edge-detect
+- **LittleFS storage:** temp.bin + events.bin з rotate при перевищенні ліміту (`retention_hours × 60 × 8` bytes)
+- **RAM buffer:** 16 temp + 32 events, flush кожні 10 хвилин
+- **10 event types:** compressor on/off, defrost start/end, alarm high/low/clear, door open/close, power_on
+- **Streaming chunked JSON:** GET /api/log?hours=24 — читає .old + .bin + RAM buffer, без великого буфера
+- **GET /api/log/summary:** {hours, temp_count, event_count, flash_kb}
+- **ChartWidget (SVG):** polyline з downsampling (max 720 точок min/max bucket), zones (comp/defrost), tooltip
+- **6 state keys** (3 persist: enabled, retention_hours, sample_interval; 3 readonly: records_count, events_count, flash_used)
+- **207 pytest тестів**
 
 ### Файли які МОЖНА редагувати
 - `modules/*/manifest.json` — опис модулів (UI, state, mqtt, display, features, constraints)
@@ -268,6 +279,8 @@ ModESP_v4/
 | /api/ota | GET | Firmware version/partition info |
 | /api/ota | POST | OTA firmware upload (.bin) |
 | /api/onewire/scan | GET | Scan OneWire bus (SEARCH_ROM), return devices with T |
+| /api/log | GET | DataLogger: streaming chunked JSON (?hours=24) |
+| /api/log/summary | GET | DataLogger: {hours, temp_count, event_count, flash_kb} |
 | /api/restart | POST | ESP restart |
 | /ws | WS | Real-time state broadcast |
 | /* | GET | Static files (LittleFS) |
@@ -347,10 +360,11 @@ feat(module): короткий опис
 | `next_prompt.md` | Промпт для наступної сесії | В кінці поточної сесії |
 
 ## Changelog
-- 2026-02-24 — Tech debt: TIMER_SATISFIED constant (types.h, replaces magic 999999 in 4 files),
-  Cache-Control headers (.gz=max-age=86400, html=no-cache), AUDIT-012 separate alarm delays
-  (high_alarm_delay + low_alarm_delay), AUDIT-036 CLOSED (REDUNDANT). 86 state keys, 41 STATE_META,
-  39 MQTT sub, 207 тестів. EMA filter (equipment.filter_coeff) from previous session.
+- 2026-02-24 — Phase 14 DONE: DataLogger module (append+rotate LittleFS, streaming chunked JSON,
+  10 event types, 6 state keys) + ChartWidget (SVG polyline, min/max downsample, comp/defrost zones,
+  tooltip, 24h/48h toggle). GET /api/log, GET /api/log/summary. downsample.js utility.
+  Tech debt: TIMER_SATISFIED, Cache-Control, AUDIT-012 separate alarm delays, AUDIT-036 CLOSED.
+  92 state keys, 44 STATE_META, 37 MQTT pub, 42 MQTT sub, 207 тестів. 5 modules, 9 pages.
 - 2026-02-23 — Phase 13a DONE: Runtime UI visibility (visible_when + requires_state). Manifests: constraints
   з disabled_hint, visible_when на defrost/thermostat/protection cards/widgets. Generator: resolve_constraints()
   зберігає ВСІ options + requires_state (FEATURE_TO_STATE mapping), visible_when passthrough, V19 validation.

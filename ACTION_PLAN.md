@@ -62,7 +62,6 @@
 
 ### Перенесені задачі
 - MQTT auto-discovery (Home Assistant) — не критично
-- DataLogger module (circular buffer на LittleFS, GET /api/log для графіків)
 
 
 ---
@@ -110,6 +109,7 @@ NTC через ADC, кілька DS18B20, DigitalInput driver.
 | **11a** | **Danfoss-level: Night Setback, Post-defrost, Display** | **DONE 02-21** |
 | **11b** | **Multi DS18B20 (MATCH_ROM) + NTC/ADC + DigitalInput** | **DONE 02-22** |
 | **13a** | **Runtime UI visibility (visible_when + disabled options)** | **DONE 02-23** |
+| **14** | **DataLogger + ChartWidget (LittleFS, SVG, streaming JSON)** | **DONE 02-24** |
 
 **Детальна історія:** docs/06_roadmap.md, docs/BUGFIXES_VERIFIED.md
 
@@ -149,6 +149,7 @@ NTC через ADC, кілька DS18B20, DigitalInput driver.
 
 ## Changelog
 
+- 2026-02-24 — Phase 14 DONE: DataLogger module (append+rotate LittleFS, streaming chunked JSON, 10 event types) + ChartWidget (SVG polyline, downsample, zones, tooltip). 92 state keys, 207 тестів. Tech debt: TIMER_SATISFIED, Cache-Control, separate alarm delays (AUDIT-012).
 - 2026-02-23 — Phase 13a DONE: Runtime UI visibility. visible_when на cards/widgets, requires_state на select options, equipment.has_* keys (+3), isVisible() Svelte utility. 84 state keys, 178 тестів.
 - 2026-02-23 — Phase 11b COMPLETE: SEARCH_ROM (Maxim AN187), GET /api/onewire/scan endpoint, WebUI OneWire Discovery (scan + assign in BindingsEditor). HttpService: set_hal() for scan. 206 тестів.
 - 2026-02-22 — Phase 11b: Multi DS18B20 (MATCH_ROM), NTC/ADC driver, DigitalInput C++ driver. HAL: GpioInputConfig, AdcChannelConfig, Binding.address. Equipment: condenser_temp + door_contact. 81 state keys, 206 тестів.
