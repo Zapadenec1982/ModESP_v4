@@ -626,6 +626,7 @@ class FeatureResolver:
         "defrost_by_sensor": "equipment.has_evap_temp",
         "fan_temp_control":  "equipment.has_evap_temp",
         "night_di":          "equipment.has_night_input",
+        "cond_temp":         "equipment.has_cond_temp",
     }
 
     def resolve_constraints(self, module_manifest, active_features):
@@ -827,7 +828,8 @@ class UIJsonGenerator:
         # Widget-specific props from manifest ui section
         for prop in ("size", "color_zones", "on_label", "off_label",
                      "on_color", "off_color", "format", "label",
-                     "api_endpoint", "confirm"):
+                     "api_endpoint", "confirm",
+                     "data_source", "default_hours"):
             if prop in w:
                 widget[prop] = w[prop]
         # visible_when passthrough

@@ -102,6 +102,7 @@ bool EquipmentModule::on_init() {
     state_set("equipment.has_cond_fan", cond_fan_ != nullptr);
     state_set("equipment.has_door_contact", door_sensor_ != nullptr);
     state_set("equipment.has_evap_temp", sensor_evap_ != nullptr);
+    state_set("equipment.has_cond_temp", sensor_cond_ != nullptr);
 
     ESP_LOGI(TAG, "Initialized (air_sensor=%s, compressor=%s)",
              sensor_air_ ? "OK" : "MISSING",

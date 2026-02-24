@@ -32,6 +32,7 @@
     "equipment.has_cond_fan":     {"type": "bool",  "access": "read", "description": "Вент. конденсатора доступний"},
     "equipment.has_door_contact": {"type": "bool",  "access": "read", "description": "Контакт дверей доступний"},
     "equipment.has_evap_temp":    {"type": "bool",  "access": "read", "description": "Датчик випарника доступний"},
+    "equipment.has_cond_temp":    {"type": "bool",  "access": "read", "description": "Датчик конденсатора доступний"},
 
     "equipment.filter_coeff":    {"type": "int", "access": "readwrite", "persist": true,
                                   "min": 0, "max": 10, "step": 1, "default": 4,

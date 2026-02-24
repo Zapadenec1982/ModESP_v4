@@ -29,6 +29,14 @@
     "datalogger.flash_used": {
       "type": "int", "access": "read",
       "description": "Flash (KB)"
+    },
+    "datalogger.log_evap": {
+      "type": "bool", "access": "readwrite", "default": false,
+      "persist": true, "description": "Логувати T випарника"
+    },
+    "datalogger.log_cond": {
+      "type": "bool", "access": "readwrite", "default": false,
+      "persist": true, "description": "Логувати T конденсатора"
     }
   },
 
@@ -63,6 +71,10 @@
         "collapsible": true,
         "widgets": [
           {"key": "datalogger.enabled",         "widget": "toggle"},
+          {"key": "datalogger.log_evap",         "widget": "toggle",
+           "visible_when": {"key": "equipment.has_evap_temp", "eq": true}},
+          {"key": "datalogger.log_cond",         "widget": "toggle",
+           "visible_when": {"key": "equipment.has_cond_temp", "eq": true}},
           {"key": "datalogger.retention_hours",  "widget": "number_input"},
           {"key": "datalogger.sample_interval",  "widget": "number_input"}
         ]
@@ -79,7 +91,9 @@
     "subscribe": [
       "datalogger.enabled",
       "datalogger.retention_hours",
-      "datalogger.sample_interval"
+      "datalogger.sample_interval",
+      "datalogger.log_evap",
+      "datalogger.log_cond"
     ]
   }
 }

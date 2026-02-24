@@ -1,24 +1,30 @@
 #pragma once
 /**
- * @brief DataLogger module — temperature & event logging to LittleFS.
+ * @brief DataLogger module — multi-channel temperature & event logging to LittleFS.
  *
- * Samples air_temp every N seconds, logs equipment events (compressor, defrost,
- * alarms, door, power) on change. Append-only files with rotate.
- * Streaming chunked JSON via HTTP for WebUI chart rendering.
+ * Samples up to 3 temperature channels every N seconds, logs equipment events
+ * (compressor, defrost, alarms, door, power) on change.
+ * Append-only files with rotate. Streaming chunked JSON via HTTP.
  */
 
 #include "modesp/base_module.h"
 #include <esp_http_server.h>
 #include <etl/vector.h>
 #include <cstdint>
+#include <climits>
 
-/// Запис температури (8 bytes, aligned)
+/// Sentinel: канал не логується або датчик відсутній
+static constexpr int16_t TEMP_NO_DATA = INT16_MIN;  // -32768
+
+/// Запис температури (12 bytes, 3 канали)
 struct TempRecord {
     uint32_t timestamp;    ///< UNIX epoch (секунди) або uptime_sec
-    int16_t  temp_x10;     ///< температура × 10 (-345 = -34.5°C)
-    uint16_t flags;        ///< reserved (0), або evap_temp_x10 в майбутньому
+    int16_t  air_x10;     ///< air_temp × 10 (завжди присутній)
+    int16_t  evap_x10;    ///< evap_temp × 10 (TEMP_NO_DATA = немає)
+    int16_t  cond_x10;    ///< cond_temp × 10 (TEMP_NO_DATA = немає)
+    int16_t  _reserved;   ///< майбутній канал (TEMP_NO_DATA)
 };
-static_assert(sizeof(TempRecord) == 8, "TempRecord must be 8 bytes");
+static_assert(sizeof(TempRecord) == 12, "TempRecord must be 12 bytes");
 
 /// Тип події
 enum EventType : uint8_t {
@@ -75,6 +81,8 @@ private:
     // ── Налаштування (cached) ──
     int32_t  sample_interval_ms_ = 60000;
     int32_t  retention_hours_    = 48;
+    bool     log_evap_ = false;
+    bool     log_cond_ = false;
 
     // ── Статистика ──
     uint32_t temp_count_  = 0;
@@ -89,6 +97,10 @@ private:
     uint32_t current_timestamp() const;
     void update_flash_used();
     void poll_events();
+    void migrate_old_format();
+
+    /// Допоміжна: int16 → JSON "null" або число
+    static int append_temp_val(char* buf, size_t sz, int16_t val);
 
     static constexpr const char* LOG_DIR        = "/data/log";
     static constexpr const char* TEMP_FILE      = "/data/log/temp.bin";
