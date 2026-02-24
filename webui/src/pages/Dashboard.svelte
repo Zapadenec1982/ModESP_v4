@@ -22,8 +22,8 @@
   $: showDefrostSymbol = typeof displayTemp === 'number' && displayTemp <= -900;
 
   // ── Mini chart: temperature in chamber ──
-  const MC_W = 654, MC_H = 120;
-  const MC_PAD = { top: 8, right: 8, bottom: 20, left: 36 };
+  const MC_W = 654, MC_H = 200;
+  const MC_PAD = { top: 12, right: 12, bottom: 24, left: 44 };
   const MC_CW = MC_W - MC_PAD.left - MC_PAD.right;
   const MC_CH = MC_H - MC_PAD.top - MC_PAD.bottom;
 
@@ -118,22 +118,22 @@
   // Setpoint line Y
   $: mcSpY = typeof setpoint === 'number' ? MC_PAD.top + mcY(setpoint) : null;
 
-  // Time labels (4 labels)
+  // Time labels (6 labels)
   $: mcTimeLabels = (() => {
     if (mcTMin === mcTMax) return [];
     const labels = [];
-    for (let i = 0; i <= 4; i++) {
-      const ts = mcTMin + (mcTMax - mcTMin) * i / 4;
+    for (let i = 0; i <= 6; i++) {
+      const ts = mcTMin + (mcTMax - mcTMin) * i / 6;
       const d = new Date(ts * 1000);
       labels.push({ x: MC_PAD.left + mcX(ts), label: `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` });
     }
     return labels;
   })();
 
-  // Y axis labels (3 labels)
+  // Y axis labels
   $: mcYLabels = (() => {
     const labels = [];
-    const step = Math.max(1, Math.round((mcVMax - mcVMin) / 3));
+    const step = Math.max(1, Math.round((mcVMax - mcVMin) / 5));
     for (let v = Math.ceil(mcVMin); v <= Math.floor(mcVMax); v += step) {
       labels.push({ y: MC_PAD.top + mcY(v), label: `${v}°` });
     }
@@ -274,7 +274,7 @@
         {/if}
         <!-- Temperature line -->
         {#each mcPath as seg}
-          <path d={seg} fill="none" stroke="#3b82f6" stroke-width="2" />
+          <path d={seg} fill="none" stroke="#3b82f6" stroke-width="2.5" />
         {/each}
         <!-- X axis labels -->
         {#each mcTimeLabels as xl}
@@ -452,11 +452,11 @@
   }
 
   /* Mini chart */
-  .tile-chart { padding: 12px 16px; }
+  .tile-chart { padding: 16px; }
   .mini-chart { width: 100%; height: auto; display: block; }
   .mini-chart .mc-grid { stroke: var(--border); stroke-width: 0.5; }
   .mini-chart .mc-setpoint { stroke: #f59e0b; stroke-width: 1; stroke-dasharray: 4 2; opacity: 0.7; }
-  .mini-chart .mc-axis { font-size: 9px; fill: var(--fg-muted); }
+  .mini-chart .mc-axis { font-size: 11px; fill: var(--fg-muted); }
 
   @media (max-width: 480px) {
     .temp-value { font-size: 48px; }
