@@ -480,38 +480,42 @@ COOLING → sensor1_ok = false → SAFETY_RUN:
 
 ---
 
-## 8. Планові покращення (Phase 11a)
+## 8. Danfoss-level Improvements (Phase 11a — РЕАЛІЗОВАНО)
 
-### 8.1. Night Setback (нічний режим)
+### 8.1. Night Setback (нічний режим) — РЕАЛІЗОВАНО
 
-Вночі setpoint піднімається на `night_setback` °C — менше циклів компресора.
-Стандартна функція Danfoss (r40 в EKC 202, ERC 213/214).
+4 режими активації (параметр `thermostat.night_mode`):
+- **0** — вимкнено
+- **1** — за розкладом SNTP (`night_start` / `night_end`, формат HHMM)
+- **2** — через дискретний вхід (`equipment.night_input`)
+- **3** — ручний (через WebUI/MQTT `thermostat.is_night_active`)
 
-```
-Денний режим:  SP = setpoint                    (наприклад -20°C)
-Нічний режим:  SP = setpoint + night_setback     (наприклад -17°C)
-```
+`effective_setpoint = setpoint + night_setback` (night_setback default = 3°C).
 
-Активація: за розкладом (SNTP), через DI, або вручну (WebUI/MQTT).
-HAL alarm limit теж піднімається на величину night_setback.
+| Параметр | Default | Діапазон | Persist |
+|----------|---------|----------|---------|
+| night_mode | 0 | 0..3 | Yes |
+| night_setback | 3.0°C | 0..10°C | Yes |
+| night_start | 2200 | 0..2359 | Yes |
+| night_end | 600 | 0..2359 | Yes |
 
-### 8.2. Post-defrost Alarm Suppression
+### 8.2. Post-defrost Alarm Suppression — РЕАЛІЗОВАНО
 
-Після завершення розморозки T_air тимчасово підскакує — це нормально.
-HAL alarm блокується на `post_defrost_delay` хвилин (default 30).
-LAL alarm НЕ блокується — захист продукту від переохолодження завжди активний.
+High Temp alarm блокується на `post_defrost_delay` хвилин після завершення розморозки.
+LAL alarm НЕ блокується — захист від переохолодження завжди активний.
 
-Стандартна функція Danfoss (A04 в EKC 202 — подовжений delay після defrost/startup).
+| Параметр | Default | Діапазон | Persist |
+|----------|---------|----------|---------|
+| post_defrost_delay | 30 хв | 0..120 хв | Yes |
 
-### 8.3. Display During Defrost
+### 8.3. Display During Defrost — РЕАЛІЗОВАНО
 
-Під час розморозки Dashboard може показувати:
-- Реальну T_air (за замовчуванням)
-- "Заморожену" T_air (значення перед початком defrost)
-- Символ "-d-" (Danfoss style)
+Параметр `thermostat.display_defrost`:
+- **0** — реальна T_air
+- **1** — "заморожена" T_air (значення перед початком defrost)
+- **2** — символ "-d-" (Danfoss style)
 
-Мета: не показувати клієнту "+15°C" під час штатної відтайки.
-Параметр o39 в Danfoss ERC 214.
+Результат публікується в `thermostat.display_temp` для Dashboard.
 
 ---
 

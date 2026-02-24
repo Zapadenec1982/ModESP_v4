@@ -13,7 +13,7 @@
 - 5 драйверів (DS18B20, Relay, Digital Input, NTC, OneWire scan)
 - Features System — UI показує тільки підключене обладнання
 - Runtime UI visibility — visible_when + per-option disabled
-- Svelte WebUI (15 widgets, Dashboard, dark theme, i18n UA/EN, 43KB gzipped)
+- Svelte WebUI (24 widgets, Dashboard, dark/light theme, i18n UA/EN, 44KB gzipped)
 - MQTT TLS, OTA з rollback, auto-persist NVS
 - 264 pytest тестів зелені, генератор → 5 артефактів
 
@@ -23,30 +23,14 @@
 
 ## Відкриті проблеми
 
-### Bugs (оновлено 2026-02-21)
+### Bugs
 
-| ID | Sev | Опис | Статус |
-|----|-----|------|--------|
-| ~~BUG-005~~ | ~~2~~ | ~~Thermostat state inconsistency при defrost~~ | **FIXED** |
-| ~~BUG-022~~ | ~~1~~ | ~~Компресор не стартує після відтайки (COOLING без request)~~ | **FIXED** (force state→idle після defrost) |
-| ~~BUG-006~~ | ~~2~~ | ~~enter_phase() без re-entry guard~~ | **FIXED** (if phase==p return) |
-| ~~BUG-016~~ | ~~3~~ | ~~String-based phase compare~~ | **FIXED** |
-| ~~BUG-013~~ | ~~3~~ | ~~read_float/bool/int дублюються в 3 модулях~~ | **FIXED** (перенесено в BaseModule) |
-| ~~BUG-014~~ | ~~3~~ | ~~No immediate NVS flush before restart~~ | **FIXED** (flush_now() + виклик перед esp_restart) |
-| ~~BUG-018~~ | ~~3~~ | ~~state_set() return value ignored~~ | **FIXED** (ESP_LOGE + set_failures_ counter) |
-| ~~BUG-021~~ | ~~2~~ | ~~WS client_fds_ race condition~~ | **FIXED** (StaticSemaphore mutex) |
+Всі 8 знайдених багів виправлені (BUG-005/006/013/014/016/018/021/022).
+Деталі: `docs/archive/BUGFIXES_VERIFIED.md`
 
-### OPEN audit items (оновлено 2026-02-21)
+### OPEN audit items
 
-**Пріоритет 2 (перед production):**
-| ID | Опис | Примітка |
-|----|------|----------|
-| ~~AUDIT-011~~ | ~~Post-defrost alarm suppression timer (30-60 хв)~~ | **FIXED** (Phase 11a) |
-| ~~AUDIT-012~~ | ~~Separate alarm_delay для HAL і LAL~~ | **FIXED** — high_alarm_delay + low_alarm_delay |
-| ~~AUDIT-013~~ | ~~Door sensor hardcoded false в equipment_module~~ | **FIXED** (Phase 11b: DigitalInput driver + door_contact binding) |
-| ~~AUDIT-019~~ | ~~protection.reset_alarms — немає UI widget~~ | **FIXED** — кнопка в manifest UI |
-| ~~AUDIT-020~~ | ~~WS broadcast: malloc в hot path~~ | **CLOSED** — broadcast = stack buffer |
-| ~~AUDIT-021~~ | ~~Серіалізаційний буфер 3072~~ | **FIXED** — збільшено до 4096 (запас до ~115 ключів) |
+**Пріоритет 2:** Всі закриті (AUDIT-011/012/013/019/020/021).
 
 **Пріоритет 3 (commercial viability):**
 | ID | Опис | Статус |
@@ -57,8 +41,6 @@
 | AUDIT-033 | Alarm relay output для BMS | |
 | AUDIT-034 | Password protection для параметрів | |
 | AUDIT-035 | °C/°F вибір одиниць | |
-| ~~AUDIT-036~~ | ~~Compressor lockout після N коротких циклів~~ | **CLOSED** — REDUNDANT, COMP_MIN_OFF=180s+COMP_MIN_ON=120s вже захищають |
-| ~~AUDIT-037~~ | ~~Cache-Control headers для static files~~ | **FIXED** — no-store (було max-age=86400, кешувало старий bundle) |
 
 ### Перенесені задачі
 - MQTT auto-discovery (Home Assistant) — не критично
@@ -77,9 +59,9 @@
 display_screens.h вже генерується — залишилось підключити рендер.
 **Цінність:** standalone контролер. **Складність:** середня (3-4 сесії).
 
-### Варіант C: Bugfix + Hardening
-Закрити OPEN audit items P2 (AUDIT-012, 013).
-**Цінність:** стабільність. **Складність:** низька (1-2 сесії).
+### Варіант C: Hardening
+Закрити OPEN audit items P3 (AUDIT-030..035).
+**Цінність:** commercial viability. **Складність:** середня (2-3 сесії).
 
 ### ~~Варіант D: Multi-sensor + PID (Phase 11b)~~ — DONE (без PID)
 NTC через ADC, кілька DS18B20, DigitalInput driver.
@@ -112,8 +94,9 @@ NTC через ADC, кілька DS18B20, DigitalInput driver.
 | **14** | **DataLogger + ChartWidget (LittleFS, SVG, streaming JSON)** | **DONE 02-24** |
 | **14a** | **Multi-channel DataLogger (3ch, event list, CSV export)** | **DONE 02-24** |
 | **14b** | **6-channel dynamic DataLogger + ChartWidget** | **DONE 02-24** |
+| **7b-c** | **WebUI Polish: theme, i18n, animations, Catmull-Rom** | **DONE 02-24** |
 
-**Детальна історія:** docs/06_roadmap.md, docs/BUGFIXES_VERIFIED.md
+**Детальна історія:** docs/06_roadmap.md, docs/archive/BUGFIXES_VERIFIED.md
 
 ---
 

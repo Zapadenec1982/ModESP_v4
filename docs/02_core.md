@@ -15,7 +15,7 @@
 namespace modesp {
 
 // ─── Ключ стану: фіксований рядок, zero heap ───
-using StateKey = etl::string<24>;
+using StateKey = etl::string<32>;
 
 // ─── Значення стану: один з фіксованих типів ───
 using StateValue = etl::variant<
@@ -29,8 +29,8 @@ using StateValue = etl::variant<
 enum class ModulePriority : uint8_t {
     CRITICAL = 0,  // error_service, watchdog — перші init, перші update
     HIGH     = 1,  // config, сенсори, актуатори
-    NORMAL   = 2,  // бізнес-логіка: thermostat, alarm
-    LOW      = 3,  // logger, system_monitor, persist
+    NORMAL   = 2,  // бізнес-логіка: thermostat, protection, defrost
+    LOW      = 3,  // logger, system_monitor, persist, datalogger
 };
 
 // ─── ID повідомлень ───
@@ -117,6 +117,9 @@ public:
     etl::optional<int32_t> state_get_int(const char* key) const;
     etl::optional<bool> state_get_bool(const char* key) const;
 
+    // ─── Features (Phase 10.5) ───
+    bool has_feature(const char* feature_name) const;  // constexpr lookup via features_config.h
+
     // ─── Метадані ───
     const char*    name()     const { return name_; }
     ModulePriority priority() const { return priority_; }
@@ -157,7 +160,7 @@ O(1) average access, zero heap allocation.
 
 namespace modesp {
 
-template<size_t MAX_ENTRIES = 64>
+template<size_t MAX_ENTRIES = 128>
 class SharedState {
 public:
     bool init() {
@@ -222,7 +225,11 @@ private:
 } // namespace modesp
 ```
 
-**RAM:** ~4 KB для 64 entries (StateKey=24B + StateValue≈36B = 60B × 64).
+**RAM:** ~8 KB для 128 entries (StateKey=32B + StateValue≈36B = 68B × 128).
+
+**version_ counter:** інкрементується на кожен `set()` — WsService порівнює версії для delta broadcast.
+
+**Persist callback:** `set()` перевіряє зміну значення → викликає callback ПОЗА mutex для PersistService.
 
 ## module_manager.h — Управління модулями
 
@@ -259,7 +266,7 @@ public:
     etl::imessage_bus& bus() { return bus_; }
 
     // ─── State ───
-    SharedState<64>& state() { return state_; }
+    SharedState<128>& state() { return state_; }
 
     // ─── Доступ до модулів ───
     BaseModule* find(const char* name);
@@ -268,7 +275,7 @@ public:
 private:
     etl::vector<BaseModule*, MAX_MODULES> modules_;
     etl::message_bus<MAX_BUS_ROUTERS> bus_;
-    SharedState<64> state_;
+    SharedState<128> state_;
 
     void sort_by_priority();
 };

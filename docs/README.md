@@ -1,49 +1,36 @@
 # ModESP v4 — Документація
 
-## Структура
-
-### Робочі документи (корінь проекту)
-
-| Файл | Що описує | Коли читати |
-|------|-----------|-------------|
-| `CLAUDE.md` | Як працює проект ЗАРАЗ | На початку кожної сесії (Claude Code читає автоматично) |
-| `ACTION_PLAN.md` | Що робити далі, чеклісти задач | Коли треба вирішити що робити |
-| `CLAUDE_TASK.md` | Промпт для поточної задачі (Phase 10.5) | Для Claude Code |
-
-### Архітектурна документація (docs/)
-
-| Файл | Що описує | Стабільність |
-|------|-----------|--------------|
-| `01_architecture.md` | Шари системи, потік даних, принципи | Стабільний |
-| `02_core.md` | ModuleManager, SharedState, EventBus, types.h | Стабільний |
-| `03_services.md` | Error, Watchdog, Logger, Config, NVS, PersistService | Стабільний |
-| `04_best_practices.md` | Правила коду: пам'ять, потоки, помилки, іменування | Стабільний |
-| `05_cooling_defrost.md` | Thermostat + Defrost: state machines, фази, параметри | Оновлюється |
-| `06_roadmap.md` | Фази 1-13, milestones, часові рамки | Оновлюється |
-| `10_manifest_standard.md` | Стандарт маніфестів: Board, Driver, Module, Bindings | Оновлюється |
-
-### Ревью та аудит (docs/)
+## Архітектурна документація
 
 | Файл | Що описує |
 |------|-----------|
-| `architecture_review.md` | Ревью архітектури (Phase 9.4 snapshot) |
-| `business_logic_review.md` | Відповідність spec_v3 (Phase 9.4 snapshot) |
-| `BUGFIXES_VERIFIED.md` | Верифіковані баги: 27 знайдено, 14 виправлено |
+| [01_architecture.md](01_architecture.md) | Шари системи, залежності, потік даних |
+| [02_core.md](02_core.md) | SharedState, BaseModule, ModuleManager, types.h |
+| [03_services.md](03_services.md) | Error, Watchdog, Config, Persist, Logger, SystemMonitor |
+| [04_best_practices.md](04_best_practices.md) | Правила коду: пам'ять, потоки, помилки, іменування |
+| [05_cooling_defrost.md](05_cooling_defrost.md) | Thermostat + Defrost: state machines, фази, параметри |
+| [06_roadmap.md](06_roadmap.md) | Дорожня карта: завершені та заплановані фази |
+| [07_equipment.md](07_equipment.md) | Equipment Manager + Protection module |
+| [08_webui.md](08_webui.md) | Svelte 4 WebUI: stores, widgets, pages, theme, i18n |
+| [09_datalogger.md](09_datalogger.md) | DataLogger: 6-channel logging, ChartWidget, API |
+| [10_manifest_standard.md](10_manifest_standard.md) | Стандарт маніфестів: Board, Driver, Module, Bindings |
 
-### Архів (docs/archive/)
+## Інше
 
-Завершені фази, одноразові промпти, замінені документи. Тільки для історичної довідки.
+| Файл | Що описує |
+|------|-----------|
+| [CHANGELOG.md](CHANGELOG.md) | Повний changelog проекту (з 2026-02-16) |
+| [archive/](archive/) | Історичні промпти, ревью, audit snapshots |
 
-## Як користуватись
+## Робочі документи (корінь проекту)
 
-**Claude Code / новий розробник:**
-1. `CLAUDE.md` — все що потрібно для початку роботи
-2. `ACTION_PLAN.md` — що робити далі
-3. `docs/01-04` — якщо потрібні деталі архітектури
-4. `docs/10` — якщо пишеш модуль або драйвер
-
-**Принцип:** документація відображає ПОТОЧНИЙ стан коду.
+| Файл | Призначення |
+|------|-------------|
+| `CLAUDE.md` | Як працює проект ЗАРАЗ — читається Claude Code автоматично |
+| `ACTION_PLAN.md` | Чеклісти задач, баги, TODO |
+| `README.md` | Огляд проекту для GitHub |
 
 ## Changelog
-- 2026-02-20 — Оновлено: додано ревью/аудит файли, CLAUDE_TASK.md, прибрано мертві промпти
-- 2026-02-17 — Реорганізація: 05, 07, 08 в архів. Оновлено стан.
+- 2026-02-24 — Переписано як індекс. Додано docs 07-09, CHANGELOG, archive
+- 2026-02-20 — Оновлено: додано ревью/аудит файли
+- 2026-02-17 — Створено

@@ -20,7 +20,8 @@ ModESP v4 is an open-source firmware framework that turns a cheap ESP32 module i
 - **Progressive feature disclosure** — UI shows only settings for connected equipment; select widgets with human-readable labels
 - **Manifest-driven code generation** — JSON manifests → auto-generated UI, C++ headers, MQTT topics, feature flags
 - **Zero heap in hot path** — ETL instead of STL; no `new`/`malloc` in runtime loops
-- **Svelte Web UI** — real-time dashboard with WebSocket, 17KB gzipped, dark theme
+- **6-channel DataLogger** — temperature history + events on LittleFS, streaming JSON API, SVG chart with CSV export
+- **Svelte Web UI** — real-time dashboard with WebSocket, 44KB gzipped, light/dark theme, i18n UA/EN
 - **MQTT with TLS** — publish state and subscribe to commands via any MQTT broker
 - **OTA updates** — over-the-air firmware upload with rollback support
 - **Persistent settings** — auto-save configuration to NVS with debounce
@@ -69,24 +70,26 @@ ModESP_v4/
 │   ├── modesp_core/               # BaseModule, ModuleManager, SharedState, types
 │   ├── modesp_services/           # Error, Watchdog, Logger, Config, NVS, PersistService
 │   ├── modesp_hal/                # HAL, DriverManager, driver interfaces
-│   ├── modesp_net/                # WiFi, HTTP (12 endpoints), WebSocket
+│   ├── modesp_net/                # WiFi, HTTP (21 endpoints), WebSocket
 │   ├── modesp_mqtt/               # MQTT client with TLS
 │   ├── modesp_json/               # JSON serialization helpers
 │   └── jsmn/                      # Lightweight JSON parser (header-only)
 ├── drivers/
 │   ├── digital_input/             # GPIO digital input (door contact etc.)
 │   ├── ds18b20/                   # Dallas DS18B20 temperature sensor (OneWire)
+│   ├── ntc/                       # NTC thermistor via ADC (B-parameter equation)
 │   └── relay/                     # GPIO relay with min on/off time protection
 ├── modules/
 │   ├── equipment/                 # HAL owner, arbitration, interlocks
 │   ├── thermostat/                # Asymmetric differential, fan control, safety run
 │   ├── defrost/                   # 7-phase FSM, 3 defrost types, 4 initiations
-│   └── protection/                # 5 alarm monitors, delayed alarms, manual reset
+│   ├── protection/                # 5 alarm monitors, delayed alarms, manual reset
+│   └── datalogger/                # 6-channel temperature logging + events (LittleFS)
 ├── tools/
-│   ├── generate_ui.py             # Manifest → 5 artifacts generator (~1200 lines)
-│   └── tests/                     # 209 pytest tests
+│   ├── generate_ui.py             # Manifest → 5 artifacts generator (~1644 lines)
+│   └── tests/                     # 264 pytest tests
 ├── webui/                         # Svelte 4 WebUI source
-│   ├── src/                       # App.svelte, stores, components (15 widgets), pages
+│   ├── src/                       # App.svelte, stores, components (24 widgets), pages
 │   └── scripts/deploy.js          # Gzip + copy to data/www/
 ├── data/
 │   ├── board.json                 # PCB pin assignment (4 relays, 1 OW, 1 DI, 2 ADC)
@@ -134,7 +137,7 @@ npm run deploy   # → data/www/
 ### Run Tests
 
 ```bash
-python -m pytest tools/tests/ -v   # 209 tests
+python -m pytest tools/tests/ -v   # 264 tests
 ```
 
 ---
@@ -147,12 +150,15 @@ python -m pytest tools/tests/ -v   # 209 tests
 | `/api/ui` | GET | UI schema (generated from manifests) |
 | `/api/settings` | POST | Change writable state keys (with validation) |
 | `/api/board` | GET | Board configuration |
-| `/api/bindings` | GET | Driver bindings |
+| `/api/bindings` | GET/POST | Driver bindings (POST saves + restart) |
 | `/api/modules` | GET | Module list and status |
 | `/api/mqtt` | GET/POST | MQTT config and status |
 | `/api/wifi` | POST | WiFi credentials |
 | `/api/wifi/scan` | GET | WiFi scan results |
 | `/api/ota` | GET/POST | Firmware info / OTA upload |
+| `/api/onewire/scan` | GET | Scan OneWire bus (SEARCH_ROM) |
+| `/api/log` | GET | DataLogger: streaming chunked JSON (?hours=24) |
+| `/api/log/summary` | GET | DataLogger: record counts and flash usage |
 | `/api/restart` | POST | Restart ESP32 |
 | `/ws` | WS | Real-time state broadcast |
 
@@ -160,16 +166,17 @@ python -m pytest tools/tests/ -v   # 209 tests
 
 ## Current Status
 
-**Phase 10.5 (Features System) complete.** The following is fully operational:
+**Phase 14b (DataLogger 6-channel) complete.** Milestone M3 "Production Ready" achieved. The following is fully operational:
 
-- 4 business modules: Equipment Manager, Thermostat v2, Defrost (7-phase), Protection (5 alarms)
-- 3 drivers: DS18B20 (OneWire), Relay (GPIO), Digital Input (GPIO)
-- Progressive feature disclosure — disabled settings for unconnected equipment
-- Select widgets with human-readable labels for enum parameters
-- Svelte WebUI with 15 widget types, Dashboard, dark theme (17KB gzipped)
+- 5 business modules: Equipment Manager, Thermostat v2, Defrost (7-phase), Protection (5 alarms), DataLogger (6-ch)
+- 4 drivers: DS18B20 (OneWire, MATCH_ROM), Relay (GPIO), Digital Input (GPIO), NTC (ADC thermistor)
+- 6-channel temperature logging with event history, SVG chart, CSV export
+- Night Setback (4 modes), post-defrost alarm suppression, display during defrost
+- Progressive feature disclosure with runtime UI visibility (visible_when, requires_state)
+- Svelte WebUI with 24 widget types, light/dark theme, i18n UA/EN (44KB gzipped)
 - MQTT with TLS, OTA with rollback, auto-persist settings to NVS
 - WiFi STA + AP fallback
-- 209 pytest tests green
+- 97 state keys, 264 pytest tests green
 - Free heap after boot: **176 KB** / 240 KB
 
 ---
@@ -184,9 +191,9 @@ python -m pytest tools/tests/ -v   # 209 tests
 | Containers | ETL (Embedded Template Library) |
 | JSON parser | jsmn (header-only) |
 | Filesystem | LittleFS |
-| WebUI | Svelte 4, Rollup, Lucide icons |
-| Code generation | Python 3 (manifest → 5 artifacts) |
-| Testing | pytest (209 tests) |
+| WebUI | Svelte 4, Rollup, Lucide icons, i18n UA/EN |
+| Code generation | Python 3 (manifest → 5 artifacts, ~1644 lines) |
+| Testing | pytest (264 tests) |
 
 ---
 

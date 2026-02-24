@@ -229,12 +229,15 @@ ModESP_v4/
 │   ├── thermostat/
 │   │   ├── manifest.json      # ⭐ Single Source of Truth для UI/state/mqtt
 │   │   └── src/thermostat_module.cpp
-│   └── defrost/
-│       ├── manifest.json      # ⭐ 7-phase defrost cycle (3 types, 13 params)
-│       └── src/defrost_module.cpp
+│   ├── defrost/
+│   │   ├── manifest.json      # ⭐ 7-phase defrost cycle (3 types, 13 params)
+│   │   └── src/defrost_module.cpp
+│   └── datalogger/
+│       ├── manifest.json      # ⭐ 6-channel dynamic logging + events
+│       └── src/datalogger_module.cpp
 ├── tools/
 │   ├── generate_ui.py         # Manifest → UI + C++ headers generator (~1200 lines)
-│   └── tests/                 # 209 pytest tests (test_features, test_modules, test_validator)
+│   └── tests/                 # 264 pytest tests (test_features, test_modules, test_validator)
 ├── data/
 │   ├── board.json             # PCB pin assignment (gpio_outputs, onewire_buses, gpio_inputs, adc_channels)
 │   ├── bindings.json          # Runtime: role → driver → GPIO mapping (manifest_version: 1)
@@ -246,7 +249,7 @@ ModESP_v4/
 │   ├── package.json           # npm run build / npm run deploy
 │   └── rollup.config.js       # Rollup bundler config
 ├── generated/                 # 🔄 All generated C++ headers (5 files)
-├── docs/                      # Architecture docs (01-09)
+├── docs/                      # Architecture docs (01-10, CHANGELOG)
 ├── project.json               # Active modules list
 ├── partitions.csv             # NVS(24K) + app(1.5MB) + data/LittleFS(384K)
 └── CMakeLists.txt             # Auto-runs generate_ui.py before build
@@ -370,7 +373,11 @@ feat(module): короткий опис
 | `CLAUDE.md` | Як працює проект ЗАРАЗ | При зміні архітектури/API/структури |
 | `ACTION_PLAN.md` | Що робити далі | Після кожної сесії |
 | `docs/06_roadmap.md` | Куди йдемо (фази 6-12) | При завершенні фази |
+| `docs/07_equipment.md` | Equipment Manager + Protection | При зміні EM/Protection логіки |
+| `docs/08_webui.md` | Svelte WebUI архітектура | При зміні WebUI структури |
+| `docs/09_datalogger.md` | DataLogger + ChartWidget | При зміні DataLogger |
 | `docs/10_manifest_standard.md` | Стандарт маніфестів | При зміні формату manifest |
+| `docs/CHANGELOG.md` | Повний changelog проекту | Після кожної сесії |
 | `next_prompt.md` | Промпт для наступної сесії | В кінці поточної сесії |
 
 ## Changelog
@@ -420,42 +427,6 @@ feat(module): короткий опис
 - 2026-02-20 — BUG-012: NVS positional keys → hash-based (djb2). Auto-migration p0..p32 → sXXXXXXX.
   BUG-023: POST /api/settings uses meta->type instead of decimal point heuristic. Float persist fixed.
   AUDIT-014..017: manifest range fixes. AUDIT-038..040: security (CORS, traversal, old files removed).
-- 2026-02-20 — AUDIT Phase 10: 10 critical fixes. C++: relay min_switch_ms role-based (compressor only),
-  EM publishes actual relay state via get_state(), EM-level compressor anti-short-cycle timer
-  (COMP_MIN_OFF_MS=180s, COMP_MIN_ON_MS=120s), JSON string escaping in http_service + ws_service.
-  WebUI: ButtonWidget state key fallback (manual defrost works), icons (flame, shield-alert,
-  alert-triangle, thermometer), Dashboard uses equipment.compressor + defrost/alarm tiles,
-  StatusText defrost phase colors, alarm banner in Layout, apiPost error handling.
-- 2026-02-18 — SharedState capacity 64→96 (MODESP_MAX_STATE_ENTRIES). 69 manifest keys + ~15 system keys overflowed 64.
-- 2026-02-18 — Phase 9.4 DONE: Defrost module (modules/defrost/). 7-phase state machine,
-  3 types (natural/heater/hot gas), 4 initiations (timer/demand/combo/manual).
-  13 persist params + 2 runtime persist (interval_timer, defrost_count). 27 state keys, 10 MQTT publish.
-  Generator fix: read-only persist keys now included in state_meta.h (writable=false, persist=true).
-  4 modules, 69 state keys, 9 pages. 79 тестів зелені.
-- 2026-02-18 — Phase 9.3 DONE: Protection module (modules/protection/). 5 alarm monitors
-  (HAL, LAL, ERR1, ERR2, Door). Delayed alarms (dAd), defrost blocking, auto-clear + manual reset.
-  5 persist параметрів, 14 state keys, 8 MQTT publish. 79 тестів зелені. 3 modules, 42 state keys.
-- 2026-02-18 — Phase 9.2 DONE: Thermostat v2 — повна логіка spec_v3. Асиметричний диференціал,
-  state machine (STARTUP→IDLE→COOLING→SAFETY_RUN), вент. випарника (3 режими FAn), вент. конденсатора
-  (затримка COd), Safety Run, 11 persist параметрів, 18 state keys. 79 тестів зелені.
-- 2026-02-18 — Phase 9.1 DONE: Equipment Manager (modules/equipment/). Єдиний власник HAL drivers.
-  Арбітраж: Protection > Defrost > Thermostat. Інтерлоки: тен↔компресор, тен↔клапан ГГ.
-  Thermostat рефакторинг: req.compressor замість direct relay, читає equipment.air_temp.
-  generate_ui.py: cross-module widget key resolution (inputs → global state map). 79 тестів зелені.
-- 2026-02-17 — Phase 7a DONE: Svelte WebUI (webui/). Svelte 4 + Rollup. 14 widget components,
-  Dashboard (tile-based, temp color zones, compressor pulse), Layout (sidebar + bottom tabs),
-  DynamicPage (renders any ui.json page). Bundle: 17KB gzipped. Deploy: npm run deploy → data/www/.
-- 2026-02-17 — Phase 6.5 DONE: PersistService (CRITICAL, Phase 1). SharedState persist callback (ПОЗА mutex).
-  state_meta.h: persist+default_val. POST /api/settings: state_meta валідація (writable, min/max clamp).
-  Thermostat: hardcoded config.setpoint замінено на SharedState read. 79 pytest тестів зелені.
-- 2026-02-17 — Inputs validation в generate_ui.py: _validate_inputs() в ManifestValidator, 6 правил з docs/10 §3.2a.
-  73 pytest тести зелені. Thermostat без inputs (єдиний модуль) — працює як раніше.
-- 2026-02-17 — Phase 6 DONE: MQTT WebUI page додана (generate_ui.py + app.js). mqtt.broker в SharedState.
-  WiFi PS bug виправлений (DS18B20 esp_wifi_set_ps видалений). Thermostat: temperature→SharedState,
-  settings sync, gauge→value. OTA + MQTT endpoints додані в HTTP API таблицю. Milestone M2 ДОСЯГНУТО.
-- 2026-02-17 — Driver manifests (ds18b20, relay) + DriverManifestValidator + cross-валідація module↔driver.
-  board.json: relays→gpio_outputs. C++ HAL оновлений (BoardConfig.gpio_outputs). Bindings page в WebUI.
-  generate_ui.py: ~900 рядків, --drivers-dir, 66 тестів зелені.
-- 2026-02-17 — Видалено HTMLGenerator з generate_ui.py (820→755 рядків, 4 артефакти замість 5). WebUI тепер статичний (data/www/)
-- 2026-02-17 — Додано правила документування. WiFi: виправлено (STA працює, не тільки AP)
-- 2026-02-16 — Створено
+- 2026-02-20 — AUDIT Phase 10: 10 critical fixes (relay min_switch_ms, JSON escaping, WebUI icons/tiles/alarm).
+
+> Повний changelog (2026-02-16 — 2026-02-24): [docs/CHANGELOG.md](docs/CHANGELOG.md)
