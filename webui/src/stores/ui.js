@@ -37,7 +37,9 @@ export const pages = derived([rawPages, language], ([$raw, $lang]) => {
         confirm: tr(w.confirm),
         options: trOpts(w.options),
       }))
-    }))
+    })),
+    roles: (page.roles || []).map(r => ({ ...r, label: tr(r.label) })),
+    hardware: (page.hardware || []).map(h => ({ ...h, label: tr(h.label) })),
   }));
 });
 

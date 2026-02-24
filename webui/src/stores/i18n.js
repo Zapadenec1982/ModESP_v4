@@ -472,6 +472,31 @@ export const uiEn = {
   'Вільне обладнання': 'Free Equipment',
   'Немає налаштованих підключень': 'No configured connections',
   'не призначено': 'not assigned',
+
+  // Equipment role labels
+  'Темп. камери': 'Chamber temp',
+  'Компресор': 'Compressor',
+  'Темп. випарника': 'Evaporator temp',
+  'Темп. конденсатора': 'Condenser temp',
+  'Тен відтайки': 'Defrost heater',
+  'Вент. випарника': 'Evaporator fan',
+  'Вент. конденсатора': 'Condenser fan',
+  'Клапан гарячого газу': 'Hot gas valve',
+  'Контакт дверей': 'Door contact',
+  'Вхід нічного режиму': 'Night mode input',
+
+  // Hardware labels
+  'Реле 1': 'Relay 1',
+  'Реле 2': 'Relay 2',
+  'Реле 3': 'Relay 3',
+  'Реле 4': 'Relay 4',
+  'Цифровий вхід 1': 'Digital input 1',
+  'OneWire шина 1': 'OneWire bus 1',
+  'ADC 1': 'ADC 1',
+  'ADC 2': 'ADC 2',
+
+  // DataLogger labels
+  'Flash (KB)': 'Flash (KB)',
 };
 
 const dicts = { uk, en };
