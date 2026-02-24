@@ -1,8 +1,11 @@
 <script>
   import { onMount } from 'svelte';
+  import { fade, fly, scale } from 'svelte/transition';
   import { loadUiConfig, uiLoading, uiError, deviceName, pages } from './stores/ui.js';
   import { initWebSocket, state } from './stores/state.js';
   import { apiGet } from './lib/api.js';
+  import { t } from './stores/i18n.js';
+  import './stores/theme.js';
   import Layout from './components/Layout.svelte';
   import Dashboard from './pages/Dashboard.svelte';
   import DynamicPage from './pages/DynamicPage.svelte';
@@ -12,14 +15,12 @@
 
   onMount(async () => {
     await loadUiConfig();
-    // Load initial state
     try {
       const s = await apiGet('/api/state');
       state.update(st => ({ ...st, ...s }));
     } catch (e) {
       console.warn('Initial state load failed', e);
     }
-    // Start WebSocket
     initWebSocket();
   });
 
@@ -27,26 +28,30 @@
 </script>
 
 {#if $uiLoading}
-  <div class="loading-screen">
+  <div class="loading-screen" in:fade={{ duration: 200 }}>
     <div class="loading-spinner"></div>
-    <div class="loading-text">Loading...</div>
+    <div class="loading-text">{$t['app.loading']}</div>
   </div>
 {:else if $uiError}
-  <div class="error-screen">
+  <div class="error-screen" in:scale={{ start: 0.95, duration: 200 }}>
     <div class="error-icon">!</div>
-    <div class="error-title">Connection Error</div>
+    <div class="error-title">{$t['app.error']}</div>
     <div class="error-msg">{$uiError}</div>
-    <button class="retry-btn" on:click={() => location.reload()}>Retry</button>
+    <button class="retry-btn" on:click={() => location.reload()}>{$t['app.retry']}</button>
   </div>
 {:else}
   <Layout bind:currentPage>
-    {#if currentPage === 'dashboard'}
-      <Dashboard />
-    {:else if currentPage === 'bindings'}
-      <BindingsEditor />
-    {:else}
-      <DynamicPage pageId={currentPage} />
-    {/if}
+    {#key currentPage}
+      <div in:fly={{ x: 20, duration: 200, delay: 50 }} out:fade={{ duration: 100 }}>
+        {#if currentPage === 'dashboard'}
+          <Dashboard />
+        {:else if currentPage === 'bindings'}
+          <BindingsEditor />
+        {:else}
+          <DynamicPage pageId={currentPage} />
+        {/if}
+      </div>
+    {/key}
   </Layout>
 {/if}
 
@@ -64,6 +69,23 @@
     --success: #22c55e;
     --warning: #f59e0b;
     --error: #ef4444;
+    --color-scheme: dark;
+  }
+
+  :global(:root[data-theme="light"]) {
+    --bg: #f8fafc;
+    --bg2: #ffffff;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --bg-hover: rgba(59, 130, 246, 0.08);
+    --fg: #0f172a;
+    --fg-muted: #64748b;
+    --accent: #2563eb;
+    --accent-bg: rgba(37, 99, 235, 0.1);
+    --success: #16a34a;
+    --warning: #d97706;
+    --error: #dc2626;
+    --color-scheme: light;
   }
 
   :global(*) {
@@ -78,6 +100,7 @@
     font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.3s, color 0.3s;
   }
 
   .loading-screen {
