@@ -1,4 +1,6 @@
 <script>
+  import { t } from '../../stores/i18n.js';
+
   export let config;
   export let value;
 
@@ -29,7 +31,7 @@
       />
     {/if}
     <button class="reveal-btn" on:click={() => revealed = !revealed}>
-      {revealed ? 'Hide' : 'Show'}
+      {revealed ? $t['pass.hide'] : $t['pass.show']}
     </button>
   </div>
 </div>

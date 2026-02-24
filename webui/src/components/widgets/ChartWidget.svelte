@@ -290,7 +290,7 @@
 
 <div class="chart-container">
   <div class="chart-header">
-    <span class="chart-title">{config.label || 'Температура'}</span>
+    <span class="chart-title">{config.label || $t['chart.title']}</span>
     <div class="header-controls">
       <div class="period-btns">
         <button class:active={hours === 24} on:click={() => setHours(24)}>24h</button>

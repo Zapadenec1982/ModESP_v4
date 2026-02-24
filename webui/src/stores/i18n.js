@@ -99,6 +99,30 @@ const uk = {
 
   // Timezone
   'tz.label': 'Часовий пояс',
+
+  // Password
+  'pass.show': 'Показати',
+  'pass.hide': 'Сховати',
+
+  // Buttons
+  'btn.action': 'Дія',
+  'btn.save': 'Зберегти',
+  'btn.save_ap': 'Зберегти AP',
+  'btn.error': 'Помилка',
+  'btn.remove': 'Видалити',
+
+  // Bindings page
+  'bind.sensors': 'Сенсори',
+  'bind.actuators': 'Актуатори',
+  'bind.onewire': 'Виявлення OneWire',
+  'bind.add_equip': 'Додати обладнання',
+  'bind.used': 'зайнято',
+  'bind.role': '-- Роль --',
+  'bind.found': 'Знайдено {0} пристроїв, {1} вже призначено',
+  'bind.new_device': 'новий',
+
+  // Chart
+  'chart.title': 'Температура',
 };
 
 const en = {
@@ -187,6 +211,30 @@ const en = {
   'defrost.toggle': 'Defrost',
 
   'tz.label': 'Timezone',
+
+  // Password
+  'pass.show': 'Show',
+  'pass.hide': 'Hide',
+
+  // Buttons
+  'btn.action': 'Action',
+  'btn.save': 'Save',
+  'btn.save_ap': 'Save AP',
+  'btn.error': 'Error',
+  'btn.remove': 'Remove',
+
+  // Bindings page
+  'bind.sensors': 'Sensors',
+  'bind.actuators': 'Actuators',
+  'bind.onewire': 'OneWire Discovery',
+  'bind.add_equip': 'Add Equipment',
+  'bind.used': 'used',
+  'bind.role': '-- Role --',
+  'bind.found': 'Found {0} device(s), {1} already assigned',
+  'bind.new_device': 'new',
+
+  // Chart
+  'chart.title': 'Temperature',
 };
 
 const dicts = { uk, en };

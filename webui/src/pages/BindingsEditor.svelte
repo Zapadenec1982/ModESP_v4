@@ -246,7 +246,7 @@
 
   <!-- Sensors card -->
   {#if assignedSensors.length > 0}
-    <Card title="Sensors">
+    <Card title={$t['bind.sensors']}>
       {#each assignedSensors as roleDef}
         {@const binding = getBinding(roleDef.role)}
         {#if binding}
@@ -255,7 +255,7 @@
               <span class="role-label">{roleDef.label}</span>
               {#if roleDef.optional}
                 <button class="remove-btn" on:click={() => removeRole(roleDef.role)}
-                        title="Remove">&#x2715;</button>
+                        title={$t['btn.remove']}>&#x2715;</button>
               {/if}
             </div>
             <select class="hw-select"
@@ -264,7 +264,7 @@
               {#each compatibleHw(roleDef) as hw}
                 {@const used = usedHwIds(roleDef.role).has(hw.id)}
                 <option value={hw.id} disabled={used}>
-                  {hw.label}{hw.gpio !== undefined ? ` (GPIO ${hw.gpio})` : ''}{used ? ' — used' : ''}
+                  {hw.label}{hw.gpio !== undefined ? ` (GPIO ${hw.gpio})` : ''}{used ? ` — ${$t['bind.used']}` : ''}
                 </option>
               {/each}
             </select>
@@ -283,7 +283,7 @@
 
   <!-- Actuators card -->
   {#if assignedActuators.length > 0}
-    <Card title="Actuators">
+    <Card title={$t['bind.actuators']}>
       {#each assignedActuators as roleDef}
         {@const binding = getBinding(roleDef.role)}
         {#if binding}
@@ -292,7 +292,7 @@
               <span class="role-label">{roleDef.label}</span>
               {#if roleDef.optional}
                 <button class="remove-btn" on:click={() => removeRole(roleDef.role)}
-                        title="Remove">&#x2715;</button>
+                        title={$t['btn.remove']}>&#x2715;</button>
               {/if}
             </div>
             <select class="hw-select"
@@ -301,7 +301,7 @@
               {#each compatibleHw(roleDef) as hw}
                 {@const used = usedHwIds(roleDef.role).has(hw.id)}
                 <option value={hw.id} disabled={used}>
-                  {hw.label}{hw.gpio !== undefined ? ` (GPIO ${hw.gpio})` : ''}{used ? ' — used' : ''}
+                  {hw.label}{hw.gpio !== undefined ? ` (GPIO ${hw.gpio})` : ''}{used ? ` — ${$t['bind.used']}` : ''}
                 </option>
               {/each}
             </select>
@@ -313,7 +313,7 @@
 
   <!-- OneWire Discovery -->
   {#if owBuses.length > 0}
-    <Card title="OneWire Discovery">
+    <Card title={$t['bind.onewire']}>
       <div class="scan-controls">
         {#if owBuses.length > 1}
           <select class="hw-select" bind:value={selectedBus}>
@@ -335,7 +335,7 @@
         )}
         {@const assignedCount = scanResults.length - newDevices.length}
         {#if assignedCount > 0}
-          <div class="scan-summary">Found {scanResults.length} device(s), {assignedCount} already assigned</div>
+          <div class="scan-summary">{$t['bind.found'].replace('{0}', scanResults.length).replace('{1}', assignedCount)}</div>
         {/if}
         <div class="scan-results">
           {#each newDevices as device}
@@ -349,7 +349,7 @@
               <div class="device-action">
                 {#if freeAddrRoles.length > 0}
                   <select class="role-select" bind:value={device.selectedRole}>
-                    <option value="">-- Role --</option>
+                    <option value="">{$t['bind.role']}</option>
                     {#each freeAddrRoles as r}
                       <option value={r.role}>{r.label}</option>
                     {/each}
@@ -360,7 +360,7 @@
                     {$t['bind.add']}
                   </button>
                 {:else}
-                  <span class="device-role new">new</span>
+                  <span class="device-role new">{$t['bind.new_device']}</span>
                 {/if}
               </div>
             </div>
@@ -377,7 +377,7 @@
 
   <!-- Add optional roles -->
   {#if unassignedOptional.length > 0}
-    <Card title="Add Equipment">
+    <Card title={$t['bind.add_equip']}>
       {#each unassignedOptional as roleDef}
         <button class="add-role-btn" on:click={() => addRole(roleDef)}>
           + {roleDef.label}

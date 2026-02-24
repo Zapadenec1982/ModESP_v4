@@ -1,5 +1,6 @@
 <script>
   import { apiPost } from '../../lib/api.js';
+  import { t } from '../../stores/i18n.js';
 
   export let config;
 
@@ -30,7 +31,7 @@
         await apiPost('/api/settings', { [config.key]: true });
       }
     } catch (e) {
-      alert('Error: ' + e.message);
+      alert($t['btn.error'] + ': ' + e.message);
     } finally {
       loading = false;
     }
@@ -44,7 +45,7 @@
     disabled={loading}
     on:click={onClick}
   >
-    {loading ? '...' : (config.label || 'Action')}
+    {loading ? '...' : (config.label || $t['btn.action'])}
   </button>
 </div>
 

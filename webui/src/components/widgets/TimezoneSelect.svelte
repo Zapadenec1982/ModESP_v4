@@ -1,4 +1,6 @@
 <script>
+  import { t } from '../../stores/i18n.js';
+
   export let config;
   export let value;
 
@@ -32,7 +34,7 @@
 </script>
 
 <div class="tz-widget">
-  <div class="tz-label">{config.description || 'Часовий пояс'}</div>
+  <div class="tz-label">{config.description || $t['tz.label']}</div>
   <select class="tz-select">
     {#each timezones as z}
       <option value={z.tz}>{z.label}</option>

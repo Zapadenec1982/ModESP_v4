@@ -60,7 +60,7 @@
 
 <div class="save-widget">
   <button class="action-btn" disabled={loading} on:click={save}>
-    {loading ? '...' : (config.label || 'Save')}
+    {loading ? '...' : (config.label || $t['btn.save'])}
   </button>
 </div>
 
