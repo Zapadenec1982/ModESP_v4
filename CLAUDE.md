@@ -116,25 +116,28 @@ board.json + bindings.json ─┘
 - **equipment.has_* state keys:** `has_heater`, `has_hg_valve`, `has_cond_fan`, `has_door_contact`, `has_evap_temp`, `has_cond_temp`
 - **Runtime ланцюг:** Bindings page → Save → Restart → equipment.has_* = true → option enabled / card visible
 
-### DataLogger (Phase 14 + 14a)
+### DataLogger (Phase 14 + 14b)
 
-- **Multi-channel logging:** air (завжди) + evap + cond (опціонально, per-channel toggle)
-- **TempRecord 12 bytes:** timestamp(4) + air_x10(2) + evap_x10(2) + cond_x10(2) + reserved(2)
-- **TEMP_NO_DATA sentinel:** INT16_MIN (-32768) = канал не логується або датчик відсутній
-- **LittleFS storage:** temp.bin + events.bin з rotate при перевищенні ліміту (`retention_hours × 60 × 12` bytes)
+- **6-channel dynamic logging:** air (завжди) + evap + cond + setpoint + humidity + reserved
+- **TempRecord 16 bytes:** timestamp(4) + int16_t ch[6] (12 bytes) — compile-time ChannelDef table
+- **ChannelDef:** id, state_key, enable_key, has_key — per-channel enable/hardware detection
+- **TEMP_NO_DATA sentinel:** INT16_MIN (-32768) = канал вимкнений або датчик відсутній
+- **LittleFS storage:** temp.bin + events.bin з rotate при перевищенні ліміту
 - **RAM buffer:** 16 temp + 32 events, flush кожні 10 хвилин
-- **Auto-migration:** старий 8-byte формат видаляється при boot (st_size % 12 != 0)
+- **Auto-migration:** старі формати (8/12 bytes) видаляються при boot (st_size % 16 != 0)
 - **10 event types:** compressor on/off, defrost start/end, alarm high/low/clear, door open/close, power_on
-- **JSON v2:** `{"channels":["air","evap","cond"],"temp":[[ts,a,e,c],...],"events":[[ts,type],...]}`
-  - evap/cond = null якщо TEMP_NO_DATA; GET /api/log?hours=24 — streaming chunked
+- **JSON v3:** `{"channels":["air","evap","setpoint"],"temp":[[ts,v0,v1,v2],...],"events":[[ts,type],...]}`
+  - Dynamic channels: serialize scans files for non-null data, outputs only active channels
+  - Values = null якщо TEMP_NO_DATA; GET /api/log?hours=24 — streaming chunked
 - **GET /api/log/summary:** {hours, temp_count, event_count, flash_kb}
-- **ChartWidget (SVG):** multi-line chart (air=blue, evap=emerald, cond=amber), channel toggles,
-  downsample (max 720 min/max bucket per channel), zones (comp/defrost), multi-channel tooltip
+- **ChartWidget (SVG):** fully dynamic channels from API response, PALETTE colors per channel,
+  toggle checkboxes, downsample (max 720 min/max bucket per channel), zones (comp/defrost), tooltip
+- **Setpoint dual-mode:** if logged as channel → polyline; if not → horizontal line from live $state
 - **Event list:** `<details>` секція під графіком, останні 50 подій з текстовими мітками
-- **CSV export:** client-side download (temps + events), zero ESP32 навантаження
-- **8 state keys** (5 persist: enabled, retention_hours, sample_interval, log_evap, log_cond;
-  3 readonly: records_count, events_count, flash_used)
-- **207 pytest тестів**
+- **CSV export:** client-side download (dynamic channels + events), zero ESP32 навантаження
+- **10 state keys** (7 persist: enabled, retention_hours, sample_interval, log_evap, log_cond,
+  log_setpoint, log_humidity; 3 readonly: records_count, events_count, flash_used)
+- **264 pytest тестів**
 
 ### Файли які МОЖНА редагувати
 - `modules/*/manifest.json` — опис модулів (UI, state, mqtt, display, features, constraints)
@@ -371,6 +374,11 @@ feat(module): короткий опис
 | `next_prompt.md` | Промпт для наступної сесії | В кінці поточної сесії |
 
 ## Changelog
+- 2026-02-24 — Phase 14b DONE: 6-channel dynamic DataLogger + ChartWidget. TempRecord 12→16 bytes (ch[6] array),
+  ChannelDef compile-time table (air/evap/cond/setpoint/humidity/reserved), sync/sample/serialize loops.
+  Manifest: +log_setpoint, +log_humidity, "Канали логування" card. ChartWidget: fully dynamic channels
+  from API, PALETTE colors, toggle checkboxes, setpoint dual-mode. JSON v3 with dynamic channels.
+  i18n: +chart.ch_setpoint, +chart.ch_humidity. 97 state keys, 48 STATE_META, 46 MQTT sub, 264 тестів.
 - 2026-02-24 — Phase 7b-c DONE: WebUI Polish. Light/Dark theme toggle (stores/theme.js, CSS custom properties,
   localStorage persist, prefers-color-scheme). i18n UA/EN (stores/i18n.js, ~75 keys × 2 languages, derived $t store).
   Animations: page fly/fade transitions, staggered card entrance, card slide collapse, value flash on change.

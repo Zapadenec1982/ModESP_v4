@@ -13,11 +13,11 @@
 - 5 драйверів (DS18B20, Relay, Digital Input, NTC, OneWire scan)
 - Features System — UI показує тільки підключене обладнання
 - Runtime UI visibility — visible_when + per-option disabled
-- Svelte WebUI (15 widgets, Dashboard, dark theme, 17KB gzipped)
+- Svelte WebUI (15 widgets, Dashboard, dark theme, i18n UA/EN, 43KB gzipped)
 - MQTT TLS, OTA з rollback, auto-persist NVS
-- 178 pytest тестів зелені, генератор → 5 артефактів
+- 264 pytest тестів зелені, генератор → 5 артефактів
 
-**Поточна фаза: Phase 14a — Multi-channel DataLogger (air+evap+cond, event list, CSV) — DONE.**
+**Поточна фаза: Phase 14b — 6-channel dynamic DataLogger + ChartWidget — DONE.**
 
 ---
 
@@ -111,6 +111,7 @@ NTC через ADC, кілька DS18B20, DigitalInput driver.
 | **13a** | **Runtime UI visibility (visible_when + disabled options)** | **DONE 02-23** |
 | **14** | **DataLogger + ChartWidget (LittleFS, SVG, streaming JSON)** | **DONE 02-24** |
 | **14a** | **Multi-channel DataLogger (3ch, event list, CSV export)** | **DONE 02-24** |
+| **14b** | **6-channel dynamic DataLogger + ChartWidget** | **DONE 02-24** |
 
 **Детальна історія:** docs/06_roadmap.md, docs/BUGFIXES_VERIFIED.md
 
@@ -150,6 +151,7 @@ NTC через ADC, кілька DS18B20, DigitalInput driver.
 
 ## Changelog
 
+- 2026-02-24 — Phase 14b: 6-channel dynamic DataLogger (TempRecord 16 bytes, ch[6], ChannelDef table), dynamic ChartWidget (PALETTE, toggles, setpoint dual-mode). +log_setpoint, +log_humidity. 97 state keys, 264 тестів.
 - 2026-02-24 — Phase 14a: Multi-channel DataLogger (air+evap+cond, TempRecord 12 bytes, JSON v2), event text list, CSV export. Equipment +has_cond_temp. Fix Cache-Control no-store. 95 state keys, 207 тестів.
 - 2026-02-24 — Phase 14 DONE: DataLogger module (append+rotate LittleFS, streaming chunked JSON, 10 event types) + ChartWidget (SVG polyline, downsample, zones, tooltip). 92 state keys, 207 тестів.
 - 2026-02-23 — Phase 13a DONE: Runtime UI visibility. visible_when на cards/widgets, requires_state на select options, equipment.has_* keys (+3), isVisible() Svelte utility. 84 state keys, 178 тестів.
