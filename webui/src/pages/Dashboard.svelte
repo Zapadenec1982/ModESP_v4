@@ -1,6 +1,7 @@
 <script>
   import { state } from '../stores/state.js';
   import { stateMeta } from '../stores/ui.js';
+  import { t } from '../stores/i18n.js';
   import SliderWidget from '../components/widgets/SliderWidget.svelte';
 
   $: displayTemp = $state['thermostat.display_temp'];
@@ -29,9 +30,9 @@
     return '#ef4444';
   }
 
-  const stateLabels = {
-    idle: 'IDLE', cooling: 'COOLING',
-    safe_mode: 'SAFE MODE', startup: 'STARTUP'
+  const stateKeys = {
+    idle: 'state.idle', cooling: 'state.cooling',
+    safe_mode: 'state.safety_run', startup: 'state.startup'
   };
   const stateColors = {
     idle: 'var(--fg-muted)', cooling: 'var(--accent)',
@@ -57,7 +58,7 @@
 
     <div class="status-row">
       <!-- Compressor -->
-      <div class="status-item" title="Компресор">
+      <div class="status-item" title={$t['dash.compressor']}>
         <svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke={compressor ? '#22c55e' : 'var(--fg-muted)'} stroke-width="2">
           <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z" opacity="0.15" fill={compressor ? '#22c55e' : 'none'}/>
           <circle cx="12" cy="12" r="3"/>
@@ -69,7 +70,7 @@
       </div>
 
       <!-- Evap Fan -->
-      <div class="status-item" title="Вентилятор">
+      <div class="status-item" title={$t['dash.fan']}>
         <svg class="status-icon" class:spinning={!!evapFan} viewBox="0 0 24 24" fill="none" stroke={evapFan ? '#3b82f6' : 'var(--fg-muted)'} stroke-width="2">
           <path d="M12 12c-3-5-8-3-8 0s5 3 8 0z"/>
           <path d="M12 12c5-3 3-8 0-8s-3 5 0 8z"/>
@@ -81,7 +82,7 @@
 
       <!-- Heater -->
       {#if heater}
-        <div class="status-item" title="Нагрівач">
+        <div class="status-item" title={$t['dash.heater']}>
           <svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
             <path d="M12 2c0 4-4 6-4 10a4 4 0 0 0 8 0c0-4-4-6-4-10z" fill="rgba(239,68,68,0.2)"/>
             <path d="M12 2c0 4-4 6-4 10a4 4 0 0 0 8 0c0-4-4-6-4-10z"/>
@@ -95,24 +96,24 @@
       <!-- State badge: defrost overrides thermostat -->
       {#if defrostActive}
         <div class="state-label defrost-label">
-          DEFROST
+          {$t['state.defrost']}
         </div>
       {:else}
         <div class="state-label" style="color: {stateColors[thermoState] || 'var(--fg-muted)'}">
-          {stateLabels[thermoState] || thermoState || '—'}
+          {stateKeys[thermoState] ? $t[stateKeys[thermoState]] : (thermoState || '—')}
         </div>
       {/if}
 
       <!-- Night mode badge -->
       {#if nightActive}
-        <div class="state-label night-label">NIGHT</div>
+        <div class="state-label night-label">{$t['state.night']}</div>
       {/if}
     </div>
 
     <!-- Alarm banner -->
     {#if alarmActive}
       <div class="alarm-banner">
-        {alarmCode ? String(alarmCode).toUpperCase().replace('_', ' ') : 'ALARM'}
+        {alarmCode ? String(alarmCode).toUpperCase().replace('_', ' ') : $t['state.alarm']}
       </div>
     {/if}
   </div>
@@ -120,7 +121,7 @@
   <!-- Setpoint tile -->
   <div class="tile tile-setpoint">
     <div class="sp-header">
-      <span class="sp-label">SETPOINT</span>
+      <span class="sp-label">{$t['dash.setpoint']}</span>
       <span class="sp-value" style="color: var(--accent)">
         {typeof setpoint === 'number' ? setpoint.toFixed(1) : '—'}°C
       </span>

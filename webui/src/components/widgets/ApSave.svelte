@@ -1,5 +1,6 @@
 <script>
   import { apiGet, apiPost } from '../../lib/api.js';
+  import { t } from '../../stores/i18n.js';
   import { onMount } from 'svelte';
 
   export let config;
@@ -31,19 +32,19 @@
     const password = getInput('wifi.ap_password');
     const channel = parseInt(getInput('wifi.ap_channel')) || 1;
 
-    if (!ssid) { alert('SSID не може бути порожнім'); return; }
+    if (!ssid) { alert($t['alert.ssid_empty']); return; }
     if (password && password.length < 8) {
-      alert('Пароль повинен бути не менше 8 символів (або порожній для відкритої мережі)');
+      alert($t['alert.pass_min8']);
       return;
     }
 
     loading = true;
     try {
       const r = await apiPost('/api/wifi/ap', { ssid, password, channel });
-      if (r.ok) alert('Збережено! Перезавантажте для застосування.');
-      else alert('Помилка збереження');
+      if (r.ok) alert($t['alert.saved_restart']);
+      else alert($t['alert.error']);
     } catch (e) {
-      alert('Помилка: ' + e.message);
+      alert($t['alert.error'] + ': ' + e.message);
     } finally {
       loading = false;
     }

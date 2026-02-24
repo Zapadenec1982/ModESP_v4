@@ -2,6 +2,8 @@
   import { onMount, onDestroy } from 'svelte';
   import { pages, deviceName } from '../stores/ui.js';
   import { wsConnected, state } from '../stores/state.js';
+  import { theme, toggleTheme } from '../stores/theme.js';
+  import { t, language, toggleLanguage } from '../stores/i18n.js';
   import Icon from './Icon.svelte';
 
   export let currentPage = 'dashboard';
@@ -87,7 +89,7 @@
     <div class="sidebar-footer">
       <div class="ws-status" class:connected={$wsConnected}>
         <span class="ws-dot"></span>
-        {$wsConnected ? 'Online' : 'Offline'}
+        {$wsConnected ? $t['status.online'] : $t['status.offline']}
       </div>
     </div>
   </aside>
@@ -97,7 +99,7 @@
     <!-- AUDIT-009: alarm banner на всіх сторінках -->
     {#if alarmActive}
       <div class="alarm-banner" on:click={() => navigate('protection')}>
-        ALARM: {alarmCode ? String(alarmCode).toUpperCase().replace('_', ' ') : 'ACTIVE'}
+        {$t['alarm.banner']}: {alarmCode ? String(alarmCode).toUpperCase().replace('_', ' ') : ''}
       </div>
     {/if}
     <header class="topbar">
@@ -110,6 +112,12 @@
             <span class="clock-date">{clockDate}</span>
           </div>
         {/if}
+        <button class="topbar-btn" on:click={toggleLanguage} title="Language">
+          {$language === 'uk' ? 'EN' : 'UA'}
+        </button>
+        <button class="topbar-btn" on:click={toggleTheme} title="Theme">
+          <Icon name={$theme === 'dark' ? 'sun' : 'moon'} size={18} />
+        </button>
         <div class="ws-badge" class:connected={$wsConnected}>
           <span class="ws-dot"></span>
         </div>
@@ -311,6 +319,27 @@
 
   .clock-date {
     opacity: 0.7;
+  }
+
+  .topbar-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--fg-muted);
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.15s;
+  }
+  .topbar-btn:hover {
+    background: var(--bg-hover);
+    color: var(--fg);
+    border-color: var(--accent);
   }
 
   .ws-badge {

@@ -3,6 +3,7 @@
   import { apiGet, apiPost } from '../lib/api.js';
   import { pages } from '../stores/ui.js';
   import { state } from '../stores/state.js';
+  import { t } from '../stores/i18n.js';
   import Card from '../components/Card.svelte';
 
   // Roles/hardware metadata з ui.json bindings page
@@ -201,14 +202,14 @@
 </script>
 
 {#if loading}
-  <div class="center-msg">Loading...</div>
+  <div class="center-msg">{$t['bind.loading']}</div>
 {:else if error && !bindings.length}
   <div class="center-msg error">{error}</div>
 {:else}
   {#if needsRestart}
     <div class="restart-banner">
-      Bindings saved. Restart required.
-      <button class="restart-btn" on:click={restart}>Restart now</button>
+      {$t['bind.saved']}
+      <button class="restart-btn" on:click={restart}>{$t['bind.restart']}</button>
     </div>
   {/if}
 
@@ -218,13 +219,13 @@
 
   {#if missingRequired.length > 0}
     <div class="warning-banner">
-      Required: {missingRequired.map(r => r.label).join(', ')}
+      {$t['bind.required']}: {missingRequired.map(r => r.label).join(', ')}
     </div>
   {/if}
 
   <!-- Live equipment status -->
   {#if assignedRoles.size > 0}
-    <Card title="Стан обладнання">
+    <Card title={$t['bind.status']}>
       <div class="status-grid">
         {#each [...assignedSensors, ...assignedActuators] as roleDef}
           {@const stKey = ROLE_STATE_KEY[roleDef.role]}
@@ -324,7 +325,7 @@
           <span class="bus-label">{owBuses[0].id}{owBuses[0].gpio !== undefined ? ` (GPIO ${owBuses[0].gpio})` : ''}</span>
         {/if}
         <button class="scan-btn" on:click={scanBus} disabled={scanning}>
-          {scanning ? 'Scanning...' : 'Scan Bus'}
+          {scanning ? $t['bind.scanning'] : $t['bind.scan']}
         </button>
       </div>
 
@@ -356,7 +357,7 @@
                   <button class="assign-btn"
                           disabled={!device.selectedRole}
                           on:click={() => assignDevice(device)}>
-                    Assign
+                    {$t['bind.add']}
                   </button>
                 {:else}
                   <span class="device-role new">new</span>
@@ -365,11 +366,11 @@
             </div>
           {/each}
           {#if newDevices.length === 0}
-            <div class="scan-hint">All devices on this bus are already assigned</div>
+            <div class="scan-hint">{$t['bind.all_assigned']}</div>
           {/if}
         </div>
       {:else if !scanning}
-        <div class="scan-hint">Press "Scan Bus" to discover sensors</div>
+        <div class="scan-hint">{$t['bind.scan_hint']}</div>
       {/if}
     </Card>
   {/if}
@@ -388,7 +389,7 @@
   <!-- Save button -->
   <div class="save-area">
     <button class="save-btn" disabled={!canSave} on:click={save}>
-      {saving ? 'Saving...' : 'Save'}
+      {saving ? $t['bind.saving'] : $t['bind.save']}
     </button>
   </div>
 {/if}

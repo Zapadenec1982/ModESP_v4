@@ -1,6 +1,7 @@
 <script>
   import { apiPost } from '../../lib/api.js';
   import { state } from '../../stores/state.js';
+  import { t } from '../../stores/i18n.js';
 
   export let config;
   export let value;
@@ -19,7 +20,7 @@
 </script>
 
 <div class="widget-row">
-  <span class="label">{config.label || config.description || 'Розморозка'}</span>
+  <span class="label">{config.label || config.description || $t['defrost.toggle']}</span>
   <button class="toggle" class:on={isOn} on:click={toggle}>
     <span class="toggle-thumb"></span>
   </button>

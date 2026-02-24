@@ -2,6 +2,9 @@
   export let config;
   export let value;
 
+  let flash = false;
+  let prevDisplay = '';
+
   const statusColors = {
     // Thermostat
     idle: 'var(--fg-muted)',
@@ -23,11 +26,17 @@
 
   $: display = value !== undefined && value !== null ? String(value) : '—';
   $: badgeColor = statusColors[display] || 'var(--fg-muted)';
+
+  $: if (display !== prevDisplay && prevDisplay !== '') {
+    flash = true;
+    setTimeout(() => flash = false, 400);
+  }
+  $: prevDisplay = display;
 </script>
 
 <div class="widget-row">
   <span class="label">{config.description || config.key}</span>
-  <span class="badge" style="color: {badgeColor}; border-color: {badgeColor}">{display}</span>
+  <span class="badge" class:status-flash={flash} style="color: {badgeColor}; border-color: {badgeColor}">{display}</span>
 </div>
 
 <style>
@@ -43,5 +52,7 @@
     border-radius: 20px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    transition: background-color 0.4s;
   }
+  .status-flash { background-color: var(--accent-bg); }
 </style>

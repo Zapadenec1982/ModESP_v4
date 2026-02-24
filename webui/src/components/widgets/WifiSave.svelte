@@ -1,5 +1,6 @@
 <script>
   import { apiPost } from '../../lib/api.js';
+  import { t } from '../../stores/i18n.js';
 
   export let config;
 
@@ -12,15 +13,15 @@
     const ssid = card?.value?.trim() || '';
     const password = passEl?.value || '';
 
-    if (!ssid) { alert('SSID не може бути порожнім'); return; }
+    if (!ssid) { alert($t['alert.ssid_empty']); return; }
 
     loading = true;
     try {
       const r = await apiPost('/api/wifi', { ssid, password });
-      if (r.ok) alert('Збережено! Перезавантажте для застосування.');
-      else alert('Помилка збереження');
+      if (r.ok) alert($t['alert.saved_restart']);
+      else alert($t['alert.error']);
     } catch (e) {
-      alert('Помилка: ' + e.message);
+      alert($t['alert.error'] + ': ' + e.message);
     } finally {
       loading = false;
     }

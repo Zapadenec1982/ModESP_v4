@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { apiGet } from '../../lib/api.js';
   import { state } from '../../stores/state.js';
+  import { t } from '../../stores/i18n.js';
   import { downsample } from '../../lib/downsample.js';
 
   export let config;
@@ -37,18 +38,10 @@
   const DOOR_OPEN = 8, DOOR_CLOSE = 9;
   const POWER_ON = 10;
 
-  const EVENT_LABELS = {
-    1: 'Компресор ON', 2: 'Компресор OFF',
-    3: 'Дефрост старт', 4: 'Дефрост кінець',
-    5: 'Аварія: висока T', 6: 'Аварія: низька T', 7: 'Аварія знята',
-    8: 'Двері відкрито', 9: 'Двері зачинено',
-    10: 'Увімкнення'
-  };
-
-  // Канали: кольори
-  const CH_AIR  = { name: 'air',  label: 'Камера',      color: '#3b82f6', idx: 1 };
-  const CH_EVAP = { name: 'evap', label: 'Випарник',     color: '#10b981', idx: 2 };
-  const CH_COND = { name: 'cond', label: 'Конденсатор',  color: '#f59e0b', idx: 3 };
+  // Канали: кольори (labels read via $t)
+  const CH_AIR  = { name: 'air',  tkey: 'chart.ch_air',  color: '#3b82f6', idx: 1 };
+  const CH_EVAP = { name: 'evap', tkey: 'chart.ch_evap', color: '#10b981', idx: 2 };
+  const CH_COND = { name: 'cond', tkey: 'chart.ch_cond', color: '#f59e0b', idx: 3 };
 
   async function loadData() {
     loading = true;
@@ -225,7 +218,7 @@
     const mo = String(d.getMonth() + 1).padStart(2, '0');
     return {
       time: `${dd}.${mo} ${hh}:${mm}:${ss}`,
-      label: EVENT_LABELS[e[1]] || `Event #${e[1]}`,
+      label: $t[`event.${e[1]}`] || `Event #${e[1]}`,
       type: e[1]
     };
   });
@@ -282,7 +275,7 @@
     for (const e of events) {
       const d = new Date(e[0] * 1000);
       const dt = d.toISOString().replace('T', ' ').slice(0, 19);
-      csv += `${e[0]},${dt},${e[1]},${EVENT_LABELS[e[1]] || ''}\n`;
+      csv += `${e[0]},${dt},${e[1]},${$t[`event.${e[1]}`] || ''}\n`;
     }
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
@@ -303,7 +296,7 @@
         <button class:active={hours === 24} on:click={() => setHours(24)}>24h</button>
         <button class:active={hours === 48} on:click={() => setHours(48)}>48h</button>
       </div>
-      <button class="csv-btn" on:click={downloadCSV} title="Завантажити CSV">CSV</button>
+      <button class="csv-btn" on:click={downloadCSV} title="CSV">CSV</button>
     </div>
   </div>
 
@@ -311,27 +304,27 @@
   {#if hasEvap || hasCond}
     <div class="channel-toggles">
       <label class="ch-toggle" style="--ch-color: {CH_AIR.color}">
-        <input type="checkbox" bind:checked={showAir} /> {CH_AIR.label}
+        <input type="checkbox" bind:checked={showAir} /> {$t[CH_AIR.tkey]}
       </label>
       {#if hasEvap}
         <label class="ch-toggle" style="--ch-color: {CH_EVAP.color}">
-          <input type="checkbox" bind:checked={showEvap} /> {CH_EVAP.label}
+          <input type="checkbox" bind:checked={showEvap} /> {$t[CH_EVAP.tkey]}
         </label>
       {/if}
       {#if hasCond}
         <label class="ch-toggle" style="--ch-color: {CH_COND.color}">
-          <input type="checkbox" bind:checked={showCond} /> {CH_COND.label}
+          <input type="checkbox" bind:checked={showCond} /> {$t[CH_COND.tkey]}
         </label>
       {/if}
     </div>
   {/if}
 
   {#if loading}
-    <div class="chart-status">Завантаження...</div>
+    <div class="chart-status">{$t['chart.loading']}</div>
   {:else if error}
     <div class="chart-status chart-error">{error}</div>
   {:else if temp.length === 0}
-    <div class="chart-status">Немає даних</div>
+    <div class="chart-status">{$t['chart.no_data']}</div>
   {:else}
     <svg bind:this={svgEl} viewBox="0 0 {W} {H}" class="chart-svg"
          on:mousemove={handleMove} on:touchmove|preventDefault={handleMove}
@@ -403,26 +396,26 @@
       <!-- Legend -->
       {#if showAir && hasAir}
         <rect x={PAD.left} y={H - 12} width="8" height="8" fill={CH_AIR.color} />
-        <text x={PAD.left + 12} y={H - 5} class="legend-text">{CH_AIR.label}</text>
+        <text x={PAD.left + 12} y={H - 5} class="legend-text">{$t[CH_AIR.tkey]}</text>
       {/if}
       {#if showEvap && hasEvap}
         <rect x={PAD.left + 70} y={H - 12} width="8" height="8" fill={CH_EVAP.color} />
-        <text x={PAD.left + 82} y={H - 5} class="legend-text">{CH_EVAP.label}</text>
+        <text x={PAD.left + 82} y={H - 5} class="legend-text">{$t[CH_EVAP.tkey]}</text>
       {/if}
       {#if showCond && hasCond}
         <rect x={PAD.left + 150} y={H - 12} width="8" height="8" fill={CH_COND.color} />
-        <text x={PAD.left + 162} y={H - 5} class="legend-text">{CH_COND.label}</text>
+        <text x={PAD.left + 162} y={H - 5} class="legend-text">{$t[CH_COND.tkey]}</text>
       {/if}
-      <!-- Зони легенда (зсув якщо мульти-канал) -->
+      <!-- Zone legend -->
       {#if true}
         {@const lx = PAD.left + (hasEvap || hasCond ? 240 : 0)}
         <rect x={lx} y={H - 12} width="8" height="8" fill="#22c55e" opacity="0.5" />
-        <text x={lx + 12} y={H - 5} class="legend-text">Комп.</text>
+        <text x={lx + 12} y={H - 5} class="legend-text">{$t['chart.legend_comp']}</text>
         <rect x={lx + 60} y={H - 12} width="8" height="8" fill="#f97316" opacity="0.5" />
-        <text x={lx + 72} y={H - 5} class="legend-text">Дефрост</text>
+        <text x={lx + 72} y={H - 5} class="legend-text">{$t['chart.legend_defrost']}</text>
         <line x1={lx + 130} y1={H - 8} x2={lx + 148} y2={H - 8}
               stroke="#f59e0b" stroke-width="1" stroke-dasharray="4 2" />
-        <text x={lx + 152} y={H - 5} class="legend-text">Уставка</text>
+        <text x={lx + 152} y={H - 5} class="legend-text">{$t['chart.legend_setpoint']}</text>
       {/if}
     </svg>
   {/if}
@@ -431,7 +424,7 @@
   {#if events.length > 0}
     <details class="events-section" bind:open={showEvents}>
       <summary class="events-toggle">
-        Події ({events.length})
+        {$t['chart.events']} ({events.length})
       </summary>
       <div class="events-list">
         {#each eventList as ev}

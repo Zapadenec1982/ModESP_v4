@@ -1,4 +1,5 @@
 <script>
+  import { slide } from 'svelte/transition';
   import Icon from './Icon.svelte';
 
   export let title = '';
@@ -30,7 +31,7 @@
     </div>
   {/if}
   {#if !collapsed}
-    <div class="card-body">
+    <div class="card-body" transition:slide={{ duration: 200 }}>
       <slot />
     </div>
   {/if}
@@ -43,6 +44,11 @@
     border: 1px solid var(--border);
     margin-bottom: 16px;
     overflow: hidden;
+    transition: box-shadow 0.3s;
+  }
+
+  :global(:root[data-theme="light"]) .card {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   }
 
   .card-title {

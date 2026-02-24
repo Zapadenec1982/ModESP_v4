@@ -1,5 +1,6 @@
 <script>
   import { apiGet } from '../../lib/api.js';
+  import { t } from '../../stores/i18n.js';
 
   export let config;
 
@@ -44,7 +45,7 @@
 
 <div class="scan-widget">
   <button class="scan-btn" disabled={loading} on:click={scan}>
-    {loading ? 'Сканування...' : (config.label || 'Сканувати')}
+    {loading ? $t['wifi.scanning'] : (config.label || $t['wifi.scan'])}
   </button>
 
   {#if error}

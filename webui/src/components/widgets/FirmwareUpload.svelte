@@ -1,6 +1,7 @@
 <script>
   import { apiGet, apiUpload } from '../../lib/api.js';
   import { setStateKey } from '../../stores/state.js';
+  import { t } from '../../stores/i18n.js';
   import { onMount } from 'svelte';
 
   export let config;
@@ -23,14 +24,14 @@
   async function onFile(e) {
     const file = e.target.files[0];
     if (!file) return;
-    if (!file.name.endsWith('.bin')) { alert('Only .bin files'); return; }
-    if (!confirm('Оновити прошивку? Пристрій перезавантажиться.')) {
+    if (!file.name.endsWith('.bin')) { alert($t['alert.only_bin']); return; }
+    if (!confirm($t['alert.confirm_ota'])) {
       fileInput.value = '';
       return;
     }
 
     uploading = true;
-    status = 'Uploading...';
+    status = $t['ota.uploading'];
     progress = 0;
 
     try {
@@ -38,7 +39,7 @@
         progress = pct;
         status = `${pct}% (${Math.round(bytes / 1024)} KB)`;
       });
-      status = 'Done! Restarting...';
+      status = $t['ota.done'];
       progress = 100;
       setTimeout(() => location.reload(), 5000);
     } catch (e) {
@@ -61,7 +62,7 @@
     disabled={uploading}
     on:click={() => fileInput.click()}
   >
-    {config.label || 'Upload firmware'}
+    {config.label || $t['ota.upload']}
   </button>
   {#if uploading}
     <div class="progress-area">

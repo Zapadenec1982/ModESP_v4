@@ -1,6 +1,7 @@
 <script>
   import { apiGet, apiPost } from '../../lib/api.js';
   import { setStateKey, state } from '../../stores/state.js';
+  import { t } from '../../stores/i18n.js';
   import { onMount } from 'svelte';
 
   export let config;
@@ -47,10 +48,10 @@
 
     try {
       const r = await apiPost('/api/mqtt', data);
-      if (r.ok) alert('Збережено! MQTT перепідключається...');
-      else alert('Помилка збереження');
+      if (r.ok) alert($t['alert.saved_mqtt']);
+      else alert($t['alert.error']);
     } catch (e) {
-      alert('Помилка: ' + e.message);
+      alert($t['alert.error'] + ': ' + e.message);
     } finally {
       loading = false;
     }
