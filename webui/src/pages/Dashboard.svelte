@@ -453,7 +453,7 @@
 
   /* Mini chart */
   .tile-chart { padding: 16px; }
-  .mini-chart { width: 100%; height: auto; display: block; }
+  .mini-chart { width: 100%; display: block; }
   .mini-chart .mc-grid { stroke: var(--border); stroke-width: 0.5; }
   .mini-chart .mc-setpoint { stroke: #f59e0b; stroke-width: 1; stroke-dasharray: 4 2; opacity: 0.7; }
   .mini-chart .mc-axis { font-size: 11px; fill: var(--fg-muted); }
@@ -463,5 +463,8 @@
     .sp-value { font-size: 20px; }
     .tile { padding: 16px; }
     .status-icon { width: 24px; height: 24px; }
+    .mini-chart { height: 180px; }
+    .mini-chart .mc-axis { font-size: 16px; }
+    .tile-chart { padding: 12px; }
   }
 </style>
