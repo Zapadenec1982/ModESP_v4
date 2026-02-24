@@ -15,7 +15,15 @@
   let tooltip = null;
   let svgEl;
   let refreshTimer;
+  let liveTimer;
   let showEvents = false;
+
+  // Channel name → state key (дзеркалює CHANNEL_DEFS з бекенду)
+  const CH_STATE_KEYS = {
+    air: 'equipment.air_temp', evap: 'equipment.evap_temp',
+    cond: 'equipment.cond_temp', setpoint: 'thermostat.setpoint',
+    humidity: 'equipment.humidity'
+  };
 
   // SVG dimensions
   const W = 720;
@@ -52,13 +60,50 @@
       data = null;
     }
     loading = false;
+    startLiveTimer();
+  }
+
+  // ── Real-time: додаємо нові точки з WebSocket state ──
+  function startLiveTimer() {
+    if (liveTimer) clearInterval(liveTimer);
+    const interval = ($state['datalogger.sample_interval'] || 60) * 1000;
+    liveTimer = setInterval(appendLivePoint, interval);
+  }
+
+  function appendLivePoint() {
+    if (!data || !data.channels || !data.temp) return;
+    const chs = data.channels;
+    const now = Math.floor(Date.now() / 1000);
+    const point = [now];
+    let hasAny = false;
+    for (const name of chs) {
+      const key = CH_STATE_KEYS[name];
+      const sv = key ? $state[key] : undefined;
+      if (sv != null && typeof sv === 'number') {
+        point.push(Math.round(sv * 10));
+        hasAny = true;
+      } else {
+        point.push(null);
+      }
+    }
+    if (!hasAny) return;
+    // Видалити точки що вийшли за вікно
+    const cutoff = now - hours * 3600;
+    while (data.temp.length > 0 && data.temp[0][0] < cutoff) {
+      data.temp.shift();
+    }
+    data.temp.push(point);
+    data = data; // Svelte reactivity trigger
   }
 
   onMount(() => {
     loadData();
     refreshTimer = setInterval(loadData, 300000);
   });
-  onDestroy(() => { if (refreshTimer) clearInterval(refreshTimer); });
+  onDestroy(() => {
+    if (refreshTimer) clearInterval(refreshTimer);
+    if (liveTimer) clearInterval(liveTimer);
+  });
 
   function setHours(h) { hours = h; loadData(); }
 
@@ -148,28 +193,49 @@
     return zones;
   }
 
-  // Build polyline для одного каналу
-  function buildPolyline(pts, chIdx) {
+  // Catmull-Rom → SVG cubic Bezier path
+  function catmullRomPath(points) {
+    if (points.length < 2) return '';
+    if (points.length === 2) {
+      return `M${points[0].x},${points[0].y} L${points[1].x},${points[1].y}`;
+    }
+    let d = `M${points[0].x},${points[0].y}`;
+    for (let i = 0; i < points.length - 1; i++) {
+      const p0 = points[Math.max(0, i - 1)];
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      const p3 = points[Math.min(points.length - 1, i + 2)];
+      const cp1x = (p1.x + (p2.x - p0.x) / 6).toFixed(1);
+      const cp1y = (p1.y + (p2.y - p0.y) / 6).toFixed(1);
+      const cp2x = (p2.x - (p3.x - p1.x) / 6).toFixed(1);
+      const cp2y = (p2.y - (p3.y - p1.y) / 6).toFixed(1);
+      d += ` C${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x},${p2.y}`;
+    }
+    return d;
+  }
+
+  // Build smooth SVG path для одного каналу
+  function buildSmoothPath(pts, chIdx) {
     const segments = [];
     let seg = [];
     for (const p of pts) {
       const raw = p[chIdx];
       if (raw == null) {
-        if (seg.length > 0) { segments.push(seg); seg = []; }
+        if (seg.length > 0) { segments.push(catmullRomPath(seg)); seg = []; }
         continue;
       }
-      const x = PAD.left + xScale(p[0], tMin, tMax);
-      const y = PAD.top + yScale(raw / 10, vMin, vMax);
-      seg.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+      const x = +(PAD.left + xScale(p[0], tMin, tMax)).toFixed(1);
+      const y = +(PAD.top + yScale(raw / 10, vMin, vMax)).toFixed(1);
+      seg.push({ x, y });
     }
-    if (seg.length > 0) segments.push(seg);
+    if (seg.length > 0) segments.push(catmullRomPath(seg));
     return segments;
   }
 
-  // Polylines для кожного видимого каналу
+  // Smooth paths для кожного видимого каналу
   $: channelLines = visibleChannels.map(ch => ({
     ...ch,
-    segments: buildPolyline(sampled, ch.idx)
+    segments: buildSmoothPath(sampled, ch.idx)
   }));
 
   // Zones
@@ -361,10 +427,10 @@
         <line x1={PAD.left} y1={spY} x2={W - PAD.right} y2={spY} class="setpoint" />
       {/if}
 
-      <!-- Temperature lines (dynamic channels) -->
+      <!-- Temperature lines (dynamic channels, smooth curves) -->
       {#each channelLines as ch}
         {#each ch.segments as seg}
-          <polyline points={seg.join(' ')} fill="none" stroke={ch.color} stroke-width="1.5" />
+          <path d={seg} fill="none" stroke={ch.color} stroke-width="1.5" />
         {/each}
       {/each}
 
