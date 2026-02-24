@@ -110,19 +110,27 @@ board.json + bindings.json ─┘
   - resolve_constraints() тепер зберігає ВСІ options + додає `requires_state` та `disabled_hint`
   - FEATURE_TO_STATE mapping: feature name → `equipment.has_*` state key
   - SelectWidget перевіряє `$state[opt.requires_state]` реактивно
-- **equipment.has_* state keys:** `has_heater`, `has_hg_valve`, `has_cond_fan`, `has_door_contact`, `has_evap_temp`
+- **equipment.has_* state keys:** `has_heater`, `has_hg_valve`, `has_cond_fan`, `has_door_contact`, `has_evap_temp`, `has_cond_temp`
 - **Runtime ланцюг:** Bindings page → Save → Restart → equipment.has_* = true → option enabled / card visible
 
-### DataLogger (Phase 14)
+### DataLogger (Phase 14 + 14a)
 
-- **Append-only logging:** температура семплюється кожні N секунд (default 60), події edge-detect
-- **LittleFS storage:** temp.bin + events.bin з rotate при перевищенні ліміту (`retention_hours × 60 × 8` bytes)
+- **Multi-channel logging:** air (завжди) + evap + cond (опціонально, per-channel toggle)
+- **TempRecord 12 bytes:** timestamp(4) + air_x10(2) + evap_x10(2) + cond_x10(2) + reserved(2)
+- **TEMP_NO_DATA sentinel:** INT16_MIN (-32768) = канал не логується або датчик відсутній
+- **LittleFS storage:** temp.bin + events.bin з rotate при перевищенні ліміту (`retention_hours × 60 × 12` bytes)
 - **RAM buffer:** 16 temp + 32 events, flush кожні 10 хвилин
+- **Auto-migration:** старий 8-byte формат видаляється при boot (st_size % 12 != 0)
 - **10 event types:** compressor on/off, defrost start/end, alarm high/low/clear, door open/close, power_on
-- **Streaming chunked JSON:** GET /api/log?hours=24 — читає .old + .bin + RAM buffer, без великого буфера
+- **JSON v2:** `{"channels":["air","evap","cond"],"temp":[[ts,a,e,c],...],"events":[[ts,type],...]}`
+  - evap/cond = null якщо TEMP_NO_DATA; GET /api/log?hours=24 — streaming chunked
 - **GET /api/log/summary:** {hours, temp_count, event_count, flash_kb}
-- **ChartWidget (SVG):** polyline з downsampling (max 720 точок min/max bucket), zones (comp/defrost), tooltip
-- **6 state keys** (3 persist: enabled, retention_hours, sample_interval; 3 readonly: records_count, events_count, flash_used)
+- **ChartWidget (SVG):** multi-line chart (air=blue, evap=emerald, cond=amber), channel toggles,
+  downsample (max 720 min/max bucket per channel), zones (comp/defrost), multi-channel tooltip
+- **Event list:** `<details>` секція під графіком, останні 50 подій з текстовими мітками
+- **CSV export:** client-side download (temps + events), zero ESP32 навантаження
+- **8 state keys** (5 persist: enabled, retention_hours, sample_interval, log_evap, log_cond;
+  3 readonly: records_count, events_count, flash_used)
 - **207 pytest тестів**
 
 ### Файли які МОЖНА редагувати
@@ -360,6 +368,12 @@ feat(module): короткий опис
 | `next_prompt.md` | Промпт для наступної сесії | В кінці поточної сесії |
 
 ## Changelog
+- 2026-02-24 — Phase 14a: Multi-channel DataLogger (air+evap+cond), TempRecord 8→12 bytes,
+  TEMP_NO_DATA sentinel, JSON v2 з channels header, auto-migration old format.
+  ChartWidget: multi-line chart (3 polylines), channel toggles, event text list (50 events),
+  CSV export (client-side). Equipment: +has_cond_temp. Generator: +cond_temp FEATURE_TO_STATE.
+  Fix: Cache-Control no-store (was max-age=86400 causing stale bundle).
+  95 state keys, 46 STATE_META, 37 MQTT pub, 44 MQTT sub, 207 тестів.
 - 2026-02-24 — Phase 14 DONE: DataLogger module (append+rotate LittleFS, streaming chunked JSON,
   10 event types, 6 state keys) + ChartWidget (SVG polyline, min/max downsample, comp/defrost zones,
   tooltip, 24h/48h toggle). GET /api/log, GET /api/log/summary. downsample.js utility.
