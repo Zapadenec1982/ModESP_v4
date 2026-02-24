@@ -134,9 +134,9 @@ Equipment: night_input role + digital input. 80 state keys, 206 pytest тест�
 **Пріоритет:** СЕРЕДНІЙ.
 
 - [x] ~~Графіки температури (DataLogger module + GET /api/log)~~ (Phase 14+14a)
-- [ ] Animations/transitions
-- [ ] Light theme toggle
-- [ ] i18n (UA/EN)
+- [x] ~~Animations/transitions~~ (Phase 7b-c)
+- [x] ~~Light theme toggle~~ (Phase 7b-c)
+- [x] ~~i18n (UA/EN)~~ (Phase 7b-c)
 - [ ] PWA / Service Worker
 - [ ] CMake інтеграція (auto-build Svelte перед idf.py build)
 
@@ -251,6 +251,7 @@ Equipment: night_input role + digital input. 80 state keys, 206 pytest тест�
 ---
 
 ## Changelog
+- v21.0 (2026-02-24) — Phase 7b-c partial: Light/dark theme toggle, i18n UA/EN (~75 keys), Svelte transitions (page fly, card slide, value flash). Bundle 43.7KB gz.
 - v20.0 (2026-02-24) — Phase 14+14a DONE: DataLogger + multi-channel (air+evap+cond), event list, CSV export. 95 state keys, 207 tests.
 - v18.0 (2026-02-23) — Phase 13a DONE: Runtime UI visibility (visible_when + requires_state). 84 state keys, 178 tests.
 - v17.0 (2026-02-22) — Phase 11b DONE: Multi DS18B20 (MATCH_ROM), NTC/ADC driver, DigitalInput C++ driver. 5 drivers, 81 state keys, 206 tests.

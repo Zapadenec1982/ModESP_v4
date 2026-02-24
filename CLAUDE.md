@@ -30,9 +30,12 @@ board.json + bindings.json ─┘
 - `webui/src/` — Svelte 4 source code (App.svelte, stores, components, pages)
 - `webui/dist/` — Build output (bundle.js, bundle.css) — gitignored
 - `data/www/index.html` — SPA shell (підключає /bundle.css + /bundle.js)
-- `data/www/bundle.js.gz` — Svelte app gzipped (~14KB)
-- `data/www/bundle.css.gz` — Styles gzipped (~3KB)
+- `data/www/bundle.js.gz` — Svelte app gzipped (~38KB)
+- `data/www/bundle.css.gz` — Styles gzipped (~6KB)
 - Build: `cd webui && npm run build` → Deploy: `npm run deploy` → data/www/
+- **Theme:** Light/Dark toggle (stores/theme.js), CSS custom properties, localStorage + prefers-color-scheme
+- **i18n:** UA/EN toggle (stores/i18n.js), ~75 inline keys per language, derived `$t` store
+- **Animations:** Svelte transitions (fly/fade/slide/scale), value flash on change, staggered card entrance
 
 ### Equipment Layer (Phase 9.1)
 - **EquipmentModule** (priority=CRITICAL) — єдиний модуль з доступом до HAL drivers
@@ -368,6 +371,10 @@ feat(module): короткий опис
 | `next_prompt.md` | Промпт для наступної сесії | В кінці поточної сесії |
 
 ## Changelog
+- 2026-02-24 — Phase 7b-c DONE: WebUI Polish. Light/Dark theme toggle (stores/theme.js, CSS custom properties,
+  localStorage persist, prefers-color-scheme). i18n UA/EN (stores/i18n.js, ~75 keys × 2 languages, derived $t store).
+  Animations: page fly/fade transitions, staggered card entrance, card slide collapse, value flash on change.
+  19 files updated. Bundle: 37.5→43.7KB gz (within 50KB limit).
 - 2026-02-24 — Phase 14a: Multi-channel DataLogger (air+evap+cond), TempRecord 8→12 bytes,
   TEMP_NO_DATA sentinel, JSON v2 з channels header, auto-migration old format.
   ChartWidget: multi-line chart (3 polylines), channel toggles, event text list (50 events),
