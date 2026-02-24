@@ -113,7 +113,7 @@
           </div>
         {/if}
         <button class="topbar-btn" on:click={toggleLanguage} title="Language">
-          {$language === 'uk' ? 'EN' : 'UA'}
+          {$language === 'uk' ? 'UA' : 'EN'}
         </button>
         <button class="topbar-btn" on:click={toggleTheme} title="Theme">
           <Icon name={$theme === 'dark' ? 'sun' : 'moon'} size={18} />

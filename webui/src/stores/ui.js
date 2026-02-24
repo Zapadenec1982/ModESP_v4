@@ -1,11 +1,45 @@
 import { writable, derived } from 'svelte/store';
 import { apiGet } from '../lib/api.js';
+import { language, uiEn } from './i18n.js';
 
 /** Full UI config from /api/ui */
 export const uiConfig = writable(null);
 
-/** Pages array for navigation */
-export const pages = derived(uiConfig, $ui => $ui?.pages || []);
+/** Raw pages from server (always Ukrainian) */
+const rawPages = derived(uiConfig, $ui => $ui?.pages || []);
+
+/** Translate Ukrainian text to English using uiEn map */
+function tr(text) {
+  return (text && uiEn[text]) || text;
+}
+
+/** Translate widget options labels */
+function trOpts(options) {
+  if (!options) return options;
+  return options.map(o => ({ ...o, label: tr(o.label) }));
+}
+
+/** Pages array — auto-translated based on current language */
+export const pages = derived([rawPages, language], ([$raw, $lang]) => {
+  if ($lang === 'uk') return $raw;
+  return $raw.map(page => ({
+    ...page,
+    title: tr(page.title),
+    cards: (page.cards || []).map(card => ({
+      ...card,
+      title: tr(card.title),
+      widgets: (card.widgets || []).map(w => ({
+        ...w,
+        description: tr(w.description),
+        label: tr(w.label),
+        on_label: tr(w.on_label),
+        off_label: tr(w.off_label),
+        confirm: tr(w.confirm),
+        options: trOpts(w.options),
+      }))
+    }))
+  }));
+});
 
 /** State metadata for validation/display */
 export const stateMeta = derived(uiConfig, $ui => $ui?.state_meta || {});
