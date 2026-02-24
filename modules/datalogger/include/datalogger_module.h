@@ -2,7 +2,7 @@
 /**
  * @brief DataLogger module — multi-channel temperature & event logging to LittleFS.
  *
- * Samples up to 3 temperature channels every N seconds, logs equipment events
+ * Samples up to 6 configurable channels every N seconds, logs equipment events
  * (compressor, defrost, alarms, door, power) on change.
  * Append-only files with rotate. Streaming chunked JSON via HTTP.
  */
@@ -16,15 +16,33 @@
 /// Sentinel: канал не логується або датчик відсутній
 static constexpr int16_t TEMP_NO_DATA = INT16_MIN;  // -32768
 
-/// Запис температури (12 bytes, 3 канали)
-struct TempRecord {
-    uint32_t timestamp;    ///< UNIX epoch (секунди) або uptime_sec
-    int16_t  air_x10;     ///< air_temp × 10 (завжди присутній)
-    int16_t  evap_x10;    ///< evap_temp × 10 (TEMP_NO_DATA = немає)
-    int16_t  cond_x10;    ///< cond_temp × 10 (TEMP_NO_DATA = немає)
-    int16_t  _reserved;   ///< майбутній канал (TEMP_NO_DATA)
+/// Максимум каналів у записі
+static constexpr int MAX_CHANNELS = 6;
+
+/// Визначення каналу (compile-time)
+struct ChannelDef {
+    const char* id;          ///< "air", "evap", "cond", "setpoint", "humidity"
+    const char* state_key;   ///< "equipment.air_temp" — звідки читати значення
+    const char* enable_key;  ///< "datalogger.log_evap" — toggle (nullptr = завжди)
+    const char* has_key;     ///< "equipment.has_evap_temp" — потрібен hardware (nullptr = ні)
 };
-static_assert(sizeof(TempRecord) == 12, "TempRecord must be 12 bytes");
+
+/// Таблиця каналів (порядок = порядок у бінарному записі)
+static constexpr ChannelDef CHANNEL_DEFS[MAX_CHANNELS] = {
+    {"air",      "equipment.air_temp",      nullptr,                    nullptr                     },
+    {"evap",     "equipment.evap_temp",     "datalogger.log_evap",      "equipment.has_evap_temp"   },
+    {"cond",     "equipment.cond_temp",     "datalogger.log_cond",      "equipment.has_cond_temp"   },
+    {"setpoint", "thermostat.setpoint",     "datalogger.log_setpoint",  nullptr                     },
+    {"humidity", "equipment.humidity",      "datalogger.log_humidity",  "equipment.has_humidity"    },
+    {nullptr,    nullptr,                   nullptr,                    nullptr                     },
+};
+
+/// Запис температури (16 bytes, 6 каналів)
+struct TempRecord {
+    uint32_t timestamp;      ///< UNIX epoch (секунди) або uptime_sec
+    int16_t  ch[MAX_CHANNELS]; ///< Канали ×10 (TEMP_NO_DATA = немає даних)
+};
+static_assert(sizeof(TempRecord) == 16, "TempRecord must be 16 bytes");
 
 /// Тип події
 enum EventType : uint8_t {
@@ -81,8 +99,7 @@ private:
     // ── Налаштування (cached) ──
     int32_t  sample_interval_ms_ = 60000;
     int32_t  retention_hours_    = 48;
-    bool     log_evap_ = false;
-    bool     log_cond_ = false;
+    bool     ch_enabled_[MAX_CHANNELS] = {true, false, false, false, false, false};
 
     // ── Статистика ──
     uint32_t temp_count_  = 0;

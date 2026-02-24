@@ -1,15 +1,16 @@
 /**
  * @brief DataLogger — multi-channel temperature & event logging to LittleFS.
  *
- * Samples up to 3 temperature channels every N seconds (air + optional evap/cond).
+ * Samples up to 6 configurable channels every N seconds.
  * Logs equipment events on state change (edge-detect).
- * Append-only files with rotate. Streaming chunked JSON v2 via HTTP.
+ * Append-only files with rotate. Streaming chunked JSON v3 via HTTP.
  *
- * JSON v2 format:
- *   {"channels":["air","evap","cond"],
- *    "temp":[[ts,a,e,c],...],
+ * JSON v3 format:
+ *   {"channels":["air","evap","setpoint",...],
+ *    "temp":[[ts,v0,v1,v2,...],...],
  *    "events":[[ts,type],...]}
- * where e/c = null when TEMP_NO_DATA.
+ * where value = null when TEMP_NO_DATA.
+ * channels array contains only enabled channel IDs.
  */
 
 #include "datalogger_module.h"
@@ -45,10 +46,9 @@ int DataLoggerModule::append_temp_val(char* buf, size_t sz, int16_t val) {
     return snprintf(buf, sz, "%d", static_cast<int>(val));
 }
 
-// ── Міграція старого 8-байтного формату ──
+// ── Міграція старого формату (8 або 12 байт → 16 байт) ──
 
 void DataLoggerModule::migrate_old_format() {
-    // Перевіряємо чи temp.bin має старий формат (розмір не кратний 12)
     struct stat st;
     bool need_migrate = false;
 
@@ -64,7 +64,7 @@ void DataLoggerModule::migrate_old_format() {
     }
 
     if (need_migrate) {
-        ESP_LOGW(TAG, "Старий формат temp файлів — видаляємо для міграції");
+        ESP_LOGW(TAG, "Старий формат temp файлів — видаляємо для міграції на 16-байтний");
         remove(TEMP_FILE);
         remove(TEMP_OLD_FILE);
     }
@@ -76,7 +76,7 @@ bool DataLoggerModule::on_init() {
     // Створити директорію логів
     mkdir(LOG_DIR, 0775);
 
-    // Міграція старого формату (8 bytes → 12 bytes)
+    // Міграція старого формату (8/12 bytes → 16 bytes)
     migrate_old_format();
 
     sync_settings();
@@ -112,9 +112,14 @@ bool DataLoggerModule::on_init() {
     prev_alarm_high_     = read_bool("protection.high_temp_alarm", false);
     prev_alarm_low_      = read_bool("protection.low_temp_alarm", false);
 
-    ESP_LOGI(TAG, "Ініціалізовано: %lu temp, %lu events, %lu KB flash (evap=%d, cond=%d)",
+    // Логувати активні канали
+    int active = 0;
+    for (int i = 0; i < MAX_CHANNELS; i++) {
+        if (ch_enabled_[i] && CHANNEL_DEFS[i].id) active++;
+    }
+    ESP_LOGI(TAG, "Ініціалізовано: %lu temp, %lu events, %lu KB flash, %d каналів",
              (unsigned long)temp_count_, (unsigned long)event_count_,
-             (unsigned long)flash_used_kb_, log_evap_, log_cond_);
+             (unsigned long)flash_used_kb_, active);
     return true;
 }
 
@@ -124,8 +129,24 @@ void DataLoggerModule::sync_settings() {
     int32_t interval = read_int("datalogger.sample_interval", 60);
     sample_interval_ms_ = interval * 1000;
     retention_hours_ = read_int("datalogger.retention_hours", 48);
-    log_evap_ = read_bool("datalogger.log_evap", false);
-    log_cond_ = read_bool("datalogger.log_cond", false);
+
+    // Оновити enabled стан кожного каналу
+    for (int i = 0; i < MAX_CHANNELS; i++) {
+        const auto& def = CHANNEL_DEFS[i];
+        if (!def.id) {
+            ch_enabled_[i] = false;
+            continue;
+        }
+        // Канал без enable_key — завжди увімкнений (air)
+        if (!def.enable_key) {
+            ch_enabled_[i] = true;
+            continue;
+        }
+        // Канал увімкнений якщо toggle ON + hardware присутній (якщо потрібен)
+        bool toggled = read_bool(def.enable_key, false);
+        bool has_hw = def.has_key ? read_bool(def.has_key, false) : true;
+        ch_enabled_[i] = toggled && has_hw;
+    }
 }
 
 // ── Main loop ──
@@ -135,7 +156,7 @@ void DataLoggerModule::on_update(uint32_t dt_ms) {
 
     sync_settings();
 
-    // 1. Семплювання температури (3 канали)
+    // 1. Семплювання температури (до 6 каналів)
     sample_timer_ms_ += dt_ms;
     if (sample_timer_ms_ >= static_cast<uint32_t>(sample_interval_ms_)) {
         sample_timer_ms_ = 0;
@@ -143,37 +164,24 @@ void DataLoggerModule::on_update(uint32_t dt_ms) {
         TempRecord rec;
         rec.timestamp = current_timestamp();
 
-        // Air — завжди логується
-        float air = read_float("equipment.air_temp", 0.0f);
-        rec.air_x10 = static_cast<int16_t>(air * 10.0f);
-
-        // Evap — тільки якщо enabled І датчик присутній
-        if (log_evap_ && read_bool("equipment.has_evap_temp", false)) {
-            float evap = read_float("equipment.evap_temp", 0.0f);
-            rec.evap_x10 = static_cast<int16_t>(evap * 10.0f);
-        } else {
-            rec.evap_x10 = TEMP_NO_DATA;
+        for (int i = 0; i < MAX_CHANNELS; i++) {
+            const auto& def = CHANNEL_DEFS[i];
+            if (ch_enabled_[i] && def.state_key) {
+                float val = read_float(def.state_key, 0.0f);
+                rec.ch[i] = static_cast<int16_t>(val * 10.0f);
+            } else {
+                rec.ch[i] = TEMP_NO_DATA;
+            }
         }
-
-        // Cond — тільки якщо enabled І датчик присутній
-        if (log_cond_ && read_bool("equipment.has_cond_temp", false)) {
-            float cond = read_float("equipment.cond_temp", 0.0f);
-            rec.cond_x10 = static_cast<int16_t>(cond * 10.0f);
-        } else {
-            rec.cond_x10 = TEMP_NO_DATA;
-        }
-
-        rec._reserved = TEMP_NO_DATA;
 
         if (!temp_buf_.full()) {
             temp_buf_.push_back(rec);
-            // Оновлюємо кількість записів (flushed + RAM) одразу для UI
             state_set("datalogger.records_count",
                       static_cast<int32_t>(temp_count_ + temp_buf_.size()));
         }
     }
 
-    // 2. Polling подій (edge-detect, дешево — тільки read_bool)
+    // 2. Polling подій (edge-detect)
     size_t events_before = event_buf_.size();
     poll_events();
     if (event_buf_.size() != events_before) {
@@ -299,7 +307,6 @@ void DataLoggerModule::rotate_if_needed(const char* path, size_t max_size) {
     if (stat(path, &st) != 0) return;
     if (static_cast<size_t>(st.st_size) <= max_size) return;
 
-    // Визначити .old шлях
     const char* old_path = nullptr;
     if (strcmp(path, TEMP_FILE) == 0) {
         old_path = TEMP_OLD_FILE;
@@ -325,12 +332,13 @@ void DataLoggerModule::update_flash_used() {
     flash_used_kb_ = static_cast<uint32_t>((total + 512) / 1024);
 }
 
-// ── Streaming chunked JSON v2 для GET /api/log ──
+// ── Streaming chunked JSON v3 для GET /api/log ──
 //
-// Формат: {"channels":["air","evap","cond"],
-//          "temp":[[ts,air,evap,cond],...],
+// Формат: {"channels":["air","evap","setpoint"],
+//          "temp":[[ts,v0,v1,v2],...],
 //          "events":[[ts,type],...]}
-// Значення evap/cond = null якщо TEMP_NO_DATA.
+// Всі 6 слотів записані у бінарному файлі; JSON містить тільки
+// ті канали що мають хоча б 1 != TEMP_NO_DATA значення.
 
 esp_err_t DataLoggerModule::serialize_log_chunked(httpd_req_t* req, int hours) const {
     char buf[256];
@@ -344,12 +352,50 @@ esp_err_t DataLoggerModule::serialize_log_chunked(httpd_req_t* req, int hours) c
         }
     }
 
-    // 1. Header з channels + початок temp масиву
-    len = snprintf(buf, sizeof(buf),
-        "{\"channels\":[\"air\",\"evap\",\"cond\"],\"temp\":[");
-    httpd_resp_send_chunk(req, buf, len);
+    // Визначити які канали мають дані (scan файлів + RAM)
+    bool ch_has_data[MAX_CHANNELS] = {};
+    // Scan файлів
+    const char* temp_files_scan[] = {TEMP_OLD_FILE, TEMP_FILE};
+    for (int fi = 0; fi < 2; fi++) {
+        FILE* f = fopen(temp_files_scan[fi], "rb");
+        if (!f) continue;
+        TempRecord rec;
+        while (fread(&rec, sizeof(rec), 1, f) == 1) {
+            if (rec.timestamp < cutoff) continue;
+            for (int i = 0; i < MAX_CHANNELS; i++) {
+                if (rec.ch[i] != TEMP_NO_DATA) ch_has_data[i] = true;
+            }
+        }
+        fclose(f);
+    }
+    // Scan RAM буфер
+    for (size_t bi = 0; bi < temp_buf_.size(); bi++) {
+        const auto& rec = temp_buf_[bi];
+        if (rec.timestamp < cutoff) continue;
+        for (int i = 0; i < MAX_CHANNELS; i++) {
+            if (rec.ch[i] != TEMP_NO_DATA) ch_has_data[i] = true;
+        }
+    }
 
-    // 2. Читаємо temp.old + temp.bin
+    // Побудувати індекси активних каналів
+    int active_idx[MAX_CHANNELS];
+    int active_count = 0;
+    for (int i = 0; i < MAX_CHANNELS; i++) {
+        if (ch_has_data[i] && CHANNEL_DEFS[i].id) {
+            active_idx[active_count++] = i;
+        }
+    }
+
+    // 1. Header: channels масив
+    int pos = snprintf(buf, sizeof(buf), "{\"channels\":[");
+    for (int a = 0; a < active_count; a++) {
+        pos += snprintf(buf + pos, sizeof(buf) - pos, "%s\"%s\"",
+                       a > 0 ? "," : "", CHANNEL_DEFS[active_idx[a]].id);
+    }
+    pos += snprintf(buf + pos, sizeof(buf) - pos, "],\"temp\":[");
+    httpd_resp_send_chunk(req, buf, pos);
+
+    // 2. Temp records (файли + RAM)
     const char* temp_files[] = {TEMP_OLD_FILE, TEMP_FILE};
     bool first = true;
 
@@ -361,19 +407,17 @@ esp_err_t DataLoggerModule::serialize_log_chunked(httpd_req_t* req, int hours) c
         while (fread(&rec, sizeof(rec), 1, f) == 1) {
             if (rec.timestamp < cutoff) continue;
 
-            // [ts, air, evap_or_null, cond_or_null]
             char tmp[128];
-            int pos = 0;
-            pos += snprintf(tmp + pos, sizeof(tmp) - pos, "%s[%lu,%d,",
-                           first ? "" : ",",
-                           (unsigned long)rec.timestamp,
-                           static_cast<int>(rec.air_x10));
-            pos += append_temp_val(tmp + pos, sizeof(tmp) - pos, rec.evap_x10);
-            pos += snprintf(tmp + pos, sizeof(tmp) - pos, ",");
-            pos += append_temp_val(tmp + pos, sizeof(tmp) - pos, rec.cond_x10);
-            pos += snprintf(tmp + pos, sizeof(tmp) - pos, "]");
+            int p = snprintf(tmp, sizeof(tmp), "%s[%lu",
+                            first ? "" : ",",
+                            (unsigned long)rec.timestamp);
+            for (int a = 0; a < active_count; a++) {
+                p += snprintf(tmp + p, sizeof(tmp) - p, ",");
+                p += append_temp_val(tmp + p, sizeof(tmp) - p, rec.ch[active_idx[a]]);
+            }
+            p += snprintf(tmp + p, sizeof(tmp) - p, "]");
 
-            if (httpd_resp_send_chunk(req, tmp, pos) != ESP_OK) {
+            if (httpd_resp_send_chunk(req, tmp, p) != ESP_OK) {
                 fclose(f);
                 httpd_resp_send_chunk(req, nullptr, 0);
                 return ESP_FAIL;
@@ -383,23 +427,22 @@ esp_err_t DataLoggerModule::serialize_log_chunked(httpd_req_t* req, int hours) c
         fclose(f);
     }
 
-    // 3. Також RAM буфер (ще не flush-нутий)
+    // 3. RAM буфер
     for (size_t i = 0; i < temp_buf_.size(); i++) {
         const auto& rec = temp_buf_[i];
         if (rec.timestamp < cutoff) continue;
 
         char tmp[128];
-        int pos = 0;
-        pos += snprintf(tmp + pos, sizeof(tmp) - pos, "%s[%lu,%d,",
-                       first ? "" : ",",
-                       (unsigned long)rec.timestamp,
-                       static_cast<int>(rec.air_x10));
-        pos += append_temp_val(tmp + pos, sizeof(tmp) - pos, rec.evap_x10);
-        pos += snprintf(tmp + pos, sizeof(tmp) - pos, ",");
-        pos += append_temp_val(tmp + pos, sizeof(tmp) - pos, rec.cond_x10);
-        pos += snprintf(tmp + pos, sizeof(tmp) - pos, "]");
+        int p = snprintf(tmp, sizeof(tmp), "%s[%lu",
+                        first ? "" : ",",
+                        (unsigned long)rec.timestamp);
+        for (int a = 0; a < active_count; a++) {
+            p += snprintf(tmp + p, sizeof(tmp) - p, ",");
+            p += append_temp_val(tmp + p, sizeof(tmp) - p, rec.ch[active_idx[a]]);
+        }
+        p += snprintf(tmp + p, sizeof(tmp) - p, "]");
 
-        httpd_resp_send_chunk(req, tmp, pos);
+        httpd_resp_send_chunk(req, tmp, p);
         first = false;
     }
 
@@ -431,7 +474,7 @@ esp_err_t DataLoggerModule::serialize_log_chunked(httpd_req_t* req, int hours) c
         fclose(f);
     }
 
-    // Також RAM events
+    // RAM events
     for (size_t i = 0; i < event_buf_.size(); i++) {
         const auto& rec = event_buf_[i];
         if (rec.timestamp < cutoff) continue;
@@ -452,22 +495,28 @@ esp_err_t DataLoggerModule::serialize_log_chunked(httpd_req_t* req, int hours) c
 // ── Summary для /api/log/summary ──
 
 bool DataLoggerModule::serialize_summary(char* buf, size_t buf_size) const {
-    // Включаємо RAM буфер в лічильники
     uint32_t total_temp = temp_count_ + static_cast<uint32_t>(temp_buf_.size());
     uint32_t total_events = event_count_ + static_cast<uint32_t>(event_buf_.size());
+
+    // Порахувати активні канали
+    int active = 0;
+    for (int i = 0; i < MAX_CHANNELS; i++) {
+        if (ch_enabled_[i] && CHANNEL_DEFS[i].id) active++;
+    }
+
     int len = snprintf(buf, buf_size,
-        "{\"hours\":%ld,\"temp_count\":%lu,\"event_count\":%lu,\"flash_kb\":%lu}",
+        "{\"hours\":%ld,\"temp_count\":%lu,\"event_count\":%lu,\"flash_kb\":%lu,\"channels\":%d}",
         (long)retention_hours_,
         (unsigned long)total_temp,
         (unsigned long)total_events,
-        (unsigned long)flash_used_kb_);
+        (unsigned long)flash_used_kb_,
+        active);
     return len > 0 && static_cast<size_t>(len) < buf_size;
 }
 
 // ── Stop ──
 
 void DataLoggerModule::on_stop() {
-    // Flush залишки перед зупинкою
     flush_to_flash();
     ESP_LOGI(TAG, "Зупинено, фінальний flush виконано");
 }

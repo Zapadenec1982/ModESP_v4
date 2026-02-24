@@ -17,11 +17,6 @@
   let refreshTimer;
   let showEvents = false;
 
-  // Канали: показувати/ховати (тільки фронтенд)
-  let showAir = true;
-  let showEvap = true;
-  let showCond = true;
-
   // SVG dimensions
   const W = 720;
   const H = 280;
@@ -38,10 +33,13 @@
   const DOOR_OPEN = 8, DOOR_CLOSE = 9;
   const POWER_ON = 10;
 
-  // Канали: кольори (labels read via $t)
-  const CH_AIR  = { name: 'air',  tkey: 'chart.ch_air',  color: '#3b82f6', idx: 1 };
-  const CH_EVAP = { name: 'evap', tkey: 'chart.ch_evap', color: '#10b981', idx: 2 };
-  const CH_COND = { name: 'cond', tkey: 'chart.ch_cond', color: '#f59e0b', idx: 3 };
+  // Палітра кольорів для каналів
+  const PALETTE = ['#3b82f6', '#10b981', '#f59e0b', '#f97316', '#8b5cf6', '#ec4899'];
+  // i18n ключі для відомих каналів
+  const CH_TKEYS = {
+    air: 'chart.ch_air', evap: 'chart.ch_evap', cond: 'chart.ch_cond',
+    setpoint: 'chart.ch_setpoint', humidity: 'chart.ch_humidity'
+  };
 
   async function loadData() {
     loading = true;
@@ -64,11 +62,41 @@
 
   function setHours(h) { hours = h; loadData(); }
 
+  // ── Динамічні канали з API response ──
+
+  let channelShow = {};  // {name: bool} — стан toggles
+
+  $: channels = (data?.channels || []).map((name, i) => {
+    if (!(name in channelShow)) channelShow[name] = true;
+    return {
+      name,
+      idx: i + 1,
+      color: PALETTE[i % PALETTE.length],
+      tkey: CH_TKEYS[name] || name,
+    };
+  });
+
   // Чи є дані для каналу (хоча б один не-null)
   function channelHasData(pts, idx) {
     if (!pts) return false;
     return pts.some(p => p[idx] != null);
   }
+
+  // Видимі канали (мають дані + toggle on)
+  $: visibleChannels = channels.filter(ch =>
+    channelShow[ch.name] !== false && channelHasData(temp, ch.idx)
+  );
+
+  // ── Reactive data ──
+  $: temp = data?.temp || [];
+  $: events = data?.events || [];
+
+  // Які канали мають дані
+  $: channelsWithData = channels.filter(ch => channelHasData(temp, ch.idx));
+
+  // Downsample по першому каналу (зазвичай air)
+  $: primaryIdx = channels.length > 0 ? channels[0].idx : 1;
+  $: sampled = downsample(temp, MAX_POINTS, primaryIdx);
 
   // Coordinate helpers
   function tsRange(pts) {
@@ -76,11 +104,11 @@
     return [pts[0][0], pts[pts.length - 1][0]];
   }
 
-  function tempRange(pts, channels) {
+  function tempRange(pts, chs) {
     if (!pts || pts.length === 0) return [-40, 10];
     let mn = Infinity, mx = -Infinity;
     for (const p of pts) {
-      for (const ch of channels) {
+      for (const ch of chs) {
         const raw = p[ch.idx];
         if (raw == null) continue;
         const v = raw / 10;
@@ -93,20 +121,23 @@
     return [Math.floor(mn - margin), Math.ceil(mx + margin)];
   }
 
-  function xScale(ts, tMin, tMax) {
-    if (tMax === tMin) return CW / 2;
-    return ((ts - tMin) / (tMax - tMin)) * CW;
+  $: [tMin, tMax] = tsRange(temp);
+  $: [vMin, vMax] = tempRange(temp, visibleChannels);
+
+  function xScale(ts, tMn, tMx) {
+    if (tMx === tMn) return CW / 2;
+    return ((ts - tMn) / (tMx - tMn)) * CW;
   }
-  function yScale(tempC, vMin, vMax) {
-    if (vMax === vMin) return CH / 2;
-    return CH - ((tempC - vMin) / (vMax - vMin)) * CH;
+  function yScale(tempC, vMn, vMx) {
+    if (vMx === vMn) return CH / 2;
+    return CH - ((tempC - vMn) / (vMx - vMn)) * CH;
   }
 
   // Build zones from event pairs
-  function buildZones(events, onType, offType, tMin, tMax) {
+  function buildZones(evts, onType, offType) {
     const zones = [];
     let start = null;
-    for (const [ts, type] of events) {
+    for (const [ts, type] of evts) {
       if (type === onType) start = ts;
       else if (type === offType && start !== null) {
         zones.push({ x1: xScale(start, tMin, tMax), x2: xScale(ts, tMin, tMax) });
@@ -118,7 +149,7 @@
   }
 
   // Build polyline для одного каналу
-  function buildPolyline(pts, chIdx, tMin, tMax, vMin, vMax) {
+  function buildPolyline(pts, chIdx) {
     const segments = [];
     let seg = [];
     for (const p of pts) {
@@ -135,36 +166,15 @@
     return segments;
   }
 
-  // Visible channels
-  $: visibleChannels = [
-    ...(showAir && hasAir ? [CH_AIR] : []),
-    ...(showEvap && hasEvap ? [CH_EVAP] : []),
-    ...(showCond && hasCond ? [CH_COND] : [])
-  ];
-
-  // Reactive calculations
-  $: temp = data && data.temp ? data.temp : [];
-  $: events = data && data.events ? data.events : [];
-  $: channels = data && data.channels ? data.channels : [];
-
-  // Які канали мають дані
-  $: hasAir  = channelHasData(temp, 1);
-  $: hasEvap = channelHasData(temp, 2);
-  $: hasCond = channelHasData(temp, 3);
-
-  // Downsample по первинному каналу (air)
-  $: sampled = downsample(temp, MAX_POINTS, 1);
-  $: [tMin, tMax] = tsRange(temp);
-  $: [vMin, vMax] = tempRange(temp, visibleChannels);
-
-  // Polylines per channel
-  $: airLines  = showAir && hasAir  ? buildPolyline(sampled, 1, tMin, tMax, vMin, vMax) : [];
-  $: evapLines = showEvap && hasEvap ? buildPolyline(sampled, 2, tMin, tMax, vMin, vMax) : [];
-  $: condLines = showCond && hasCond ? buildPolyline(sampled, 3, tMin, tMax, vMin, vMax) : [];
+  // Polylines для кожного видимого каналу
+  $: channelLines = visibleChannels.map(ch => ({
+    ...ch,
+    segments: buildPolyline(sampled, ch.idx)
+  }));
 
   // Zones
-  $: compZones = buildZones(events, COMP_ON, COMP_OFF, tMin, tMax);
-  $: defrostZones = buildZones(events, DEF_START, DEF_END, tMin, tMax);
+  $: compZones = buildZones(events, COMP_ON, COMP_OFF);
+  $: defrostZones = buildZones(events, DEF_START, DEF_END);
 
   // Alarm markers
   $: alarmMarkers = events
@@ -176,8 +186,9 @@
     .filter(e => e[1] === POWER_ON)
     .map(e => PAD.left + xScale(e[0], tMin, tMax));
 
-  // Setpoint line
-  $: setpoint = $state['thermostat.setpoint'];
+  // Setpoint line (якщо setpoint НЕ логується як канал → показати з live state)
+  $: hasSetpointChannel = channels.some(ch => ch.name === 'setpoint');
+  $: setpoint = !hasSetpointChannel ? $state['thermostat.setpoint'] : null;
   $: spY = setpoint != null ? PAD.top + yScale(setpoint, vMin, vMax) : null;
 
   // Time axis labels
@@ -230,7 +241,6 @@
     const clientX = e.touches ? e.touches[0].clientX : e.clientX;
     const mouseX = (clientX - rect.left) / rect.width * W - PAD.left;
     const ts = tMin + (mouseX / CW) * (tMax - tMin);
-    // Find nearest point
     let best = null, bestDist = Infinity;
     for (const p of temp) {
       const d = Math.abs(p[0] - ts);
@@ -238,16 +248,14 @@
     }
     if (best) {
       const x = PAD.left + xScale(best[0], tMin, tMax);
-      // Y по air (основному каналу)
-      const airVal = best[1] != null ? best[1] / 10 : null;
-      const y = airVal != null ? PAD.top + yScale(airVal, vMin, vMax) : PAD.top + CH / 2;
+      const firstVis = visibleChannels[0];
+      const firstVal = firstVis && best[firstVis.idx] != null ? best[firstVis.idx] / 10 : null;
+      const y = firstVal != null ? PAD.top + yScale(firstVal, vMin, vMax) : PAD.top + CH / 2;
       const d = new Date(best[0] * 1000);
       const time = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-      // Зібрати значення всіх каналів
-      const vals = [];
-      if (showAir && hasAir && best[1] != null) vals.push(`${(best[1]/10).toFixed(1)}°`);
-      if (showEvap && hasEvap && best[2] != null) vals.push(`E:${(best[2]/10).toFixed(1)}°`);
-      if (showCond && hasCond && best[3] != null) vals.push(`C:${(best[3]/10).toFixed(1)}°`);
+      const vals = visibleChannels
+        .filter(ch => best[ch.idx] != null)
+        .map(ch => `${($t[ch.tkey] || ch.name).slice(0,3)}:${(best[ch.idx]/10).toFixed(1)}°`);
       tooltip = { x, y, text: vals.join(' ') + '  ' + time, width: Math.max(90, vals.join(' ').length * 7 + 50) };
     }
   }
@@ -256,21 +264,20 @@
   // CSV export (client-side)
   function downloadCSV() {
     if (!data) return;
-    let csv = 'timestamp,datetime,air_temp';
-    if (hasEvap) csv += ',evap_temp';
-    if (hasCond) csv += ',cond_temp';
+    let csv = 'timestamp,datetime';
+    for (const ch of channelsWithData) csv += `,${ch.name}`;
     csv += '\n';
 
     for (const p of temp) {
       const d = new Date(p[0] * 1000);
       const dt = d.toISOString().replace('T', ' ').slice(0, 19);
-      let line = `${p[0]},${dt},${p[1] != null ? (p[1]/10).toFixed(1) : ''}`;
-      if (hasEvap) line += `,${p[2] != null ? (p[2]/10).toFixed(1) : ''}`;
-      if (hasCond) line += `,${p[3] != null ? (p[3]/10).toFixed(1) : ''}`;
+      let line = `${p[0]},${dt}`;
+      for (const ch of channelsWithData) {
+        line += `,${p[ch.idx] != null ? (p[ch.idx]/10).toFixed(1) : ''}`;
+      }
       csv += line + '\n';
     }
 
-    // Додати events в окрему секцію
     csv += '\n# Events\ntimestamp,datetime,event_type,description\n';
     for (const e of events) {
       const d = new Date(e[0] * 1000);
@@ -300,22 +307,14 @@
     </div>
   </div>
 
-  <!-- Перемикачі каналів -->
-  {#if hasEvap || hasCond}
+  <!-- Перемикачі каналів (якщо більше 1) -->
+  {#if channelsWithData.length > 1}
     <div class="channel-toggles">
-      <label class="ch-toggle" style="--ch-color: {CH_AIR.color}">
-        <input type="checkbox" bind:checked={showAir} /> {$t[CH_AIR.tkey]}
-      </label>
-      {#if hasEvap}
-        <label class="ch-toggle" style="--ch-color: {CH_EVAP.color}">
-          <input type="checkbox" bind:checked={showEvap} /> {$t[CH_EVAP.tkey]}
+      {#each channelsWithData as ch}
+        <label class="ch-toggle" style="--ch-color: {ch.color}">
+          <input type="checkbox" bind:checked={channelShow[ch.name]} /> {$t[ch.tkey] || ch.name}
         </label>
-      {/if}
-      {#if hasCond}
-        <label class="ch-toggle" style="--ch-color: {CH_COND.color}">
-          <input type="checkbox" bind:checked={showCond} /> {$t[CH_COND.tkey]}
-        </label>
-      {/if}
+      {/each}
     </div>
   {/if}
 
@@ -357,20 +356,16 @@
         <line x1={px} y1={PAD.top} x2={px} y2={PAD.top + CH} class="power-mark" />
       {/each}
 
-      <!-- Setpoint line -->
+      <!-- Setpoint line (live з state, якщо НЕ логується як канал) -->
       {#if spY != null}
         <line x1={PAD.left} y1={spY} x2={W - PAD.right} y2={spY} class="setpoint" />
       {/if}
 
-      <!-- Temperature lines (multi-channel) -->
-      {#each airLines as seg}
-        <polyline points={seg.join(' ')} class="line-air" />
-      {/each}
-      {#each evapLines as seg}
-        <polyline points={seg.join(' ')} class="line-evap" />
-      {/each}
-      {#each condLines as seg}
-        <polyline points={seg.join(' ')} class="line-cond" />
+      <!-- Temperature lines (dynamic channels) -->
+      {#each channelLines as ch}
+        {#each ch.segments as seg}
+          <polyline points={seg.join(' ')} fill="none" stroke={ch.color} stroke-width="1.5" />
+        {/each}
       {/each}
 
       <!-- Y axis labels -->
@@ -393,29 +388,23 @@
         </text>
       {/if}
 
-      <!-- Legend -->
-      {#if showAir && hasAir}
-        <rect x={PAD.left} y={H - 12} width="8" height="8" fill={CH_AIR.color} />
-        <text x={PAD.left + 12} y={H - 5} class="legend-text">{$t[CH_AIR.tkey]}</text>
-      {/if}
-      {#if showEvap && hasEvap}
-        <rect x={PAD.left + 70} y={H - 12} width="8" height="8" fill={CH_EVAP.color} />
-        <text x={PAD.left + 82} y={H - 5} class="legend-text">{$t[CH_EVAP.tkey]}</text>
-      {/if}
-      {#if showCond && hasCond}
-        <rect x={PAD.left + 150} y={H - 12} width="8" height="8" fill={CH_COND.color} />
-        <text x={PAD.left + 162} y={H - 5} class="legend-text">{$t[CH_COND.tkey]}</text>
-      {/if}
+      <!-- Legend (dynamic channels) -->
+      {#each visibleChannels as ch, i}
+        <rect x={PAD.left + i * 80} y={H - 12} width="8" height="8" fill={ch.color} />
+        <text x={PAD.left + i * 80 + 12} y={H - 5} class="legend-text">{$t[ch.tkey] || ch.name}</text>
+      {/each}
       <!-- Zone legend -->
       {#if true}
-        {@const lx = PAD.left + (hasEvap || hasCond ? 240 : 0)}
+        {@const lx = PAD.left + visibleChannels.length * 80}
         <rect x={lx} y={H - 12} width="8" height="8" fill="#22c55e" opacity="0.5" />
         <text x={lx + 12} y={H - 5} class="legend-text">{$t['chart.legend_comp']}</text>
         <rect x={lx + 60} y={H - 12} width="8" height="8" fill="#f97316" opacity="0.5" />
         <text x={lx + 72} y={H - 5} class="legend-text">{$t['chart.legend_defrost']}</text>
-        <line x1={lx + 130} y1={H - 8} x2={lx + 148} y2={H - 8}
-              stroke="#f59e0b" stroke-width="1" stroke-dasharray="4 2" />
-        <text x={lx + 152} y={H - 5} class="legend-text">{$t['chart.legend_setpoint']}</text>
+        {#if spY != null}
+          <line x1={lx + 130} y1={H - 8} x2={lx + 148} y2={H - 8}
+                stroke="#f59e0b" stroke-width="1" stroke-dasharray="4 2" />
+          <text x={lx + 152} y={H - 5} class="legend-text">{$t['chart.legend_setpoint']}</text>
+        {/if}
       {/if}
     </svg>
   {/if}
@@ -497,6 +486,7 @@
     display: flex;
     gap: 12px;
     margin-bottom: 6px;
+    flex-wrap: wrap;
   }
   .ch-toggle {
     display: flex;
@@ -526,9 +516,6 @@
     display: block;
   }
   .chart-svg .grid { stroke: var(--border); stroke-width: 0.5; }
-  .chart-svg .line-air  { fill: none; stroke: #3b82f6; stroke-width: 1.5; }
-  .chart-svg .line-evap { fill: none; stroke: #10b981; stroke-width: 1.5; }
-  .chart-svg .line-cond { fill: none; stroke: #f59e0b; stroke-width: 1.5; }
   .chart-svg .setpoint { stroke: #f59e0b; stroke-width: 1; stroke-dasharray: 4 2; }
   .chart-svg .zone-comp { fill: #22c55e; opacity: 0.15; }
   .chart-svg .zone-defrost { fill: #f97316; opacity: 0.2; }

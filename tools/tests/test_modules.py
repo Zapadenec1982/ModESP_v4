@@ -523,9 +523,9 @@ class TestCrossModuleValidation:
         assert len(therm_errors) == 0, f"Thermostat errors: {therm_errors}"
 
     def test_total_state_keys(self, all_manifests):
-        """Всього 95 state keys у 5 модулях."""
+        """Всього 97 state keys у 5 модулях."""
         total = sum(len(m.get("state", {})) for m in all_manifests)
-        assert total == 95
+        assert total == 97
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -643,9 +643,10 @@ class TestStateMetaFullProject:
         # defrost: type, interval, counter_mode, initiation, end_temp, max_duration,
         #   demand_temp, drip_time, fan_delay, fad_temp, stabilize_time, valve_delay,
         #   equalize_time, manual_start, manual_stop = 15 rw
-        # datalogger: enabled, retention_hours, sample_interval, log_evap, log_cond = 5 rw
-        # Total: 1 + 8 + 17 + 15 + 5 = 46
-        assert "STATE_META_COUNT = 46" in result
+        # datalogger: enabled, retention_hours, sample_interval, log_evap, log_cond,
+        #   log_setpoint, log_humidity = 7 rw
+        # Total: 1 + 8 + 17 + 15 + 7 = 48
+        assert "STATE_META_COUNT = 48" in result
 
     def test_persist_true_for_setpoint(self, all_manifests):
         """thermostat.setpoint — writable=true, persist=true."""
@@ -690,8 +691,8 @@ class TestMqttTopicsFullProject:
         """Загальна кількість MQTT subscribe topics."""
         gen = MqttTopicsGenerator()
         result = gen.generate(all_manifests)
-        # equipment=0, protection=8, thermostat=17, defrost=14, datalogger=5 = 44
-        assert "MQTT_SUBSCRIBE_COUNT = 44" in result
+        # equipment=0, protection=8, thermostat=17, defrost=14, datalogger=7 = 46
+        assert "MQTT_SUBSCRIBE_COUNT = 46" in result
 
     def test_contains_all_module_topics(self, all_manifests):
         """Містить topics від усіх модулів."""
