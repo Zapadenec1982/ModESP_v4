@@ -118,13 +118,13 @@ ModESP_v4/
 │       │   ├── state_serializer.h, config_loader.h, rpc_handler.h
 │       └── src/
 ├── drivers/                          # Драйвери пристроїв
-│   ├── ds18b20/, ntc/, relay/
+│   ├── ds18b20/, ntc/, relay/, digital_input/
 ├── modules/                          # Бізнес-логіка
-│   ├── thermostat/, alarm/, defrost/
+│   ├── equipment/, thermostat/, protection/, defrost/, datalogger/
 ├── main/                             # Точка входу
-│   ├── main.cpp, board_config.h
-├── configs/                          # JSON конфігурації
-│   ├── default.json, freezer.json
+│   ├── main.cpp
+├── data/                             # Runtime конфігурація + WebUI
+│   ├── board.json, bindings.json, ui.json, www/
 ├── CMakeLists.txt
 ├── sdkconfig
 └── partitions.csv

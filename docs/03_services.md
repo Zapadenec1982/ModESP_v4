@@ -10,7 +10,7 @@
 | ErrorService | CRITICAL | Помилки, Safe Mode | ~2 KB |
 | WatchdogService | CRITICAL | Heartbeat модулів | ~0.5 KB |
 | ConfigService | HIGH | Завантаження/збереження конфіг | ~1 KB |
-| PersistService | LOW | Автозбереження стану в NVS | ~0.5 KB |
+| PersistService | CRITICAL | Автозбереження стану в NVS | ~0.5 KB |
 | LoggerService | LOW | Ring buffer логів | ~5 KB |
 | SystemMonitor | LOW | RAM, uptime, boot reason | ~0.2 KB |
 
@@ -89,55 +89,43 @@ public:
 - Software (WatchdogService) → ловить зависання окремих модулів
 - Hardware (ESP32 TWDT в App) → ловить зависання всієї системи
 
-## 3. ConfigService — Конфігурація
+## 3. ConfigService — Конфігурація плати та драйверів
 
-Завантаження JSON конфігурації → SharedState при старті.
-Збереження змін SharedState → NVS.
+Парсинг `board.json` + `bindings.json` при старті → заповнення BoardConfig та Bindings у HAL.
 
 ```
 Старт:
-  configs/default.json ──parse──► SharedState
-  NVS saved config ────load───► SharedState (overrides defaults)
+  data/board.json ──parse──► BoardConfig (GPIO pins, I2C buses, OneWire, ADC)
+  data/bindings.json ──parse──► vector<Binding> (role → driver → hardware)
 
 Runtime:
-  WebSocket RPC "set config.setpoint=5" → SharedState → mark dirty
-
-Periodic / on demand:
-  SharedState (dirty keys) ──save──► NVS
+  POST /api/bindings → оновити bindings.json → restart
 ```
 
-### API
-
-```cpp
-class ConfigService : public BaseModule {
-public:
-    bool load(const char* path = "/configs/default.json");
-    bool save();
-    bool reset_to_defaults(const char* section = nullptr);
-    bool export_json(char* buffer, size_t size);
-    bool import_json(const char* json_str);
-    bool is_dirty() const;
-};
-```
+Парсить секції: `gpio_outputs`, `onewire_buses`, `gpio_inputs`, `adc_channels`.
+Кожен Binding включає: `role`, `driver`, `module`, `output`/`bus`/`input`/`channel`, `address` (опційно).
 
 ## 4. PersistService — Автозбереження стану
 
-Зберігає **обрані** ключі SharedState в NVS раз на хвилину.
-НЕ зберігає все — тільки зареєстровані ключі.
+Пріоритет **CRITICAL** — ініціалізується в Phase 1 (до бізнес-модулів).
 
-Приклади: `persist.total_runtime`, `persist.compressor_cycles`,
-`persist.boot_count`, `persist.last_defrost_time`.
+**Boot:** ітерує `STATE_META[]` (constexpr масив з `state_meta.h`), для записів з `persist: true`
+читає NVS → SharedState (або встановлює default_val).
 
-```cpp
-class PersistService : public BaseModule {
-public:
-    uint32_t save_interval_ms = 60000;  // раз на хвилину
+**Runtime:** SharedState persist callback → dirty flag → debounce 5s → NVS flush.
 
-    void track(const char* key);    // додати до автозбереження
-    void untrack(const char* key);
-    bool force_save();              // при shutdown
-};
 ```
+Boot:
+  STATE_META[i].persist == true → NVS read → SharedState set (або default)
+  Авто-міграція: "p0".."p32" (позиційні) → "sXXXXXXX" (djb2 hash)
+
+Runtime:
+  SharedState.set() → persist callback (ПОЗА mutex) → dirty flag
+  on_update(): debounce 5s → NVS write dirty keys → clear flags
+```
+
+NVS namespace: `"persist"`, ключі: `"s" + 7 hex chars` (djb2 hash від state key name).
+Підтримує float, int32_t, bool типи (з auto-conversion між float↔int32_t).
 
 ## 5. LoggerService — Логування
 
