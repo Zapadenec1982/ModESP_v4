@@ -49,24 +49,45 @@ int DataLoggerModule::append_temp_val(char* buf, size_t sz, int16_t val) {
 // ── Міграція старого формату (8 або 12 байт → 16 байт) ──
 
 void DataLoggerModule::migrate_old_format() {
-    struct stat st;
-    bool need_migrate = false;
+    // Обрізаємо файли до кратного sizeof(TempRecord) розміру.
+    // Partial write після power loss → останній неповний запис відкидається,
+    // решта даних зберігається.
+    const char* files[] = {TEMP_FILE, TEMP_OLD_FILE};
+    for (int i = 0; i < 2; i++) {
+        struct stat st;
+        if (stat(files[i], &st) != 0 || st.st_size == 0) continue;
+        size_t remainder = st.st_size % sizeof(TempRecord);
+        if (remainder == 0) continue;
 
-    if (stat(TEMP_FILE, &st) == 0 && st.st_size > 0) {
-        if (st.st_size % sizeof(TempRecord) != 0) {
-            need_migrate = true;
-        }
-    }
-    if (!need_migrate && stat(TEMP_OLD_FILE, &st) == 0 && st.st_size > 0) {
-        if (st.st_size % sizeof(TempRecord) != 0) {
-            need_migrate = true;
-        }
-    }
+        size_t valid_size = st.st_size - remainder;
+        ESP_LOGW(TAG, "Truncate %s: %lu → %lu bytes (відкинуто %lu partial)",
+                 files[i], (unsigned long)st.st_size,
+                 (unsigned long)valid_size, (unsigned long)remainder);
 
-    if (need_migrate) {
-        ESP_LOGW(TAG, "Старий формат temp файлів — видаляємо для міграції на 16-байтний");
-        remove(TEMP_FILE);
-        remove(TEMP_OLD_FILE);
+        if (valid_size == 0) {
+            remove(files[i]);
+        } else {
+            // Читаємо валідну частину, перезаписуємо файл
+            FILE* f = fopen(files[i], "rb");
+            if (!f) continue;
+
+            // Використовуємо temp_buf_ як тимчасовий буфер (16 записів × 16 байт = 256 байт)
+            // Копіюємо блоками
+            FILE* tmp = fopen("/data/log/_trunc.tmp", "wb");
+            if (!tmp) { fclose(f); continue; }
+
+            TempRecord rec;
+            size_t copied = 0;
+            while (copied < valid_size && fread(&rec, sizeof(rec), 1, f) == 1) {
+                fwrite(&rec, sizeof(rec), 1, tmp);
+                copied += sizeof(rec);
+            }
+            fclose(f);
+            fclose(tmp);
+
+            remove(files[i]);
+            rename("/data/log/_trunc.tmp", files[i]);
+        }
     }
 }
 

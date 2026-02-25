@@ -640,6 +640,11 @@ esp_err_t HttpService::handle_post_restart(httpd_req_t* req) {
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, "{\"ok\":true,\"msg\":\"Restarting...\"}");
 
+    // Graceful shutdown: flush DataLogger RAM → flash, зупинити модулі
+    if (self->modules_) {
+        self->modules_->stop_all();
+    }
+
     // BUG-014: flush pending NVS writes before restart
     if (self->persist_) {
         self->persist_->flush_now();
@@ -664,6 +669,12 @@ esp_err_t HttpService::handle_post_factory_reset(httpd_req_t* req) {
     }
 
     httpd_resp_sendstr(req, "{\"ok\":true,\"msg\":\"Factory reset. Restarting...\"}");
+
+    // Graceful shutdown: flush DataLogger RAM → flash
+    auto* self = static_cast<HttpService*>(req->user_ctx);
+    if (self->modules_) {
+        self->modules_->stop_all();
+    }
 
     vTaskDelay(pdMS_TO_TICKS(500));
     esp_restart();
@@ -824,6 +835,11 @@ esp_err_t HttpService::handle_post_restore(httpd_req_t* req) {
              "{\"ok\":true,\"restored\":%d,\"skipped\":%d}", restored, skipped);
     httpd_resp_sendstr(req, resp);
 
+    // Graceful shutdown: flush DataLogger RAM → flash
+    if (self->modules_) {
+        self->modules_->stop_all();
+    }
+
     // Перезавантаження для застосування налаштувань
     vTaskDelay(pdMS_TO_TICKS(500));
     esp_restart();
@@ -929,6 +945,12 @@ esp_err_t HttpService::handle_post_ota(httpd_req_t* req) {
 
     httpd_resp_set_type(req, "application/json");
     httpd_resp_sendstr(req, "{\"status\":\"ok\",\"message\":\"Firmware updated. Restarting...\"}");
+
+    // Graceful shutdown: flush DataLogger RAM → flash
+    auto* self = static_cast<HttpService*>(req->user_ctx);
+    if (self->modules_) {
+        self->modules_->stop_all();
+    }
 
     // Дати HTTP response дійти до клієнта перед restart
     vTaskDelay(pdMS_TO_TICKS(1000));

@@ -4,7 +4,7 @@
   import { stateMeta } from '../stores/ui.js';
   import { t } from '../stores/i18n.js';
   import { apiGet } from '../lib/api.js';
-  import { downsample } from '../lib/downsample.js';
+  import { downsampleAvg } from '../lib/downsample.js';
   import SliderWidget from '../components/widgets/SliderWidget.svelte';
 
   $: displayTemp = $state['thermostat.display_temp'];
@@ -66,7 +66,7 @@
   // Reactive chart computations
   $: mcAirIdx = chartData?.channels ? chartData.channels.indexOf('air') + 1 : 1;
   $: mcTemp = chartData?.temp || [];
-  $: mcSampled = downsample(mcTemp, 600, mcAirIdx);
+  $: mcSampled = downsampleAvg(mcTemp, 300, mcAirIdx);
 
   function mcRange(pts, idx) {
     let mn = Infinity, mx = -Infinity;
