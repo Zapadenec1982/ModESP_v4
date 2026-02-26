@@ -2,6 +2,7 @@
   import { apiGet, apiPost } from '../../lib/api.js';
   import { setStateKey } from '../../stores/state.js';
   import { t } from '../../stores/i18n.js';
+  import { toastSuccess, toastError } from '../../stores/toast.js';
   import { onMount } from 'svelte';
 
   export let config;
@@ -56,10 +57,10 @@
 
     try {
       const r = await apiPost('/api/time', data);
-      if (r.ok) alert($t['alert.saved']);
-      else alert($t['alert.error'] + ': ' + (r.error || 'unknown'));
+      if (r.ok) toastSuccess($t['alert.saved']);
+      else toastError($t['alert.error'] + ': ' + (r.error || 'unknown'));
     } catch (e) {
-      alert($t['alert.error'] + ': ' + e.message);
+      toastError($t['alert.error'] + ': ' + e.message);
     } finally {
       loading = false;
     }

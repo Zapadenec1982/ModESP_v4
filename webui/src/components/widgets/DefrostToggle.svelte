@@ -2,6 +2,7 @@
   import { apiPost } from '../../lib/api.js';
   import { state } from '../../stores/state.js';
   import { t } from '../../stores/i18n.js';
+  import { toastError } from '../../stores/toast.js';
 
   export let config;
   export let value;
@@ -11,10 +12,10 @@
   async function toggle() {
     if (isOn) {
       // Зупинити розморозку
-      await apiPost('/api/settings', { 'defrost.manual_stop': true }).catch(console.error);
+      await apiPost('/api/settings', { 'defrost.manual_stop': true }).catch(e => toastError(e.message));
     } else {
       // Запустити розморозку
-      await apiPost('/api/settings', { 'defrost.manual_start': true }).catch(console.error);
+      await apiPost('/api/settings', { 'defrost.manual_start': true }).catch(e => toastError(e.message));
     }
   }
 </script>

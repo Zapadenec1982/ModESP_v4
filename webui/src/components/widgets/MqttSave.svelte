@@ -2,6 +2,7 @@
   import { apiGet, apiPost } from '../../lib/api.js';
   import { setStateKey, state } from '../../stores/state.js';
   import { t } from '../../stores/i18n.js';
+  import { toastSuccess, toastError } from '../../stores/toast.js';
   import { onMount } from 'svelte';
 
   export let config;
@@ -48,10 +49,10 @@
 
     try {
       const r = await apiPost('/api/mqtt', data);
-      if (r.ok) alert($t['alert.saved_mqtt']);
-      else alert($t['alert.error']);
+      if (r.ok) toastSuccess($t['alert.saved_mqtt']);
+      else toastError($t['alert.error']);
     } catch (e) {
-      alert($t['alert.error'] + ': ' + e.message);
+      toastError($t['alert.error'] + ': ' + e.message);
     } finally {
       loading = false;
     }

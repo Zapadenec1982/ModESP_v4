@@ -7,6 +7,7 @@
   import { t } from './stores/i18n.js';
   import './stores/theme.js';
   import Layout from './components/Layout.svelte';
+  import Toast from './components/Toast.svelte';
   import Dashboard from './pages/Dashboard.svelte';
   import DynamicPage from './pages/DynamicPage.svelte';
   import BindingsEditor from './pages/BindingsEditor.svelte';
@@ -54,6 +55,8 @@
     {/key}
   </Layout>
 {/if}
+
+<Toast />
 
 <style>
   :global(:root) {

@@ -1,6 +1,7 @@
 <script>
   import { apiPost } from '../../lib/api.js';
   import { t } from '../../stores/i18n.js';
+  import { toastSuccess, toastError, toastWarn } from '../../stores/toast.js';
 
   export let config;
 
@@ -13,15 +14,15 @@
     const ssid = card?.value?.trim() || '';
     const password = passEl?.value || '';
 
-    if (!ssid) { alert($t['alert.ssid_empty']); return; }
+    if (!ssid) { toastWarn($t['alert.ssid_empty']); return; }
 
     loading = true;
     try {
       const r = await apiPost('/api/wifi', { ssid, password });
-      if (r.ok) alert($t['alert.saved_restart']);
-      else alert($t['alert.error']);
+      if (r.ok) toastSuccess($t['alert.saved_restart']);
+      else toastError($t['alert.error']);
     } catch (e) {
-      alert($t['alert.error'] + ': ' + e.message);
+      toastError($t['alert.error'] + ': ' + e.message);
     } finally {
       loading = false;
     }

@@ -1,6 +1,7 @@
 <script>
   import { apiGet, apiPost } from '../../lib/api.js';
   import { t } from '../../stores/i18n.js';
+  import { toastSuccess, toastError, toastWarn } from '../../stores/toast.js';
   import { onMount } from 'svelte';
 
   export let config;
@@ -32,19 +33,19 @@
     const password = getInput('wifi.ap_password');
     const channel = parseInt(getInput('wifi.ap_channel')) || 1;
 
-    if (!ssid) { alert($t['alert.ssid_empty']); return; }
+    if (!ssid) { toastWarn($t['alert.ssid_empty']); return; }
     if (password && password.length < 8) {
-      alert($t['alert.pass_min8']);
+      toastWarn($t['alert.pass_min8']);
       return;
     }
 
     loading = true;
     try {
       const r = await apiPost('/api/wifi/ap', { ssid, password, channel });
-      if (r.ok) alert($t['alert.saved_restart']);
-      else alert($t['alert.error']);
+      if (r.ok) toastSuccess($t['alert.saved_restart']);
+      else toastError($t['alert.error']);
     } catch (e) {
-      alert($t['alert.error'] + ': ' + e.message);
+      toastError($t['alert.error'] + ': ' + e.message);
     } finally {
       loading = false;
     }

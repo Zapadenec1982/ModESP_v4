@@ -2,6 +2,7 @@
   import { apiPost } from '../../lib/api.js';
   import { setStateKey } from '../../stores/state.js';
   import { state } from '../../stores/state.js';
+  import { toastError } from '../../stores/toast.js';
 
   export let config;
   export let value;
@@ -25,7 +26,7 @@
     if (isNaN(nv)) return;
     setStateKey(config.key, nv);
     const endpoint = config.api_endpoint || '/api/settings';
-    apiPost(endpoint, { [config.key]: nv }).catch(console.error);
+    apiPost(endpoint, { [config.key]: nv }).catch(e => toastError(e.message));
   }
 </script>
 

@@ -2,6 +2,7 @@
   import { apiGet, apiUpload } from '../../lib/api.js';
   import { setStateKey } from '../../stores/state.js';
   import { t } from '../../stores/i18n.js';
+  import { toastWarn, toastSuccess } from '../../stores/toast.js';
   import { onMount } from 'svelte';
 
   export let config;
@@ -24,7 +25,7 @@
   async function onFile(e) {
     const file = e.target.files[0];
     if (!file) return;
-    if (!file.name.endsWith('.bin')) { alert($t['alert.only_bin']); return; }
+    if (!file.name.endsWith('.bin')) { toastWarn($t['alert.only_bin']); return; }
     if (!confirm($t['alert.confirm_ota'])) {
       fileInput.value = '';
       return;
@@ -41,6 +42,7 @@
       });
       status = $t['ota.done'];
       progress = 100;
+      toastSuccess($t['ota.done']);
       setTimeout(() => location.reload(), 5000);
     } catch (e) {
       status = 'Error: ' + e.message;

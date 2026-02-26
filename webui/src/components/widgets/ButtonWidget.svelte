@@ -1,6 +1,7 @@
 <script>
   import { apiPost } from '../../lib/api.js';
   import { t } from '../../stores/i18n.js';
+  import { toastError } from '../../stores/toast.js';
 
   export let config;
 
@@ -31,7 +32,7 @@
         await apiPost('/api/settings', { [config.key]: true });
       }
     } catch (e) {
-      alert($t['btn.error'] + ': ' + e.message);
+      toastError($t['btn.error'] + ': ' + e.message);
     } finally {
       loading = false;
     }

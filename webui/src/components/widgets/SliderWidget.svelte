@@ -1,6 +1,7 @@
 <script>
   import { apiPost } from '../../lib/api.js';
   import { setStateKey } from '../../stores/state.js';
+  import { toastError } from '../../stores/toast.js';
 
   export let config;
   export let value;
@@ -13,7 +14,7 @@
   function onChange(e) {
     const v = parseFloat(e.target.value);
     setStateKey(config.key, v);
-    apiPost('/api/settings', { [config.key]: v }).catch(console.error);
+    apiPost('/api/settings', { [config.key]: v }).catch(e => toastError(e.message));
   }
 </script>
 
