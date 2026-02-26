@@ -43,7 +43,8 @@
       "always_active": true,
       "controls_settings": [
         "defrost.interval", "defrost.counter_mode",
-        "defrost.max_duration", "defrost.drip_time", "defrost.fan_delay"
+        "defrost.max_duration", "defrost.drip_time", "defrost.fan_delay",
+        "defrost.initiation"
       ]
     },
     "defrost_by_sensor": {
@@ -51,7 +52,7 @@
       "requires_roles": ["evap_temp"],
       "controls_settings": [
         "defrost.end_temp", "defrost.fad_temp",
-        "defrost.initiation", "defrost.demand_temp"
+        "defrost.demand_temp"
       ]
     },
     "defrost_electric": {
