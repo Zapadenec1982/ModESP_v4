@@ -14,10 +14,20 @@ export function downsampleAvg(points, maxPoints, channelIdx = 1) {
     const slice = points.slice(i, i + bucket);
     const valid = slice.filter(p => p[channelIdx] != null);
     if (valid.length === 0) { result.push(slice[0]); continue; }
-    // Середнє по timestamp та всім каналам
-    const avg = new Array(valid[0].length).fill(0);
-    for (const p of valid) for (let j = 0; j < p.length; j++) avg[j] += (p[j] || 0);
-    for (let j = 0; j < avg.length; j++) avg[j] = Math.round(avg[j] / valid.length);
+    const cols = valid[0].length;
+    const avg = new Array(cols).fill(null);
+    // Timestamp: середнє від валідних точок
+    let tsSum = 0;
+    for (const p of valid) tsSum += p[0];
+    avg[0] = Math.round(tsSum / valid.length);
+    // Кожен канал: середнє тільки від точок де канал != null
+    for (let j = 1; j < cols; j++) {
+      let sum = 0, cnt = 0;
+      for (const p of valid) {
+        if (p[j] != null) { sum += p[j]; cnt++; }
+      }
+      avg[j] = cnt > 0 ? Math.round(sum / cnt) : null;
+    }
     result.push(avg);
   }
   return result;
