@@ -49,9 +49,9 @@
   },
 
   "ui": {
-    "page": "Графік",
+    "page": "Логи",
     "page_id": "chart",
-    "icon": "chart",
+    "icon": "activity",
     "order": 4,
     "cards": [
       {

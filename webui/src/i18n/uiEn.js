@@ -9,7 +9,7 @@ export default {
   'Холодильна камера': 'Refrigeration',
   'Розморозка': 'Defrost',
   'Захист': 'Protection',
-  'Графік': 'Chart',
+  'Логи': 'Logs',
   'Датчики': 'Sensors',
   'Обладнання': 'Equipment',
   'Мережа': 'Network',
