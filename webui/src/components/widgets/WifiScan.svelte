@@ -70,11 +70,11 @@
 <style>
   .scan-widget { padding: 4px 0; }
   .scan-btn {
-    background: var(--bg-card, #1e293b);
+    background: transparent;
     color: var(--accent, #3b82f6);
     border: 1px solid var(--accent, #3b82f6);
-    padding: 8px 16px; border-radius: 8px;
-    cursor: pointer; font-size: 13px; font-weight: 500;
+    padding: 12px 24px; border-radius: 10px;
+    cursor: pointer; font-size: 14px; font-weight: 600;
     width: 100%; transition: all 0.2s;
   }
   .scan-btn:hover:not(:disabled) { background: var(--accent); color: #fff; }

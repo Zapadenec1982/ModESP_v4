@@ -56,12 +56,14 @@
   }
   .text-input:focus { border-color: var(--accent); outline: none; }
   .reveal-btn {
-    width: 40px;
+    padding: 0 12px;
+    white-space: nowrap;
     border: 1px solid var(--border);
     background: var(--border);
     border-radius: 8px;
     cursor: pointer;
-    font-size: 16px;
+    font-size: 13px;
+    color: var(--fg-muted);
     display: flex; align-items: center; justify-content: center;
   }
   .reveal-btn:hover { background: var(--bg-hover); }
