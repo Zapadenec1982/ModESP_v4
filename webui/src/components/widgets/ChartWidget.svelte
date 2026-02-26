@@ -3,8 +3,8 @@
   import { apiGet } from '../../lib/api.js';
   import { state } from '../../stores/state.js';
   import { t } from '../../stores/i18n.js';
-  import { downsample } from '../../lib/downsample.js';
-  import { catmullRomPath, buildSmoothSegments, tempRange as calcTempRange, computeTimeLabels, computeTempLabels } from '../../lib/chart.js';
+  import { downsampleAvg } from '../../lib/downsample.js';
+  import { buildSmoothSegments, tempRange as calcTempRange, computeTimeLabels, computeTempLabels } from '../../lib/chart.js';
 
   export let config;
   export let value;
@@ -142,7 +142,7 @@
 
   // Downsample по першому каналу (зазвичай air)
   $: primaryIdx = channels.length > 0 ? channels[0].idx : 1;
-  $: sampled = downsample(temp, MAX_POINTS, primaryIdx);
+  $: sampled = downsampleAvg(temp, MAX_POINTS, primaryIdx);
 
   // Coordinate helpers
   function tsRange(pts) {
