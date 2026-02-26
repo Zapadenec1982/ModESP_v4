@@ -98,7 +98,7 @@
   <div class="main-area">
     <!-- AUDIT-009: alarm banner на всіх сторінках -->
     {#if alarmActive}
-      <div class="alarm-banner" on:click={() => navigate('protection')}>
+      <div class="alarm-banner" on:click={() => navigate('thermostat')}>
         {$t['alarm.banner']}: {alarmCode ? String(alarmCode).toUpperCase().replace('_', ' ') : ''}
       </div>
     {/if}

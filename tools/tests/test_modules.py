@@ -314,9 +314,9 @@ class TestThermostatManifest:
         s = thermostat["state"]["thermostat.state"]
         assert set(s["enum"]) == {"startup", "idle", "cooling", "safety_run"}
 
-    def test_has_9_inputs(self, thermostat):
-        """Thermostat має 9 inputs."""
-        assert len(thermostat["inputs"]) == 9
+    def test_has_25_inputs(self, thermostat):
+        """Thermostat має 25 inputs (9 base + 16 protection/equipment UI)."""
+        assert len(thermostat["inputs"]) == 25
 
     def test_equipment_inputs(self, thermostat):
         """Reads equipment.air_temp, equipment.sensor1_ok (required)."""
@@ -543,17 +543,18 @@ class TestUIJsonFullProject:
         assert isinstance(result["pages"], list)
 
     def test_pages(self, project, all_manifests):
-        """Сторінки: Dashboard + 4 module + Bindings + Network + System."""
+        """Сторінки: Dashboard + 3 module + Bindings + Network + System (7 total)."""
         gen = UIJsonGenerator()
         result = gen.generate(project, all_manifests)
         page_ids = [p["id"] for p in result["pages"]]
         assert "dashboard" in page_ids
         assert "thermostat" in page_ids
         assert "defrost" in page_ids
-        assert "protection" in page_ids
         assert "chart" in page_ids
         assert "network" in page_ids
         assert "system" in page_ids
+        # protection UI merged into thermostat page
+        assert "protection" not in page_ids
         # equipment UI видалено — статус на сторінці bindings
         assert "equipment" not in page_ids
         # firmware merged into system
@@ -584,12 +585,14 @@ class TestUIJsonFullProject:
         defrost_page = next(p for p in result["pages"] if p["id"] == "defrost")
         assert len(defrost_page["cards"]) == 3
 
-    def test_protection_page_has_2_cards(self, project, all_manifests):
-        """Сторінка Protection має 2 cards."""
+    def test_thermostat_page_has_protection_cards(self, project, all_manifests):
+        """Thermostat page містить protection cards (merged from protection page)."""
         gen = UIJsonGenerator()
         result = gen.generate(project, all_manifests)
-        prot_page = next(p for p in result["pages"] if p["id"] == "protection")
-        assert len(prot_page["cards"]) == 2
+        therm_page = next(p for p in result["pages"] if p["id"] == "thermostat")
+        card_titles = [c["title"] for c in therm_page["cards"]]
+        assert "Аварії" in card_titles
+        assert "Налаштування захисту" in card_titles
 
 
 # ═══════════════════════════════════════════════════════════════

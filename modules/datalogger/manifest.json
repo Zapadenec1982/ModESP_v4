@@ -52,7 +52,7 @@
     "page": "Графік",
     "page_id": "chart",
     "icon": "chart",
-    "order": 3,
+    "order": 4,
     "cards": [
       {
         "title": "Температура",

@@ -39,21 +39,6 @@
                                   "description": "Цифровий фільтр"}
   },
 
-  "ui": {
-    "page": "Датчики",
-    "page_id": "sensors",
-    "icon": "thermometer",
-    "order": 5,
-    "cards": [
-      {
-        "title": "Фільтр",
-        "widgets": [
-          {"key": "equipment.filter_coeff", "widget": "number_input"}
-        ]
-      }
-    ]
-  },
-
   "mqtt": {
     "publish": [
       "equipment.air_temp",

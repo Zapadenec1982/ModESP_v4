@@ -57,6 +57,102 @@
       "type": "bool",
       "description": "Дискретний вхід нічного режиму",
       "optional": true
+    },
+    "equipment.filter_coeff": {
+      "source_module": "equipment",
+      "type": "int",
+      "description": "Цифровий фільтр температури",
+      "optional": true
+    },
+    "protection.alarm_active": {
+      "source_module": "protection",
+      "type": "bool",
+      "description": "Є хоча б одна активна аварія",
+      "optional": true
+    },
+    "protection.alarm_code": {
+      "source_module": "protection",
+      "type": "string",
+      "description": "Код найвищої аварії",
+      "optional": true
+    },
+    "protection.high_temp_alarm": {
+      "source_module": "protection",
+      "type": "bool",
+      "description": "Аварія верхньої температури",
+      "optional": true
+    },
+    "protection.low_temp_alarm": {
+      "source_module": "protection",
+      "type": "bool",
+      "description": "Аварія нижньої температури",
+      "optional": true
+    },
+    "protection.sensor1_alarm": {
+      "source_module": "protection",
+      "type": "bool",
+      "description": "Обрив датчика камери",
+      "optional": true
+    },
+    "protection.sensor2_alarm": {
+      "source_module": "protection",
+      "type": "bool",
+      "description": "Обрив датчика випарника",
+      "optional": true
+    },
+    "protection.door_alarm": {
+      "source_module": "protection",
+      "type": "bool",
+      "description": "Двері відкриті занадто довго",
+      "optional": true
+    },
+    "protection.reset_alarms": {
+      "source_module": "protection",
+      "type": "bool",
+      "description": "Команда скидання аварій",
+      "optional": true
+    },
+    "protection.high_limit": {
+      "source_module": "protection",
+      "type": "float",
+      "description": "Верхня межа температури",
+      "optional": true
+    },
+    "protection.low_limit": {
+      "source_module": "protection",
+      "type": "float",
+      "description": "Нижня межа температури",
+      "optional": true
+    },
+    "protection.high_alarm_delay": {
+      "source_module": "protection",
+      "type": "int",
+      "description": "Затримка аварії високої T",
+      "optional": true
+    },
+    "protection.low_alarm_delay": {
+      "source_module": "protection",
+      "type": "int",
+      "description": "Затримка аварії низької T",
+      "optional": true
+    },
+    "protection.door_delay": {
+      "source_module": "protection",
+      "type": "int",
+      "description": "Затримка аварії відкритих дверей",
+      "optional": true
+    },
+    "protection.post_defrost_delay": {
+      "source_module": "protection",
+      "type": "int",
+      "description": "Затримка аварії високої T після відтайки",
+      "optional": true
+    },
+    "protection.manual_reset": {
+      "source_module": "protection",
+      "type": "bool",
+      "description": "Ручне скидання аварій",
+      "optional": true
     }
   },
 
@@ -388,6 +484,10 @@
           {
             "key": "thermostat.differential",
             "widget": "number_input"
+          },
+          {
+            "key": "equipment.filter_coeff",
+            "widget": "number_input"
           }
         ]
       },
@@ -415,6 +515,96 @@
             "key": "thermostat.comp_off_time",
             "widget": "value",
             "label": "Час простою"
+          }
+        ]
+      },
+      {
+        "title": "Аварії",
+        "widgets": [
+          {
+            "key": "protection.alarm_active",
+            "widget": "indicator",
+            "label": "Аварія",
+            "on_label": "АВАРІЯ",
+            "off_label": "Норма",
+            "on_color": "#ef4444",
+            "off_color": "#22c55e"
+          },
+          {
+            "key": "protection.alarm_code",
+            "widget": "status_text",
+            "label": "Код аварії"
+          },
+          {
+            "key": "protection.high_temp_alarm",
+            "widget": "indicator",
+            "label": "Висока T",
+            "on_color": "#ef4444"
+          },
+          {
+            "key": "protection.low_temp_alarm",
+            "widget": "indicator",
+            "label": "Низька T",
+            "on_color": "#3b82f6"
+          },
+          {
+            "key": "protection.sensor1_alarm",
+            "widget": "indicator",
+            "label": "Датчик камери",
+            "on_color": "#f97316"
+          },
+          {
+            "key": "protection.sensor2_alarm",
+            "widget": "indicator",
+            "label": "Датчик випарника",
+            "on_color": "#f97316"
+          },
+          {
+            "key": "protection.door_alarm",
+            "widget": "indicator",
+            "label": "Двері",
+            "on_color": "#eab308"
+          },
+          {
+            "key": "protection.reset_alarms",
+            "widget": "button",
+            "label": "Скинути аварії"
+          }
+        ]
+      },
+      {
+        "title": "Налаштування захисту",
+        "group": "settings",
+        "collapsible": true,
+        "widgets": [
+          {
+            "key": "protection.high_limit",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.low_limit",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.high_alarm_delay",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.low_alarm_delay",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.door_delay",
+            "widget": "number_input",
+            "visible_when": {"key": "equipment.has_door_contact", "eq": true}
+          },
+          {
+            "key": "protection.post_defrost_delay",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.manual_reset",
+            "widget": "toggle"
           }
         ]
       },
