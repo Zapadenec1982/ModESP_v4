@@ -1,0 +1,124 @@
+export default {
+  // App
+  'app.loading': 'Завантаження...',
+  'app.error': 'Помилка з\'єднання',
+  'app.retry': 'Повторити',
+
+  // Layout
+  'status.online': 'Онлайн',
+  'status.offline': 'Офлайн',
+  'alarm.banner': 'ТРИВОГА',
+
+  // Dashboard
+  'dash.setpoint': 'УСТАВКА',
+  'dash.compressor': 'Компресор',
+  'dash.fan': 'Вентилятор',
+  'dash.heater': 'Нагрівач',
+  'dash.door': 'Двері',
+  'dash.condenser': 'Конденсатор',
+  'state.idle': 'ОЧІКУВАННЯ',
+  'state.cooling': 'ОХОЛОДЖЕННЯ',
+  'state.safety_run': 'АВАРІЙНИЙ РЕЖИМ',
+  'state.startup': 'ЗАПУСК',
+  'state.defrost': 'РОЗМОРОЗКА',
+  'state.night': 'НІЧ',
+  'state.alarm': 'ТРИВОГА',
+
+  // Defrost phases
+  'defrost.idle': 'Очікування',
+  'defrost.stabilize': 'Стабілізація',
+  'defrost.valve_open': 'Клапан відкрито',
+  'defrost.active': 'Активна',
+  'defrost.equalize': 'Вирівнювання',
+  'defrost.drip': 'Стікання',
+  'defrost.fad': 'Охолодження',
+
+  // Chart
+  'chart.loading': 'Завантаження...',
+  'chart.no_data': 'Немає даних',
+  'chart.events': 'Події',
+  'chart.ch_air': 'Камера',
+  'chart.ch_evap': 'Випарник',
+  'chart.ch_cond': 'Конденсатор',
+  'chart.ch_setpoint': 'Уставка',
+  'chart.ch_humidity': 'Вологість',
+  'chart.legend_comp': 'Комп.',
+  'chart.legend_defrost': 'Дефрост',
+  'chart.legend_setpoint': 'Уставка',
+  'event.1': 'Компресор ON',
+  'event.2': 'Компресор OFF',
+  'event.3': 'Дефрост старт',
+  'event.4': 'Дефрост кінець',
+  'event.5': 'Аварія: висока T',
+  'event.6': 'Аварія: низька T',
+  'event.7': 'Аварія знята',
+  'event.8': 'Двері відкрито',
+  'event.9': 'Двері зачинено',
+  'event.10': 'Увімкнення',
+
+  // Bindings
+  'bind.status': 'Стан обладнання',
+  'bind.loading': 'Завантаження...',
+  'bind.saved': 'Збережено. Потрібен перезапуск.',
+  'bind.restart': 'Перезапустити',
+  'bind.required': 'Необхідно',
+  'bind.optional': 'Опціонально',
+  'bind.save': 'Зберегти',
+  'bind.saving': 'Збереження...',
+  'bind.scan': 'Сканувати шину',
+  'bind.scanning': 'Сканування...',
+  'bind.scan_hint': 'Натисніть "Сканувати шину" для пошуку',
+  'bind.all_assigned': 'Всі пристрої вже призначені',
+  'bind.unassigned': 'Не призначено',
+  'bind.add': 'Додати',
+  'page.not_found': 'Сторінку не знайдено',
+
+  // Alerts
+  'alert.saved': 'Збережено!',
+  'alert.saved_restart': 'Збережено! Перезавантажте.',
+  'alert.saved_mqtt': 'Збережено! MQTT перепідключується...',
+  'alert.error': 'Помилка збереження',
+  'alert.ssid_empty': 'SSID не може бути порожнім',
+  'alert.pass_min8': 'Пароль мінімум 8 символів',
+  'alert.confirm_ota': 'Оновити прошивку? Пристрій перезавантажиться.',
+  'alert.only_bin': 'Тільки .bin файли',
+
+  // OTA
+  'ota.uploading': 'Завантаження...',
+  'ota.done': 'Готово! Перезапуск...',
+  'ota.upload': 'Оновити прошивку',
+
+  // WiFi
+  'wifi.scan': 'Сканувати',
+  'wifi.scanning': 'Сканування...',
+
+  // Defrost toggle
+  'defrost.toggle': 'Розморозка',
+
+  // Timezone
+  'tz.label': 'Часовий пояс',
+
+  // Password
+  'pass.show': 'Показати',
+  'pass.hide': 'Сховати',
+
+  // Buttons
+  'btn.action': 'Дія',
+  'btn.save': 'Зберегти',
+  'btn.save_ap': 'Зберегти AP',
+  'btn.error': 'Помилка',
+  'btn.remove': 'Видалити',
+
+  // Bindings page
+  'bind.sensors': 'Сенсори',
+  'bind.actuators': 'Актуатори',
+  'bind.onewire': 'Виявлення OneWire',
+  'bind.add_equip': 'Додати обладнання',
+  'bind.used': 'зайнято',
+  'bind.role': '-- Роль --',
+  'bind.found': 'Знайдено {0} пристроїв, {1} вже призначено',
+  'bind.new_device': 'новий',
+
+  // Chart
+  'chart.title': 'Температура',
+};
