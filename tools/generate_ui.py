@@ -987,18 +987,8 @@ class UIJsonGenerator:
                     "widgets": [
                         {"key": "_ota.version", "widget": "value",
                          "description": "Версія"},
-                        {"key": "_ota.partition", "widget": "value",
-                         "description": "Partition"},
-                        {"key": "_ota.idf", "widget": "value",
-                         "description": "ESP-IDF"},
                         {"key": "_ota.date", "widget": "value",
                          "description": "Дата збірки"},
-                    ],
-                },
-                {
-                    "title": "Оновлення прошивки",
-                    "collapsible": True,
-                    "widgets": [
                         {"key": "_ota.upload", "widget": "firmware_upload",
                          "api_endpoint": "/api/ota",
                          "label": "Вибрати .bin файл",
