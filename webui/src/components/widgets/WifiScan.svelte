@@ -1,6 +1,7 @@
 <script>
   import { apiGet } from '../../lib/api.js';
   import { t } from '../../stores/i18n.js';
+  import { wifiSsid, wifiPassword } from '../../stores/wifiForm.js';
 
   export let config;
 
@@ -23,15 +24,8 @@
   }
 
   function selectNetwork(net) {
-    const ssidEl = document.querySelector('[data-widget-key="wifi.ssid"] input');
-    if (ssidEl) {
-      ssidEl.value = net.ssid;
-      ssidEl.dispatchEvent(new Event('input'));
-    }
-    if (net.auth === 'open') {
-      const passEl = document.querySelector('[data-widget-key="wifi.password"] input');
-      if (passEl) passEl.value = '';
-    }
+    wifiSsid.set(net.ssid);
+    if (net.auth === 'open') wifiPassword.set('');
     networks = [];
   }
 

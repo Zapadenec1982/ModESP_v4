@@ -1,5 +1,6 @@
 <script>
   import { t } from '../../stores/i18n.js';
+  import { wifiPassword } from '../../stores/wifiForm.js';
 
   export let config;
   export let value;
@@ -10,6 +11,9 @@
   $: if (value !== undefined && value !== null && !inputValue) {
     inputValue = String(value);
   }
+
+  // Sync wifi password з shared store (замість DOM querySelector)
+  $: if (config.key === 'wifi.password') wifiPassword.set(inputValue);
 </script>
 
 <div class="input-widget">

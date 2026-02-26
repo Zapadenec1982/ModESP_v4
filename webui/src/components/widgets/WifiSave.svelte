@@ -2,17 +2,15 @@
   import { apiPost } from '../../lib/api.js';
   import { t } from '../../stores/i18n.js';
   import { toastSuccess, toastError, toastWarn } from '../../stores/toast.js';
+  import { wifiSsid, wifiPassword } from '../../stores/wifiForm.js';
 
   export let config;
 
   let loading = false;
 
   async function save() {
-    // Collect sibling inputs from same card via DOM
-    const card = document.querySelector(`[data-widget-key="wifi.ssid"] input`);
-    const passEl = document.querySelector(`[data-widget-key="wifi.password"] input`);
-    const ssid = card?.value?.trim() || '';
-    const password = passEl?.value || '';
+    const ssid = ($wifiSsid || '').trim();
+    const password = $wifiPassword || '';
 
     if (!ssid) { toastWarn($t['alert.ssid_empty']); return; }
 

@@ -1,4 +1,6 @@
 <script>
+  import { wifiSsid } from '../../stores/wifiForm.js';
+
   export let config;
   export let value;
 
@@ -8,6 +10,10 @@
   $: if (value !== undefined && value !== null && !inputValue) {
     inputValue = String(value);
   }
+
+  // Sync wifi SSID з shared store (замість DOM querySelector)
+  $: if (config.key === 'wifi.ssid') wifiSsid.set(inputValue);
+  $: if (config.key === 'wifi.ssid' && $wifiSsid !== inputValue) inputValue = $wifiSsid;
 </script>
 
 <div class="input-widget">
