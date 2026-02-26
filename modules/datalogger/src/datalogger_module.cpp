@@ -182,8 +182,13 @@ void DataLoggerModule::on_update(uint32_t dt_ms) {
     if (sample_timer_ms_ >= static_cast<uint32_t>(sample_interval_ms_)) {
         sample_timer_ms_ = 0;
 
+        // Не логувати поки SNTP не синхронізовано — uptime timestamps
+        // ламають хронологію в log файлі
+        uint32_t now = current_timestamp();
+        if (now < 1700000000) return;
+
         TempRecord rec;
-        rec.timestamp = current_timestamp();
+        rec.timestamp = now;
 
         for (int i = 0; i < MAX_CHANNELS; i++) {
             const auto& def = CHANNEL_DEFS[i];
