@@ -377,13 +377,11 @@
     },
     "thermostat.comp_on_time": {
       "type": "int",
-      "unit": "с",
       "access": "read",
       "description": "Час роботи компресора"
     },
     "thermostat.comp_off_time": {
       "type": "int",
-      "unit": "с",
       "access": "read",
       "description": "Час простою компресора"
     },
