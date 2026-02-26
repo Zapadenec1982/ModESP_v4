@@ -589,6 +589,14 @@
           {
             "key": "thermostat.startup_delay",
             "widget": "number_input"
+          },
+          {
+            "key": "thermostat.safety_run_on",
+            "widget": "number_input"
+          },
+          {
+            "key": "thermostat.safety_run_off",
+            "widget": "number_input"
           }
         ]
       },
@@ -615,21 +623,6 @@
             "key": "thermostat.cond_fan_delay",
             "widget": "number_input",
             "visible_when": {"key": "equipment.has_cond_fan", "eq": true}
-          }
-        ]
-      },
-      {
-        "title": "Safety Run",
-        "group": "settings",
-        "collapsible": true,
-        "widgets": [
-          {
-            "key": "thermostat.safety_run_on",
-            "widget": "number_input"
-          },
-          {
-            "key": "thermostat.safety_run_off",
-            "widget": "number_input"
           }
         ]
       },
