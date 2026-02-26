@@ -33,7 +33,10 @@ for (const f of ['bundle.js', 'bundle.css']) {
 
 // Copy to data/www/
 console.log(`Deploying to ${www}`);
-copyFileSync(join(dist, 'index.html'), join(www, 'index.html'));
+const indexSrc = join(dist, 'index.html');
+if (existsSync(indexSrc)) {
+  copyFileSync(indexSrc, join(www, 'index.html'));
+}
 copyFileSync(join(dist, 'bundle.js.gz'), join(www, 'bundle.js.gz'));
 copyFileSync(join(dist, 'bundle.css.gz'), join(www, 'bundle.css.gz'));
 
