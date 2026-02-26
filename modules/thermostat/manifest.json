@@ -509,18 +509,15 @@
           {
             "key": "thermostat.comp_on_time",
             "widget": "value",
-            "label": "Час роботи"
+            "label": "Час роботи",
+            "format": "duration"
           },
           {
             "key": "thermostat.comp_off_time",
             "widget": "value",
-            "label": "Час простою"
-          }
-        ]
-      },
-      {
-        "title": "Аварії",
-        "widgets": [
+            "label": "Час простою",
+            "format": "duration"
+          },
           {
             "key": "protection.alarm_active",
             "widget": "indicator",
@@ -534,36 +531,6 @@
             "key": "protection.alarm_code",
             "widget": "status_text",
             "label": "Код аварії"
-          },
-          {
-            "key": "protection.high_temp_alarm",
-            "widget": "indicator",
-            "label": "Висока T",
-            "on_color": "#ef4444"
-          },
-          {
-            "key": "protection.low_temp_alarm",
-            "widget": "indicator",
-            "label": "Низька T",
-            "on_color": "#3b82f6"
-          },
-          {
-            "key": "protection.sensor1_alarm",
-            "widget": "indicator",
-            "label": "Датчик камери",
-            "on_color": "#f97316"
-          },
-          {
-            "key": "protection.sensor2_alarm",
-            "widget": "indicator",
-            "label": "Датчик випарника",
-            "on_color": "#f97316"
-          },
-          {
-            "key": "protection.door_alarm",
-            "widget": "indicator",
-            "label": "Двері",
-            "on_color": "#eab308"
           },
           {
             "key": "protection.reset_alarms",

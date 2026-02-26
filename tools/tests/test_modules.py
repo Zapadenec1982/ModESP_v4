@@ -586,12 +586,17 @@ class TestUIJsonFullProject:
         assert len(defrost_page["cards"]) == 3
 
     def test_thermostat_page_has_protection_cards(self, project, all_manifests):
-        """Thermostat page містить protection cards (merged from protection page)."""
+        """Thermostat page містить protection widgets в merged card + окрему settings card."""
         gen = UIJsonGenerator()
         result = gen.generate(project, all_manifests)
         therm_page = next(p for p in result["pages"] if p["id"] == "thermostat")
         card_titles = [c["title"] for c in therm_page["cards"]]
-        assert "Аварії" in card_titles
+        # Аварії об'єднані зі "Стан системи" — перевіряємо що alarm widgets є в картці
+        assert "Стан системи" in card_titles
+        status_card = next(c for c in therm_page["cards"] if c["title"] == "Стан системи")
+        status_keys = [w["key"] for w in status_card["widgets"]]
+        assert "protection.alarm_active" in status_keys
+        assert "protection.alarm_code" in status_keys
         assert "Налаштування захисту" in card_titles
 
 

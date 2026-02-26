@@ -102,11 +102,9 @@ bool ThermostatModule::is_night_active() {
 void ThermostatModule::request_compressor(bool on) {
     if (compressor_on_ != on) {
         compressor_on_ = on;
-        if (on) {
-            comp_on_time_ms_ = 0;
-        } else {
-            comp_off_time_ms_ = 0;
-        }
+        // Скидаємо обидва таймери при зміні стану
+        comp_on_time_ms_ = 0;
+        comp_off_time_ms_ = 0;
         state_set("thermostat.req.compressor", on);
         ESP_LOGI(TAG, "Request compressor %s", on ? "ON" : "OFF");
     }
