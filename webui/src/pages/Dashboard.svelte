@@ -1,11 +1,9 @@
 <script>
-  import { onMount, onDestroy } from 'svelte';
   import { state } from '../stores/state.js';
   import { stateMeta } from '../stores/ui.js';
   import { t } from '../stores/i18n.js';
-  import { apiGet } from '../lib/api.js';
-  import { downsampleAvg } from '../lib/downsample.js';
   import SliderWidget from '../components/widgets/SliderWidget.svelte';
+  import MiniChart from '../components/MiniChart.svelte';
 
   $: displayTemp = $state['thermostat.display_temp'];
   $: temperature = $state['thermostat.temperature'];
@@ -20,125 +18,6 @@
   $: alarmCode = $state['protection.alarm_code'];
   $: nightActive = $state['thermostat.night_active'];
   $: showDefrostSymbol = typeof displayTemp === 'number' && displayTemp <= -900;
-
-  // ── Mini chart: temperature in chamber ──
-  const MC_W = 654, MC_H = 200;
-  const MC_PAD = { top: 12, right: 12, bottom: 24, left: 44 };
-  const MC_CW = MC_W - MC_PAD.left - MC_PAD.right;
-  const MC_CH = MC_H - MC_PAD.top - MC_PAD.bottom;
-
-  let chartData = null;
-  let chartRefresh;
-  let chartLive;
-
-  async function loadChart() {
-    try {
-      chartData = await apiGet('/api/log?hours=24');
-    } catch (e) { /* ignore */ }
-    startChartLive();
-  }
-
-  function startChartLive() {
-    if (chartLive) clearInterval(chartLive);
-    const iv = ($state['datalogger.sample_interval'] || 60) * 1000;
-    chartLive = setInterval(appendChartPoint, iv);
-  }
-
-  function appendChartPoint() {
-    if (!chartData?.channels || !chartData?.temp) return;
-    const airIdx = chartData.channels.indexOf('air');
-    if (airIdx < 0) return;
-    const airVal = $state['equipment.air_temp'];
-    if (airVal == null || typeof airVal !== 'number') return;
-    const now = Math.floor(Date.now() / 1000);
-    const point = new Array(chartData.channels.length + 1).fill(null);
-    point[0] = now;
-    point[airIdx + 1] = Math.round(airVal * 10);
-    const cutoff = now - 24 * 3600;
-    while (chartData.temp.length > 0 && chartData.temp[0][0] < cutoff) chartData.temp.shift();
-    chartData.temp.push(point);
-    chartData = chartData;
-  }
-
-  onMount(() => { loadChart(); chartRefresh = setInterval(loadChart, 300000); });
-  onDestroy(() => { if (chartRefresh) clearInterval(chartRefresh); if (chartLive) clearInterval(chartLive); });
-
-  // Reactive chart computations
-  $: mcAirIdx = chartData?.channels ? chartData.channels.indexOf('air') + 1 : 1;
-  $: mcTemp = chartData?.temp || [];
-  $: mcSampled = downsampleAvg(mcTemp, 300, mcAirIdx);
-
-  function mcRange(pts, idx) {
-    let mn = Infinity, mx = -Infinity;
-    for (const p of pts) {
-      const r = p[idx];
-      if (r == null) continue;
-      const v = r / 10;
-      if (v < mn) mn = v;
-      if (v > mx) mx = v;
-    }
-    if (mn === Infinity) return [-25, -15];
-    const m = Math.max((mx - mn) * 0.1, 1);
-    return [Math.floor(mn - m), Math.ceil(mx + m)];
-  }
-
-  $: mcTMin = mcTemp.length > 0 ? mcTemp[0][0] : 0;
-  $: mcTMax = mcTemp.length > 0 ? mcTemp[mcTemp.length - 1][0] : 1;
-  $: [mcVMin, mcVMax] = mcRange(mcTemp, mcAirIdx);
-
-  function mcX(ts) { return mcTMax === mcTMin ? MC_CW / 2 : ((ts - mcTMin) / (mcTMax - mcTMin)) * MC_CW; }
-  function mcY(v) { return mcVMax === mcVMin ? MC_CH / 2 : MC_CH - ((v - mcVMin) / (mcVMax - mcVMin)) * MC_CH; }
-
-  function mcCatmull(points) {
-    if (points.length < 2) return '';
-    if (points.length === 2) return `M${points[0].x},${points[0].y} L${points[1].x},${points[1].y}`;
-    let d = `M${points[0].x},${points[0].y}`;
-    for (let i = 0; i < points.length - 1; i++) {
-      const p0 = points[Math.max(0, i - 1)];
-      const p1 = points[i];
-      const p2 = points[i + 1];
-      const p3 = points[Math.min(points.length - 1, i + 2)];
-      d += ` C${(p1.x + (p2.x - p0.x) / 6).toFixed(1)},${(p1.y + (p2.y - p0.y) / 6).toFixed(1)} ${(p2.x - (p3.x - p1.x) / 6).toFixed(1)},${(p2.y - (p3.y - p1.y) / 6).toFixed(1)} ${p2.x},${p2.y}`;
-    }
-    return d;
-  }
-
-  $: mcPath = (() => {
-    const segs = [];
-    let seg = [];
-    for (const p of mcSampled) {
-      const raw = p[mcAirIdx];
-      if (raw == null) { if (seg.length) { segs.push(mcCatmull(seg)); seg = []; } continue; }
-      seg.push({ x: +(MC_PAD.left + mcX(p[0])).toFixed(1), y: +(MC_PAD.top + mcY(raw / 10)).toFixed(1) });
-    }
-    if (seg.length) segs.push(mcCatmull(seg));
-    return segs;
-  })();
-
-  // Setpoint line Y
-  $: mcSpY = typeof setpoint === 'number' ? MC_PAD.top + mcY(setpoint) : null;
-
-  // Time labels (6 labels)
-  $: mcTimeLabels = (() => {
-    if (mcTMin === mcTMax) return [];
-    const labels = [];
-    for (let i = 0; i <= 6; i++) {
-      const ts = mcTMin + (mcTMax - mcTMin) * i / 6;
-      const d = new Date(ts * 1000);
-      labels.push({ x: MC_PAD.left + mcX(ts), label: `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` });
-    }
-    return labels;
-  })();
-
-  // Y axis labels
-  $: mcYLabels = (() => {
-    const labels = [];
-    const step = Math.max(1, Math.round((mcVMax - mcVMin) / 5));
-    for (let v = Math.ceil(mcVMin); v <= Math.floor(mcVMax); v += step) {
-      labels.push({ y: MC_PAD.top + mcY(v), label: `${v}°` });
-    }
-    return labels;
-  })();
 
   $: sp = typeof setpoint === 'number' ? setpoint : -18;
   $: shownTemp = showDefrostSymbol ? null : (typeof displayTemp === 'number' ? displayTemp : temperature);
@@ -260,29 +139,7 @@
   </div>
 
   <!-- Mini chart: chamber temperature -->
-  {#if mcTemp.length > 0}
-    <div class="tile tile-chart">
-      <svg viewBox="0 0 {MC_W} {MC_H}" class="mini-chart">
-        <!-- Grid -->
-        {#each mcYLabels as yl}
-          <line x1={MC_PAD.left} y1={yl.y} x2={MC_W - MC_PAD.right} y2={yl.y} class="mc-grid" />
-          <text x={MC_PAD.left - 4} y={yl.y + 3} class="mc-axis" text-anchor="end">{yl.label}</text>
-        {/each}
-        <!-- Setpoint dashed line -->
-        {#if mcSpY != null}
-          <line x1={MC_PAD.left} y1={mcSpY} x2={MC_W - MC_PAD.right} y2={mcSpY} class="mc-setpoint" />
-        {/if}
-        <!-- Temperature line -->
-        {#each mcPath as seg}
-          <path d={seg} fill="none" stroke="#3b82f6" stroke-width="2.5" />
-        {/each}
-        <!-- X axis labels -->
-        {#each mcTimeLabels as xl}
-          <text x={xl.x} y={MC_H - 4} class="mc-axis" text-anchor="middle">{xl.label}</text>
-        {/each}
-      </svg>
-    </div>
-  {/if}
+  <MiniChart />
 </div>
 
 <style>
@@ -451,20 +308,10 @@
     width: 100%;
   }
 
-  /* Mini chart */
-  .tile-chart { padding: 16px; }
-  .mini-chart { width: 100%; display: block; }
-  .mini-chart .mc-grid { stroke: var(--border); stroke-width: 0.5; }
-  .mini-chart .mc-setpoint { stroke: #f59e0b; stroke-width: 1; stroke-dasharray: 4 2; opacity: 0.7; }
-  .mini-chart .mc-axis { font-size: 11px; fill: var(--fg-muted); }
-
   @media (max-width: 480px) {
     .temp-value { font-size: 48px; }
     .sp-value { font-size: 20px; }
     .tile { padding: 16px; }
     .status-icon { width: 24px; height: 24px; }
-    .mini-chart { height: 180px; }
-    .mini-chart .mc-axis { font-size: 16px; }
-    .tile-chart { padding: 12px; }
   }
 </style>

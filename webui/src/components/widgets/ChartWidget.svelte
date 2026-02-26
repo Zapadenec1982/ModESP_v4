@@ -4,6 +4,7 @@
   import { state } from '../../stores/state.js';
   import { t } from '../../stores/i18n.js';
   import { downsample } from '../../lib/downsample.js';
+  import { catmullRomPath, buildSmoothSegments, tempRange as calcTempRange, computeTimeLabels, computeTempLabels } from '../../lib/chart.js';
 
   export let config;
   export let value;
@@ -149,25 +150,8 @@
     return [pts[0][0], pts[pts.length - 1][0]];
   }
 
-  function tempRange(pts, chs) {
-    if (!pts || pts.length === 0) return [-40, 10];
-    let mn = Infinity, mx = -Infinity;
-    for (const p of pts) {
-      for (const ch of chs) {
-        const raw = p[ch.idx];
-        if (raw == null) continue;
-        const v = raw / 10;
-        if (v < mn) mn = v;
-        if (v > mx) mx = v;
-      }
-    }
-    if (mn === Infinity) return [-40, 10];
-    const margin = Math.max((mx - mn) * 0.1, 1);
-    return [Math.floor(mn - margin), Math.ceil(mx + margin)];
-  }
-
   $: [tMin, tMax] = tsRange(temp);
-  $: [vMin, vMax] = tempRange(temp, visibleChannels);
+  $: [vMin, vMax] = calcTempRange(temp, visibleChannels.map(ch => ch.idx), [-40, 10]);
 
   function xScale(ts, tMn, tMx) {
     if (tMx === tMn) return CW / 2;
@@ -193,49 +177,11 @@
     return zones;
   }
 
-  // Catmull-Rom → SVG cubic Bezier path
-  function catmullRomPath(points) {
-    if (points.length < 2) return '';
-    if (points.length === 2) {
-      return `M${points[0].x},${points[0].y} L${points[1].x},${points[1].y}`;
-    }
-    let d = `M${points[0].x},${points[0].y}`;
-    for (let i = 0; i < points.length - 1; i++) {
-      const p0 = points[Math.max(0, i - 1)];
-      const p1 = points[i];
-      const p2 = points[i + 1];
-      const p3 = points[Math.min(points.length - 1, i + 2)];
-      const cp1x = (p1.x + (p2.x - p0.x) / 6).toFixed(1);
-      const cp1y = (p1.y + (p2.y - p0.y) / 6).toFixed(1);
-      const cp2x = (p2.x - (p3.x - p1.x) / 6).toFixed(1);
-      const cp2y = (p2.y - (p3.y - p1.y) / 6).toFixed(1);
-      d += ` C${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x},${p2.y}`;
-    }
-    return d;
-  }
-
-  // Build smooth SVG path для одного каналу
-  function buildSmoothPath(pts, chIdx) {
-    const segments = [];
-    let seg = [];
-    for (const p of pts) {
-      const raw = p[chIdx];
-      if (raw == null) {
-        if (seg.length > 0) { segments.push(catmullRomPath(seg)); seg = []; }
-        continue;
-      }
-      const x = +(PAD.left + xScale(p[0], tMin, tMax)).toFixed(1);
-      const y = +(PAD.top + yScale(raw / 10, vMin, vMax)).toFixed(1);
-      seg.push({ x, y });
-    }
-    if (seg.length > 0) segments.push(catmullRomPath(seg));
-    return segments;
-  }
-
   // Smooth paths для кожного видимого каналу
   $: channelLines = visibleChannels.map(ch => ({
     ...ch,
-    segments: buildSmoothPath(sampled, ch.idx)
+    segments: buildSmoothSegments(sampled, ch.idx, PAD,
+      ts => xScale(ts, tMin, tMax), v => yScale(v, vMin, vMax))
   }));
 
   // Zones
@@ -258,29 +204,10 @@
   $: spY = setpoint != null ? PAD.top + yScale(setpoint, vMin, vMax) : null;
 
   // Time axis labels
-  $: timeLabels = (() => {
-    if (tMin === tMax) return [];
-    const labels = [];
-    const step = (tMax - tMin) / 6;
-    for (let i = 0; i <= 6; i++) {
-      const ts = tMin + step * i;
-      const d = new Date(ts * 1000);
-      const hh = String(d.getHours()).padStart(2, '0');
-      const mm = String(d.getMinutes()).padStart(2, '0');
-      labels.push({ x: PAD.left + xScale(ts, tMin, tMax), label: `${hh}:${mm}` });
-    }
-    return labels;
-  })();
+  $: timeLabels = computeTimeLabels(tMin, tMax, 6, PAD.left, ts => xScale(ts, tMin, tMax));
 
   // Temperature axis labels
-  $: tempLabels = (() => {
-    const labels = [];
-    const step = Math.max(1, Math.round((vMax - vMin) / 5));
-    for (let v = Math.ceil(vMin); v <= Math.floor(vMax); v += step) {
-      labels.push({ y: PAD.top + yScale(v, vMin, vMax), label: `${v}°` });
-    }
-    return labels;
-  })();
+  $: tempLabels = computeTempLabels(vMin, vMax, 5, PAD.top, v => yScale(v, vMin, vMax));
 
   // Y grid
   $: gridLines = tempLabels.map(l => l.y);
