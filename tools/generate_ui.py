@@ -1014,7 +1014,7 @@ class UIJsonGenerator:
                     ],
                 },
                 {
-                    "title": "Бекап налаштувань",
+                    "title": "Дії",
                     "collapsible": True,
                     "widgets": [
                         {"key": "_action.backup", "widget": "button",
@@ -1026,11 +1026,6 @@ class UIJsonGenerator:
                          "api_endpoint": "/api/restore",
                          "accept": ".json",
                          "confirm": "Відновити налаштування з файлу? Пристрій перезавантажиться."},
-                    ],
-                },
-                {
-                    "title": "Дії",
-                    "widgets": [
                         {"key": "_action.restart", "widget": "button",
                          "label": "Перезавантажити",
                          "api_endpoint": "/api/restart",
