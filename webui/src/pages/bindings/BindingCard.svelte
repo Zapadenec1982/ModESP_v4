@@ -1,0 +1,92 @@
+<script>
+  import { createEventDispatcher } from 'svelte';
+  import { t } from '../../stores/i18n.js';
+
+  export let roleDef;
+  export let binding;
+  export let hwList = [];
+  export let usedIds = new Set();
+
+  const dispatch = createEventDispatcher();
+</script>
+
+<div class="binding-row">
+  <div class="role-info">
+    <span class="role-label">{roleDef.label}</span>
+    {#if roleDef.optional}
+      <button class="remove-btn" on:click={() => dispatch('remove', roleDef.role)}
+              title={$t['btn.remove']}>&#x2715;</button>
+    {/if}
+  </div>
+  <select class="hw-select"
+          value={binding.hardware}
+          on:change={e => dispatch('changeHw', { role: roleDef.role, hw: e.target.value })}>
+    {#each hwList as hw}
+      {@const used = usedIds.has(hw.id)}
+      <option value={hw.id} disabled={used}>
+        {hw.label}{hw.gpio !== undefined ? ` (GPIO ${hw.gpio})` : ''}{used ? ` — ${$t['bind.used']}` : ''}
+      </option>
+    {/each}
+  </select>
+  {#if roleDef.requires_address}
+    <input class="addr-input"
+           type="text"
+           placeholder="28:FF:AA:BB:CC:DD:EE:01"
+           value={binding.address || ''}
+           on:input={e => dispatch('changeAddr', { role: roleDef.role, addr: e.target.value })} />
+  {/if}
+</div>
+
+<style>
+  .binding-row {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .binding-row:last-child { border-bottom: none; }
+  .role-info {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .role-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--fg);
+  }
+  .remove-btn {
+    background: none;
+    border: none;
+    color: var(--fg-muted);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .remove-btn:hover { color: var(--error); background: rgba(239, 68, 68, 0.1); }
+  .hw-select {
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 14px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--fg);
+    cursor: pointer;
+    appearance: auto;
+  }
+  .hw-select:focus { outline: none; border-color: var(--accent); }
+  .addr-input {
+    width: 100%;
+    margin-top: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    font-family: monospace;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    color: var(--fg);
+  }
+  .addr-input:focus { outline: none; border-color: var(--accent); }
+  .addr-input::placeholder { color: var(--fg-muted); opacity: 0.6; }
+</style>
