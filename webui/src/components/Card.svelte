@@ -5,7 +5,10 @@
   export let title = '';
   export let collapsible = false;
 
-  let collapsed = collapsible;
+  // На десктопі (≥768px) collapsible картки стартують розгорнутими,
+  // на мобільних — згорнутими
+  const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches;
+  let collapsed = collapsible && isMobile;
 
   function toggle() {
     if (collapsible) collapsed = !collapsed;
