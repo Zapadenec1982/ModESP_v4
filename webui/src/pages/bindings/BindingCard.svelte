@@ -13,10 +13,8 @@
 <div class="binding-row">
   <div class="role-info">
     <span class="role-label">{roleDef.label}</span>
-    {#if roleDef.optional}
-      <button class="remove-btn" on:click={() => dispatch('remove', roleDef.role)}
-              title={$t['btn.remove']}>&#x2715;</button>
-    {/if}
+    <button class="remove-btn" on:click={() => dispatch('remove', roleDef.role)}
+            title={$t['btn.remove']}>&#x2715;</button>
   </div>
   <select class="hw-select"
           value={binding.hardware}
