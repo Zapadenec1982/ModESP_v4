@@ -6,6 +6,9 @@ CONFIG_MODESP_BOARD_DEV=y
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 CONFIG_APP_ROLLBACK_ENABLE=y
 
+# Main task stack: default 3584 too small for config JSON parsing (~4KB on stack)
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
 # Custom partition table (NVS 24K + factory 1.5MB + ota_0 1.5MB + data/LittleFS 384K)
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"

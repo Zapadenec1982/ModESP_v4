@@ -134,8 +134,8 @@ bool ConfigService::mount_littlefs() {
 // ═══════════════════════════════════════════════════════════════
 
 bool ConfigService::parse_board_json() {
-    char buf[MAX_JSON_SIZE];
-    jsmntok_t tokens[MAX_TOKENS];
+    static char buf[MAX_JSON_SIZE];
+    static jsmntok_t tokens[MAX_TOKENS];
 
     // Read file
     FILE* f = fopen("/data/board.json", "r");
@@ -494,8 +494,8 @@ bool ConfigService::parse_board_json() {
 // ═══════════════════════════════════════════════════════════════
 
 bool ConfigService::parse_bindings_json() {
-    char buf[MAX_JSON_SIZE];
-    jsmntok_t tokens[MAX_TOKENS];
+    static char buf[MAX_JSON_SIZE];
+    static jsmntok_t tokens[MAX_TOKENS];
 
     FILE* f = fopen("/data/bindings.json", "r");
     if (!f) {
