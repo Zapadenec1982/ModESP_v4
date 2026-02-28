@@ -93,13 +93,15 @@ bool ConfigService::on_init() {
         return false;
     }
 
-    ESP_LOGI(TAG, "Board: %s v%s (%d gpio_out, %d ow, %d gpio_in, %d adc)",
+    ESP_LOGI(TAG, "Board: %s v%s (%d gpio_out, %d ow, %d gpio_in, %d adc, %d i2c_bus, %d i2c_exp)",
              board_config_.board_name.c_str(),
              board_config_.board_version.c_str(),
              (int)board_config_.gpio_outputs.size(),
              (int)board_config_.onewire_buses.size(),
              (int)board_config_.gpio_inputs.size(),
-             (int)board_config_.adc_channels.size());
+             (int)board_config_.adc_channels.size(),
+             (int)board_config_.i2c_buses.size(),
+             (int)board_config_.i2c_expanders.size());
     ESP_LOGI(TAG, "Loaded %d bindings",
              (int)binding_table_.bindings.size());
 
@@ -323,6 +325,157 @@ bool ConfigService::parse_board_json() {
 
                 if (!board_config_.adc_channels.full()) {
                     board_config_.adc_channels.push_back(cfg);
+                }
+            }
+            i = j;
+        } else if (jsoneq(buf, &tokens[i], "i2c_buses")) {
+            if (tokens[i + 1].type != JSMN_ARRAY) {
+                ESP_LOGE(TAG, "board.json: 'i2c_buses' is not array");
+                return false;
+            }
+            int arr_size = tokens[i + 1].size;
+            int j = i + 2;
+
+            for (int elem = 0; elem < arr_size; elem++) {
+                if (tokens[j].type != JSMN_OBJECT) {
+                    ESP_LOGE(TAG, "board.json: i2c_bus entry is not object");
+                    return false;
+                }
+                int obj_keys = tokens[j].size;
+                j++;
+
+                I2CBusConfig cfg = {};
+                cfg.freq_hz = 100000;  // default 100kHz
+                for (int k = 0; k < obj_keys; k++) {
+                    if (jsoneq(buf, &tokens[j], "id")) {
+                        tok_to_str(buf, &tokens[j + 1], tmp, sizeof(tmp));
+                        cfg.id = tmp;
+                    } else if (jsoneq(buf, &tokens[j], "sda")) {
+                        cfg.sda = (gpio_num_t)tok_to_int(buf, &tokens[j + 1]);
+                    } else if (jsoneq(buf, &tokens[j], "scl")) {
+                        cfg.scl = (gpio_num_t)tok_to_int(buf, &tokens[j + 1]);
+                    } else if (jsoneq(buf, &tokens[j], "freq_hz")) {
+                        cfg.freq_hz = (uint32_t)tok_to_int(buf, &tokens[j + 1]);
+                    }
+                    j += 2;
+                }
+                if (!board_config_.i2c_buses.full()) {
+                    board_config_.i2c_buses.push_back(cfg);
+                }
+            }
+            i = j;
+        } else if (jsoneq(buf, &tokens[i], "i2c_expanders")) {
+            if (tokens[i + 1].type != JSMN_ARRAY) {
+                ESP_LOGE(TAG, "board.json: 'i2c_expanders' is not array");
+                return false;
+            }
+            int arr_size = tokens[i + 1].size;
+            int j = i + 2;
+
+            for (int elem = 0; elem < arr_size; elem++) {
+                if (tokens[j].type != JSMN_OBJECT) {
+                    ESP_LOGE(TAG, "board.json: i2c_expander entry is not object");
+                    return false;
+                }
+                int obj_keys = tokens[j].size;
+                j++;
+
+                I2CExpanderConfig cfg = {};
+                cfg.pin_count = 8;  // default PCF8574
+                for (int k = 0; k < obj_keys; k++) {
+                    if (jsoneq(buf, &tokens[j], "id")) {
+                        tok_to_str(buf, &tokens[j + 1], tmp, sizeof(tmp));
+                        cfg.id = tmp;
+                    } else if (jsoneq(buf, &tokens[j], "bus")) {
+                        tok_to_str(buf, &tokens[j + 1], tmp, sizeof(tmp));
+                        cfg.bus_id = tmp;
+                    } else if (jsoneq(buf, &tokens[j], "chip")) {
+                        tok_to_str(buf, &tokens[j + 1], tmp, sizeof(tmp));
+                        cfg.chip = tmp;
+                    } else if (jsoneq(buf, &tokens[j], "address")) {
+                        tok_to_str(buf, &tokens[j + 1], tmp, sizeof(tmp));
+                        cfg.address = (uint8_t)strtol(tmp, nullptr, 16);
+                    } else if (jsoneq(buf, &tokens[j], "pins")) {
+                        cfg.pin_count = (uint8_t)tok_to_int(buf, &tokens[j + 1]);
+                    }
+                    j += 2;
+                }
+                if (!board_config_.i2c_expanders.full()) {
+                    board_config_.i2c_expanders.push_back(cfg);
+                }
+            }
+            i = j;
+        } else if (jsoneq(buf, &tokens[i], "expander_outputs")) {
+            if (tokens[i + 1].type != JSMN_ARRAY) {
+                ESP_LOGE(TAG, "board.json: 'expander_outputs' is not array");
+                return false;
+            }
+            int arr_size = tokens[i + 1].size;
+            int j = i + 2;
+
+            for (int elem = 0; elem < arr_size; elem++) {
+                if (tokens[j].type != JSMN_OBJECT) {
+                    ESP_LOGE(TAG, "board.json: expander_output entry is not object");
+                    return false;
+                }
+                int obj_keys = tokens[j].size;
+                j++;
+
+                I2CExpanderOutputConfig cfg = {};
+                cfg.active_high = false;  // default: active-LOW (KC868-A6)
+                for (int k = 0; k < obj_keys; k++) {
+                    if (jsoneq(buf, &tokens[j], "id")) {
+                        tok_to_str(buf, &tokens[j + 1], tmp, sizeof(tmp));
+                        cfg.id = tmp;
+                    } else if (jsoneq(buf, &tokens[j], "expander")) {
+                        tok_to_str(buf, &tokens[j + 1], tmp, sizeof(tmp));
+                        cfg.expander_id = tmp;
+                    } else if (jsoneq(buf, &tokens[j], "pin")) {
+                        cfg.pin = (uint8_t)tok_to_int(buf, &tokens[j + 1]);
+                    } else if (jsoneq(buf, &tokens[j], "active_high")) {
+                        cfg.active_high = tok_to_bool(buf, &tokens[j + 1]);
+                    }
+                    j += 2;
+                }
+                if (!board_config_.expander_outputs.full()) {
+                    board_config_.expander_outputs.push_back(cfg);
+                }
+            }
+            i = j;
+        } else if (jsoneq(buf, &tokens[i], "expander_inputs")) {
+            if (tokens[i + 1].type != JSMN_ARRAY) {
+                ESP_LOGE(TAG, "board.json: 'expander_inputs' is not array");
+                return false;
+            }
+            int arr_size = tokens[i + 1].size;
+            int j = i + 2;
+
+            for (int elem = 0; elem < arr_size; elem++) {
+                if (tokens[j].type != JSMN_OBJECT) {
+                    ESP_LOGE(TAG, "board.json: expander_input entry is not object");
+                    return false;
+                }
+                int obj_keys = tokens[j].size;
+                j++;
+
+                I2CExpanderInputConfig cfg = {};
+                cfg.invert = false;  // default
+                for (int k = 0; k < obj_keys; k++) {
+                    if (jsoneq(buf, &tokens[j], "id")) {
+                        tok_to_str(buf, &tokens[j + 1], tmp, sizeof(tmp));
+                        cfg.id = tmp;
+                    } else if (jsoneq(buf, &tokens[j], "expander")) {
+                        tok_to_str(buf, &tokens[j + 1], tmp, sizeof(tmp));
+                        cfg.expander_id = tmp;
+                    } else if (jsoneq(buf, &tokens[j], "pin")) {
+                        cfg.pin = (uint8_t)tok_to_int(buf, &tokens[j + 1]);
+                    } else if (jsoneq(buf, &tokens[j], "invert")) {
+                        cfg.invert = tok_to_bool(buf, &tokens[j + 1]);
+                    }
+                    j += 2;
+                }
+                if (!board_config_.expander_inputs.full()) {
+                    board_config_.expander_inputs.push_back(cfg);
                 }
             }
             i = j;

@@ -10,6 +10,8 @@
  *   "digital_input" → DigitalInputDriver   (sensor, GPIO)
  *   "ntc"           → NtcDriver            (sensor, ADC)
  *   "relay"         → RelayDriver          (actuator, GPIO)
+ *   "pcf8574_relay" → PCF8574RelayDriver   (actuator, I2C expander)
+ *   "pcf8574_input" → PCF8574InputDriver   (sensor, I2C expander)
  */
 
 #include "modesp/hal/driver_manager.h"
@@ -17,6 +19,8 @@
 #include "relay_driver.h"
 #include "digital_input_driver.h"
 #include "ntc_driver.h"
+#include "pcf8574_relay_driver.h"
+#include "pcf8574_input_driver.h"
 #include "esp_log.h"
 
 static const char* TAG = "DriverMgr";
@@ -39,6 +43,12 @@ static size_t ntc_count = 0;
 static RelayDriver relay_pool[MAX_ACTUATORS];
 static size_t relay_count = 0;
 
+static PCF8574RelayDriver pcf_relay_pool[MAX_ACTUATORS];
+static size_t pcf_relay_count = 0;
+
+static PCF8574InputDriver pcf_input_pool[MAX_SENSORS];
+static size_t pcf_input_count = 0;
+
 // ═══════════════════════════════════════════════════════════════
 // Init — create all drivers from bindings
 // ═══════════════════════════════════════════════════════════════
@@ -52,6 +62,8 @@ bool DriverManager::init(const BindingTable& bindings, HAL& hal) {
     di_count = 0;
     ntc_count = 0;
     relay_count = 0;
+    pcf_relay_count = 0;
+    pcf_input_count = 0;
     sensors_.clear();
     actuators_.clear();
     sensor_count_ = 0;
@@ -67,6 +79,20 @@ bool DriverManager::init(const BindingTable& bindings, HAL& hal) {
         sensors_.push_back(entry);
         sensor_count_++;
         ESP_LOGI(TAG, "  Sensor '%s' [%s] -> module '%s'",
+                 b.role.c_str(), b.driver_type.c_str(), b.module_name.c_str());
+        return true;
+    };
+
+    // Лямбда для реєстрації актуатора
+    auto add_actuator = [this](IActuatorDriver* drv, const Binding& b) -> bool {
+        if (!drv) return false;
+        ActuatorEntry entry;
+        entry.driver = drv;
+        entry.role = b.role;
+        entry.module = b.module_name;
+        actuators_.push_back(entry);
+        actuator_count_++;
+        ESP_LOGI(TAG, "  Actuator '%s' [%s] -> module '%s'",
                  b.role.c_str(), b.driver_type.c_str(), b.module_name.c_str());
         return true;
     };
@@ -89,22 +115,18 @@ bool DriverManager::init(const BindingTable& bindings, HAL& hal) {
                 return false;
             }
         } else if (binding.driver_type == "relay") {
-            IActuatorDriver* drv = create_actuator(binding, hal);
-            if (drv) {
-                ActuatorEntry entry;
-                entry.driver = drv;
-                entry.role = binding.role;
-                entry.module = binding.module_name;
-                actuators_.push_back(entry);
-                actuator_count_++;
-
-                ESP_LOGI(TAG, "  Actuator '%s' [%s] -> module '%s'",
-                         binding.role.c_str(),
-                         binding.driver_type.c_str(),
-                         binding.module_name.c_str());
-            } else {
-                ESP_LOGE(TAG, "  Failed to create actuator '%s'",
-                         binding.role.c_str());
+            if (!add_actuator(create_actuator(binding, hal), binding)) {
+                ESP_LOGE(TAG, "  Failed to create actuator '%s'", binding.role.c_str());
+                return false;
+            }
+        } else if (binding.driver_type == "pcf8574_relay") {
+            if (!add_actuator(create_pcf_actuator(binding, hal), binding)) {
+                ESP_LOGE(TAG, "  Failed to create PCF relay '%s'", binding.role.c_str());
+                return false;
+            }
+        } else if (binding.driver_type == "pcf8574_input") {
+            if (!add_sensor(create_pcf_sensor(binding, hal), binding)) {
+                ESP_LOGE(TAG, "  Failed to create PCF input '%s'", binding.role.c_str());
                 return false;
             }
         } else {
@@ -222,6 +244,60 @@ IActuatorDriver* DriverManager::create_actuator(const Binding& binding, HAL& hal
     }
 
     return nullptr;
+}
+
+IActuatorDriver* DriverManager::create_pcf_actuator(const Binding& binding, HAL& hal) {
+    if (pcf_relay_count >= MAX_ACTUATORS) {
+        ESP_LOGE(TAG, "PCF relay pool exhausted");
+        return nullptr;
+    }
+
+    // Знайти expander output config по hardware_id ("relay_1")
+    auto* out_cfg = hal.find_expander_output(
+        etl::string_view(binding.hardware_id.c_str(), binding.hardware_id.size()));
+    if (!out_cfg) {
+        ESP_LOGE(TAG, "Expander output '%s' not found", binding.hardware_id.c_str());
+        return nullptr;
+    }
+
+    // Знайти expander resource по expander_id ("relay_exp")
+    auto* expander = hal.find_i2c_expander(
+        etl::string_view(out_cfg->expander_id.c_str(), out_cfg->expander_id.size()));
+    if (!expander) {
+        ESP_LOGE(TAG, "Expander '%s' not found", out_cfg->expander_id.c_str());
+        return nullptr;
+    }
+
+    auto& drv = pcf_relay_pool[pcf_relay_count++];
+    drv.configure(binding.role.c_str(), expander, out_cfg->pin, out_cfg->active_high);
+    return &drv;
+}
+
+ISensorDriver* DriverManager::create_pcf_sensor(const Binding& binding, HAL& hal) {
+    if (pcf_input_count >= MAX_SENSORS) {
+        ESP_LOGE(TAG, "PCF input pool exhausted");
+        return nullptr;
+    }
+
+    // Знайти expander input config по hardware_id ("din_1")
+    auto* in_cfg = hal.find_expander_input(
+        etl::string_view(binding.hardware_id.c_str(), binding.hardware_id.size()));
+    if (!in_cfg) {
+        ESP_LOGE(TAG, "Expander input '%s' not found", binding.hardware_id.c_str());
+        return nullptr;
+    }
+
+    // Знайти expander resource
+    auto* expander = hal.find_i2c_expander(
+        etl::string_view(in_cfg->expander_id.c_str(), in_cfg->expander_id.size()));
+    if (!expander) {
+        ESP_LOGE(TAG, "Expander '%s' not found", in_cfg->expander_id.c_str());
+        return nullptr;
+    }
+
+    auto& drv = pcf_input_pool[pcf_input_count++];
+    drv.configure(binding.role.c_str(), expander, in_cfg->pin, in_cfg->invert);
+    return &drv;
 }
 
 // ═══════════════════════════════════════════════════════════════

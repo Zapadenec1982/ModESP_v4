@@ -37,9 +37,21 @@ bool HAL::init(const BoardConfig& config) {
         return false;
     }
 
-    ESP_LOGI(TAG, "HAL ready: %d gpio_out, %d ow, %d gpio_in, %d adc",
+    // I2C buses та expanders (тільки якщо є в config)
+    if (!config.i2c_buses.empty()) {
+        if (!init_i2c(config)) {
+            ESP_LOGE(TAG, "I2C init failed");
+            return false;
+        }
+        if (!init_i2c_expanders(config)) {
+            ESP_LOGE(TAG, "I2C expander init failed");
+            return false;
+        }
+    }
+
+    ESP_LOGI(TAG, "HAL ready: %d gpio_out, %d ow, %d gpio_in, %d adc, %d i2c_exp",
              (int)gpio_output_count_, (int)onewire_count_,
-             (int)gpio_input_count_, (int)adc_count_);
+             (int)gpio_input_count_, (int)adc_count_, (int)i2c_expander_count_);
     return true;
 }
 
@@ -223,6 +235,161 @@ AdcChannelResource* HAL::find_adc_channel(etl::string_view id) {
         if (adc_channels_[i].id.size() == id.size() &&
             etl::string_view(adc_channels_[i].id.c_str(), adc_channels_[i].id.size()) == id) {
             return &adc_channels_[i];
+        }
+    }
+    return nullptr;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// I2C bus + expander init (new ESP-IDF v5 master API)
+// ═══════════════════════════════════════════════════════════════
+
+bool HAL::init_i2c(const BoardConfig& config) {
+    i2c_bus_count_ = 0;
+
+    for (const auto& cfg : config.i2c_buses) {
+        if (i2c_bus_count_ >= MAX_I2C_BUSES) {
+            ESP_LOGW(TAG, "I2C bus limit reached (%d)", (int)MAX_I2C_BUSES);
+            break;
+        }
+
+        i2c_master_bus_config_t bus_cfg = {};
+        bus_cfg.i2c_port = (i2c_bus_count_ == 0) ? I2C_NUM_0 : I2C_NUM_1;
+        bus_cfg.sda_io_num = cfg.sda;
+        bus_cfg.scl_io_num = cfg.scl;
+        bus_cfg.clk_source = I2C_CLK_SRC_DEFAULT;
+        bus_cfg.glitch_ignore_cnt = 7;
+        bus_cfg.flags.enable_internal_pullup = true;
+
+        auto& res = i2c_buses_[i2c_bus_count_];
+        esp_err_t err = i2c_new_master_bus(&bus_cfg, &res.bus_handle);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "I2C '%s' init failed: %s", cfg.id.c_str(), esp_err_to_name(err));
+            return false;
+        }
+
+        res.id = cfg.id;
+        res.initialized = true;
+        i2c_bus_count_++;
+
+        ESP_LOGI(TAG, "  I2C '%s' SDA=%d SCL=%d @ %luHz",
+                 cfg.id.c_str(), (int)cfg.sda, (int)cfg.scl, (unsigned long)cfg.freq_hz);
+    }
+
+    return true;
+}
+
+bool HAL::init_i2c_expanders(const BoardConfig& config) {
+    i2c_expander_count_ = 0;
+
+    for (const auto& cfg : config.i2c_expanders) {
+        if (i2c_expander_count_ >= MAX_I2C_EXPANDERS) {
+            ESP_LOGW(TAG, "I2C expander limit reached (%d)", (int)MAX_I2C_EXPANDERS);
+            break;
+        }
+
+        // Знайти I2C bus по bus_id
+        i2c_master_bus_handle_t bus_handle = nullptr;
+        for (size_t b = 0; b < i2c_bus_count_; b++) {
+            if (i2c_buses_[b].id == cfg.bus_id) {
+                bus_handle = i2c_buses_[b].bus_handle;
+                break;
+            }
+        }
+        if (!bus_handle) {
+            ESP_LOGE(TAG, "I2C bus '%s' not found for expander '%s'",
+                     cfg.bus_id.c_str(), cfg.id.c_str());
+            return false;
+        }
+
+        // Додати пристрій на шину
+        i2c_device_config_t dev_cfg = {};
+        dev_cfg.dev_addr_length = I2C_ADDR_BIT_LEN_7;
+        dev_cfg.device_address = cfg.address;
+        dev_cfg.scl_speed_hz = 100000;
+
+        auto& res = i2c_expanders_[i2c_expander_count_];
+        esp_err_t err = i2c_master_bus_add_device(bus_handle, &dev_cfg, &res.dev_handle);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Expander '%s' add device failed: %s",
+                     cfg.id.c_str(), esp_err_to_name(err));
+            return false;
+        }
+
+        res.id = cfg.id;
+        res.address = cfg.address;
+        res.pin_count = cfg.pin_count;
+        res.output_state = 0xFF;  // Все HIGH = все OFF (PCF8574 power-on default)
+        res.initialized = true;
+
+        // Записати початковий стан (все OFF)
+        if (!res.write_state()) {
+            ESP_LOGE(TAG, "Expander '%s' I2C write failed at 0x%02X — device not responding?",
+                     cfg.id.c_str(), cfg.address);
+            return false;
+        }
+
+        i2c_expander_count_++;
+
+        ESP_LOGI(TAG, "  I2C expander '%s' [%s] addr=0x%02X on '%s'",
+                 cfg.id.c_str(), cfg.chip.c_str(), cfg.address, cfg.bus_id.c_str());
+    }
+
+    // Зберігаємо output/input configs для lookup
+    expander_outputs_.clear();
+    for (const auto& c : config.expander_outputs) expander_outputs_.push_back(c);
+    expander_inputs_.clear();
+    for (const auto& c : config.expander_inputs) expander_inputs_.push_back(c);
+
+    return true;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// I2CExpanderResource — I2C byte read/write
+// ═══════════════════════════════════════════════════════════════
+
+bool I2CExpanderResource::write_state() {
+    if (!dev_handle) return false;
+    uint8_t data = output_state;
+    esp_err_t err = i2c_master_transmit(dev_handle, &data, 1, 100);
+    return err == ESP_OK;
+}
+
+bool I2CExpanderResource::read_state(uint8_t& input_byte) {
+    if (!dev_handle) return false;
+    esp_err_t err = i2c_master_receive(dev_handle, &input_byte, 1, 100);
+    return err == ESP_OK;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// I2C find methods
+// ═══════════════════════════════════════════════════════════════
+
+I2CExpanderResource* HAL::find_i2c_expander(etl::string_view id) {
+    for (size_t i = 0; i < i2c_expander_count_; i++) {
+        if (i2c_expanders_[i].id.size() == id.size() &&
+            etl::string_view(i2c_expanders_[i].id.c_str(), i2c_expanders_[i].id.size()) == id) {
+            return &i2c_expanders_[i];
+        }
+    }
+    return nullptr;
+}
+
+I2CExpanderOutputConfig* HAL::find_expander_output(etl::string_view id) {
+    for (auto& cfg : expander_outputs_) {
+        if (cfg.id.size() == id.size() &&
+            etl::string_view(cfg.id.c_str(), cfg.id.size()) == id) {
+            return &cfg;
+        }
+    }
+    return nullptr;
+}
+
+I2CExpanderInputConfig* HAL::find_expander_input(etl::string_view id) {
+    for (auto& cfg : expander_inputs_) {
+        if (cfg.id.size() == id.size() &&
+            etl::string_view(cfg.id.c_str(), cfg.id.size()) == id) {
+            return &cfg;
         }
     }
     return nullptr;
