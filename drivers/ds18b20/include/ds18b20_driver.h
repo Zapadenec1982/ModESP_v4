@@ -106,6 +106,13 @@ private:
     uint8_t  rom_address_[8]      = {};
     bool     has_address_         = false;
 
+    // Китайські клони DS18B20 (A5 A5 в reserved bytes) мають невірний CRC
+    bool     clone_detected_      = false;
+
+    // Auto-scan при init: визначає кількість датчиків на шині
+    bool     bus_scanned_         = false;
+    uint8_t  bus_device_count_    = 0;
+
     // Validation limits
     static constexpr float MIN_VALID_TEMP  = -55.0f;
     static constexpr float MAX_VALID_TEMP  = 125.0f;

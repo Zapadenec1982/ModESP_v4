@@ -6,7 +6,7 @@
  * It reads JSON config files from a LittleFS partition and fills
  * BoardConfig + BindingTable structs used by HAL and DriverManager.
  *
- * All JSON parsing uses jsmn on a stack-allocated buffer — zero heap.
+ * All JSON parsing uses jsmn with static buffers in BSS — zero heap, zero stack.
  */
 
 #pragma once
@@ -33,10 +33,10 @@ private:
     bool parse_board_json();
     bool parse_bindings_json();
 
-    // JSON parsing limits (stack-allocated)
-    // Keep small to avoid stack overflow on main task (default 3584 bytes)
-    static constexpr size_t MAX_JSON_SIZE = 2048;
-    static constexpr size_t MAX_TOKENS    = 256;
+    // JSON parsing limits (static buffers in BSS — не впливає на стек)
+    // KC868-A6 board.json ~2.3KB, ~240 jsmn tokens
+    static constexpr size_t MAX_JSON_SIZE = 4096;
+    static constexpr size_t MAX_TOKENS    = 512;
 };
 
 } // namespace modesp

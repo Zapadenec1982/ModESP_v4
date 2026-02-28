@@ -74,16 +74,43 @@ bool DS18B20Driver::init() {
     }
     gpio_set_level(gpio_, 1);  // Idle HIGH
 
-    // Check for device presence on bus
-    if (!onewire_reset()) {
-        ESP_LOGW(TAG, "No device on GPIO %d — will retry in runtime", gpio_);
+    // Auto-scan: якщо адреса не задана в bindings, визначаємо кількість датчиків
+    if (!has_address_) {
+        // Стабілізація шини перед скануванням
+        vTaskDelay(pdMS_TO_TICKS(10));
+
+        RomAddress devices[MAX_DEVICES_PER_BUS];
+        size_t count = scan_bus(gpio_, devices, MAX_DEVICES_PER_BUS);
+        bus_device_count_ = (uint8_t)count;
+        bus_scanned_ = true;
+
+        if (count == 1) {
+            // Єдиний на шині — безпечно, автоматично MATCH_ROM
+            memcpy(rom_address_, devices[0].bytes, 8);
+            has_address_ = true;
+            char addr_str[24];
+            format_address(rom_address_, addr_str, sizeof(addr_str));
+            ESP_LOGI(TAG, "[%s] Single sensor auto-assigned: %s", role_.c_str(), addr_str);
+        } else if (count > 1) {
+            // Кілька на шині без адрес — небезпечно, не читаємо
+            ESP_LOGE(TAG, "[%s] %d sensors on GPIO %d — MATCH_ROM address required!",
+                     role_.c_str(), (int)count, gpio_);
+            ESP_LOGE(TAG, "[%s] Assign addresses via WebUI -> Bindings -> OneWire Discovery",
+                     role_.c_str());
+        } else {
+            ESP_LOGW(TAG, "[%s] No sensor on GPIO %d — will retry in runtime", role_.c_str(), gpio_);
+        }
     } else {
-        ESP_LOGI(TAG, "DS18B20 detected on GPIO %d", gpio_);
+        // Адреса задана — перевіряємо наявність датчика
+        if (!onewire_reset()) {
+            ESP_LOGW(TAG, "[%s] No response on GPIO %d — will retry in runtime",
+                     role_.c_str(), gpio_);
+        }
     }
 
     ESP_LOGI(TAG, "[%s] Initialized (GPIO=%d, interval=%lu ms, %s)",
              role_.c_str(), gpio_, read_interval_ms_,
-             has_address_ ? "MATCH_ROM" : "SKIP_ROM");
+             has_address_ ? "MATCH_ROM" : "NO_ADDRESS");
     return true;
 }
 
@@ -310,11 +337,29 @@ bool DS18B20Driver::read_temperature(float& temp_out) {
     // CRC8 check (bytes 0-7, CRC in byte 8)
     uint8_t calc_crc = crc8(scratchpad, 8);
     if (calc_crc != scratchpad[8]) {
-        ESP_LOGW(TAG, "[%s] CRC8 mismatch: got=0x%02X calc=0x%02X raw=[%02X %02X %02X %02X %02X %02X %02X %02X %02X]",
-                 role_.c_str(), scratchpad[8], calc_crc,
-                 scratchpad[0], scratchpad[1], scratchpad[2], scratchpad[3],
-                 scratchpad[4], scratchpad[5], scratchpad[6], scratchpad[7], scratchpad[8]);
-        return false;
+        // Китайські клони DS18B20 мають reserved bytes A5 A5 замість FF 0C
+        // і не рахують CRC правильно — детектимо по сигнатурі
+        bool is_clone = (scratchpad[5] == 0xA5 && scratchpad[6] == 0xA5);
+        if (is_clone) {
+            if (!clone_detected_) {
+                clone_detected_ = true;
+                ESP_LOGW(TAG, "[%s] Chinese DS18B20 clone detected (A5 A5 signature) — CRC skip enabled",
+                         role_.c_str());
+            }
+            // Валідуємо config register (byte 4): 0x7F=12bit, 0x5F=11, 0x3F=10, 0x1F=9
+            uint8_t cfg = scratchpad[4];
+            if (cfg != 0x7F && cfg != 0x5F && cfg != 0x3F && cfg != 0x1F) {
+                ESP_LOGW(TAG, "[%s] Clone: invalid config byte 0x%02X", role_.c_str(), cfg);
+                return false;
+            }
+            // CRC пропускаємо — температура валідується нижче
+        } else {
+            ESP_LOGW(TAG, "[%s] CRC8 mismatch: got=0x%02X calc=0x%02X raw=[%02X %02X %02X %02X %02X %02X %02X %02X %02X]",
+                     role_.c_str(), scratchpad[8], calc_crc,
+                     scratchpad[0], scratchpad[1], scratchpad[2], scratchpad[3],
+                     scratchpad[4], scratchpad[5], scratchpad[6], scratchpad[7], scratchpad[8]);
+            return false;
+        }
     }
 
     // Check for default 85C value (conversion not complete)
@@ -503,6 +548,23 @@ size_t DS18B20Driver::scan_bus(gpio_num_t gpio, RomAddress* results, size_t max_
             continue;
         }
 
+        // Дедуплікація: клони можуть створювати фантомні конфлікти
+        // і один датчик знаходиться кілька разів
+        bool duplicate = false;
+        for (size_t d = 0; d < found; d++) {
+            if (memcmp(results[d].bytes, rom, 8) == 0) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (duplicate) {
+            ESP_LOGD(TAG, "Duplicate ROM skipped (clone artifact)");
+            memcpy(prev_rom, rom, 8);
+            last_discrepancy = new_discrepancy;
+            if (last_discrepancy == 0) last_device = true;
+            continue;
+        }
+
         memcpy(results[found].bytes, rom, 8);
         found++;
         ESP_LOGI(TAG, "Found DS18x20: %02X:%02X:%02X:%02X:%02X:%02X:%02X:%02X",
@@ -549,8 +611,12 @@ bool DS18B20Driver::read_temp_by_address(gpio_num_t gpio,
     uint8_t scratchpad[9];
     for (int i = 0; i < 9; i++) scratchpad[i] = ow_read_byte(gpio);
 
-    // CRC8 scratchpad check
-    if (crc8(scratchpad, 8) != scratchpad[8]) return false;
+    // CRC8 scratchpad check (з толерантністю до клонів)
+    if (crc8(scratchpad, 8) != scratchpad[8]) {
+        bool is_clone = (scratchpad[5] == 0xA5 && scratchpad[6] == 0xA5);
+        if (!is_clone) return false;
+        // Клон — пропускаємо CRC, валідуємо температуру нижче
+    }
 
     // Decode temperature
     int16_t raw = (static_cast<int16_t>(scratchpad[1]) << 8) | scratchpad[0];
