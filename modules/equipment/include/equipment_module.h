@@ -128,6 +128,9 @@ private:
         bool hg_valve   = false;
     } out_;
 
+    // Defrost transition tracking (логуємо тільки при зміні стану)
+    bool prev_defrost_active_ = false;
+
     // AUDIT-003: Compressor anti-short-cycle на рівні виходу (output-level).
     // Захищає компресор незалежно від джерела запиту (thermostat/defrost).
     // Доповнює, а не замінює таймери thermostat (ті працюють для state machine логіки).

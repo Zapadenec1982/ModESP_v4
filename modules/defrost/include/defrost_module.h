@@ -17,10 +17,10 @@
  *   2 = Combined (first of timer or demand)
  *   3 = Disabled
  *
- * Termination:
- *   - Primary: T_evap >= dSt (end_temp)
- *   - Safety: max_duration timer (dEt)
- *   - Skip: if T_evap > dSt before start (evaporator clean)
+ * Termination modes:
+ *   0 = By temperature: T_evap >= dSt (after 60s min), max_duration as safety backup
+ *   1 = By timer: max_duration only, T_evap ignored
+ *   - Skip: if T_evap > dSt before start (evaporator clean, temp mode only)
  *
  * Equipment Layer integration:
  *   Defrost does NOT access HAL directly. It publishes requests via
@@ -100,6 +100,7 @@ private:
     uint32_t interval_ms_      = 28800000;  // dit: 8h → ms
     int32_t  counter_mode_     = 1;         // dct: 1=real, 2=compressor
     int32_t  initiation_       = 0;         // 0=timer, 1=demand, 2=combo, 3=disabled
+    int32_t  termination_      = 0;         // 0=by temp, 1=by timer
     float    end_temp_         = 8.0f;      // dSt °C
     uint32_t max_duration_ms_  = 1800000;   // dEt: 30min → ms
     float    demand_temp_      = -25.0f;    // dSS °C
@@ -128,4 +129,8 @@ private:
     float evap_temp_      = 0.0f;
     bool  sensor2_ok_     = false;
     bool  compressor_on_  = false;
+
+    // Мінімальний час ACTIVE фази перед перевіркою end_temp (60с)
+    // Стандартна практика промислових контролерів (Dixell/Danfoss)
+    static constexpr uint32_t MIN_ACTIVE_CHECK_MS = 60000;
 };

@@ -254,7 +254,16 @@ void EquipmentModule::apply_arbitration() {
         out_.evap_fan   = req_.def_evap_fan;
         out_.cond_fan   = req_.def_cond_fan;
         out_.hg_valve   = req_.def_hg_valve;
+        // Логуємо тільки при вході в defrost (не кожен цикл)
+        if (!prev_defrost_active_) {
+            ESP_LOGI(TAG, "DEFROST arb START: comp=%d heat=%d efan=%d cfan=%d hg=%d",
+                     out_.compressor, out_.heater, out_.evap_fan, out_.cond_fan, out_.hg_valve);
+        }
     } else {
+        // Логуємо при виході з defrost
+        if (prev_defrost_active_) {
+            ESP_LOGI(TAG, "DEFROST arb END — normal mode restored");
+        }
         // Нормальний режим: thermostat requests
         out_.compressor = req_.therm_compressor;
         out_.heater     = false;   // Тільки defrost може ввімкнути
@@ -299,6 +308,9 @@ void EquipmentModule::apply_arbitration() {
         out_.hg_valve = false;
         ESP_LOGW(TAG, "INTERLOCK: heater+hg_valve → hg_valve OFF");
     }
+
+    // Оновлюємо tracking для delta-логування
+    prev_defrost_active_ = req_.defrost_active;
 }
 
 // ═══════════════════════════════════════════════════════════════

@@ -44,7 +44,7 @@
       "controls_settings": [
         "defrost.interval", "defrost.counter_mode",
         "defrost.max_duration", "defrost.drip_time", "defrost.fan_delay",
-        "defrost.initiation"
+        "defrost.initiation", "defrost.termination"
       ]
     },
     "defrost_by_sensor": {
@@ -85,6 +85,13 @@
         "1": {"requires_feature": "defrost_by_sensor", "disabled_hint": "Потрібен датчик випарника (evap_temp)"},
         "2": {"requires_feature": "defrost_by_sensor", "disabled_hint": "Потрібен датчик випарника (evap_temp)"},
         "3": {"always": true}
+      }
+    },
+    "defrost.termination": {
+      "type": "enum_filter",
+      "values": {
+        "0": {"requires_feature": "defrost_by_sensor", "disabled_hint": "Потрібен датчик випарника (evap_temp)"},
+        "1": {"always": true}
       }
     }
   },
@@ -213,6 +220,17 @@
         {"value": 3, "label": "Вимкнено"}
       ],
       "description": "Ініціація розморозки"
+    },
+    "defrost.termination": {
+      "type": "int",
+      "access": "readwrite",
+      "default": 0,
+      "persist": true,
+      "options": [
+        {"value": 0, "label": "За температурою"},
+        {"value": 1, "label": "За таймером"}
+      ],
+      "description": "Завершення відтайки"
     },
     "defrost.end_temp": {
       "type": "float",
@@ -377,9 +395,13 @@
             "widget": "select"
           },
           {
+            "key": "defrost.termination",
+            "widget": "select"
+          },
+          {
             "key": "defrost.end_temp",
             "widget": "number_input",
-            "visible_when": {"key": "defrost.initiation", "in": [1, 2]}
+            "visible_when": {"key": "defrost.termination", "eq": 0}
           },
           {
             "key": "defrost.max_duration",
@@ -400,8 +422,7 @@
           },
           {
             "key": "defrost.fad_temp",
-            "widget": "number_input",
-            "visible_when": {"key": "defrost.initiation", "in": [1, 2]}
+            "widget": "number_input"
           },
           {
             "key": "thermostat.display_defrost",
@@ -450,6 +471,7 @@
       "defrost.interval",
       "defrost.counter_mode",
       "defrost.initiation",
+      "defrost.termination",
       "defrost.end_temp",
       "defrost.max_duration",
       "defrost.demand_temp",

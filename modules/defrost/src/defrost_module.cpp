@@ -31,6 +31,7 @@ void DefrostModule::sync_settings() {
     defrost_type_  = read_int("defrost.type", 0);
     counter_mode_  = read_int("defrost.counter_mode", 1);
     initiation_    = read_int("defrost.initiation", 0);
+    termination_   = read_int("defrost.termination", 0);
     end_temp_      = read_float("defrost.end_temp", end_temp_);
     demand_temp_   = read_float("defrost.demand_temp", demand_temp_);
     fad_temp_      = read_float("defrost.fad_temp", fad_temp_);
@@ -204,10 +205,11 @@ bool DefrostModule::on_init() {
     const char* init_name = initiation_ == 0 ? "timer" :
                             initiation_ == 1 ? "demand" :
                             initiation_ == 2 ? "combo" : "disabled";
-    ESP_LOGI(TAG, "Initialized (type=%s, interval=%ldh, initiation=%s, counter=%s)",
+    const char* term_name = termination_ == 0 ? "temp" : "timer";
+    ESP_LOGI(TAG, "Initialized (type=%s, interval=%ldh, initiation=%s, termination=%s, counter=%s)",
              type_name,
              static_cast<long>(interval_ms_ / 3600000),
-             init_name,
+             init_name, term_name,
              counter_mode_ == 1 ? "realtime" : "compressor");
     ESP_LOGI(TAG, "  end_temp=%.1f, max_duration=%ldmin, defrost_count=%ld",
              end_temp_,
@@ -309,8 +311,8 @@ void DefrostModule::update_idle(uint32_t dt_ms) {
     bool demand_trigger = (initiation_ == 1 || initiation_ == 2) && check_demand_trigger();
 
     if (timer_trigger || demand_trigger) {
-        // Оптимізація: випарник чистий → скасовуємо
-        if (sensor2_ok_ && evap_temp_ > end_temp_) {
+        // Оптимізація: випарник чистий → скасовуємо (тільки в temp-mode)
+        if (termination_ == 0 && sensor2_ok_ && evap_temp_ > end_temp_) {
             ESP_LOGI(TAG, "Defrost skipped — evap clean (%.1f > %.1f)",
                      evap_temp_, end_temp_);
             interval_timer_ms_ = 0;
@@ -398,26 +400,34 @@ void DefrostModule::update_equalize(uint32_t dt_ms) {
 void DefrostModule::update_active_phase(uint32_t dt_ms) {
     phase_timer_ms_ += dt_ms;
 
-    // Завершення по T_evap (основна)
-    if (sensor2_ok_ && evap_temp_ >= end_temp_) {
-        consecutive_timeouts_ = 0;
-        state_set("defrost.heater_alarm", false);
-        state_set("defrost.last_termination", "temp");
-        finish_active_phase("temp reached");
-        return;
+    // Завершення по T_evap (тільки в temp-mode, після мінімального часу)
+    // MIN_ACTIVE_CHECK_MS запобігає миттєвому завершенню при високій T_evap (тест/сплеск)
+    if (termination_ == 0 && phase_timer_ms_ >= MIN_ACTIVE_CHECK_MS) {
+        if (sensor2_ok_ && evap_temp_ >= end_temp_) {
+            consecutive_timeouts_ = 0;
+            state_set("defrost.heater_alarm", false);
+            state_set("defrost.last_termination", "temp");
+            finish_active_phase("temp reached");
+            return;
+        }
     }
 
-    // Завершення по таймеру безпеки (dEt)
+    // Завершення по таймеру (dEt) — завжди працює в обох modes
     if (phase_timer_ms_ >= max_duration_ms_) {
-        consecutive_timeouts_++;
-        state_set("defrost.last_termination", "timeout");
-        state_set("defrost.consecutive_timeouts", consecutive_timeouts_);
-        if (consecutive_timeouts_ >= 3) {
-            ESP_LOGW(TAG, "3 consecutive timeouts — possible heater/sensor failure!");
-            // Публікуємо alarm для Protection/WebUI (BUG-010 fix)
-            state_set("defrost.heater_alarm", true);
+        if (termination_ == 0) {
+            // temp-mode: таймер = safety backup → лічильник таймаутів
+            consecutive_timeouts_++;
+            state_set("defrost.consecutive_timeouts", consecutive_timeouts_);
+            if (consecutive_timeouts_ >= 3) {
+                ESP_LOGW(TAG, "3 consecutive timeouts — possible heater/sensor failure!");
+                state_set("defrost.heater_alarm", true);
+            }
+        } else {
+            // timer-mode: нормальне завершення
+            consecutive_timeouts_ = 0;
         }
-        finish_active_phase("timeout");
+        state_set("defrost.last_termination", "timeout");
+        finish_active_phase(termination_ == 0 ? "timeout" : "timer");
         return;
     }
 }
