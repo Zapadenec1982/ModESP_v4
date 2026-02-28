@@ -35,8 +35,8 @@ private:
 
     // JSON parsing limits (stack-allocated)
     // Keep small to avoid stack overflow on main task (default 3584 bytes)
-    static constexpr size_t MAX_JSON_SIZE = 1024;
-    static constexpr size_t MAX_TOKENS    = 128;
+    static constexpr size_t MAX_JSON_SIZE = 2048;
+    static constexpr size_t MAX_TOKENS    = 256;
 };
 
 } // namespace modesp

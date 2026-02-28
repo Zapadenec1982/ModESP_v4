@@ -33,7 +33,18 @@
 
   // ── Hardware helpers ──
   function compatibleHw(roleDef) {
-    return hwInventory.filter(h => h.hw_type === roleDef.hw_type);
+    const types = roleDef.hw_types || (roleDef.hw_type ? [roleDef.hw_type] : []);
+    return hwInventory.filter(h => types.some(t => t === h.hw_type));
+  }
+
+  // Визначити правильний драйвер за hw_type обраного hardware
+  function driverForHw(roleDef, hwId) {
+    const hw = hwInventory.find(h => h.id === hwId);
+    if (!hw) return roleDef.driver || (roleDef.drivers && roleDef.drivers[0]) || '';
+    const types = roleDef.hw_types || [];
+    const drivers = roleDef.drivers || (roleDef.driver ? [roleDef.driver] : []);
+    const idx = types.indexOf(hw.hw_type);
+    return idx >= 0 && idx < drivers.length ? drivers[idx] : drivers[0] || '';
   }
 
   function usedHwIds(excludeRole) {
@@ -53,8 +64,9 @@
   }
 
   function setHardware(role, hwId) {
+    const roleDef = roles.find(r => r.role === role);
     bindings = bindings.map(b =>
-      b.role === role ? { ...b, hardware: hwId } : b
+      b.role === role ? { ...b, hardware: hwId, driver: roleDef ? driverForHw(roleDef, hwId) : b.driver } : b
     );
   }
 
@@ -73,7 +85,7 @@
     if (hw.length === 0) return;
     bindings = [...bindings, {
       hardware: hw[0].id,
-      driver: roleDef.driver,
+      driver: driverForHw(roleDef, hw[0].id),
       role: roleDef.role,
       module: 'equipment',
       ...(roleDef.requires_address ? { address: '' } : {}),
@@ -85,7 +97,7 @@
     const roleDef = roles.find(r => r.role === role);
     bindings = [...bindings, {
       hardware: bus,
-      driver: roleDef ? roleDef.driver : 'ds18b20',
+      driver: roleDef ? driverForHw(roleDef, bus) : 'ds18b20',
       role: role,
       module: 'equipment',
       address: address,

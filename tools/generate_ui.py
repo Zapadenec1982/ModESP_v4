@@ -393,6 +393,7 @@ VALID_DRIVER_CATEGORIES = {"sensor", "actuator", "io"}
 VALID_HARDWARE_TYPES = {
     "gpio_output", "gpio_input", "onewire_bus",
     "adc_channel", "pwm_channel", "i2c_bus",
+    "i2c_expander_output", "i2c_expander_input",
 }
 VALID_KEY_RE = re.compile(r'^[a-z0-9_]+$')
 
@@ -542,6 +543,8 @@ BOARD_SECTION_TO_HW_TYPE = {
     "adc_channels": "adc_channel",
     "pwm_channels": "pwm_channel",
     "i2c_buses": "i2c_bus",
+    "expander_outputs": "i2c_expander_output",
+    "expander_inputs": "i2c_expander_input",
 }
 
 
@@ -1112,17 +1115,35 @@ class UIJsonGenerator:
         # Roles metadata для BindingsEditor
         roles = []
         for req in (equip_requires or []):
-            drv_name = req["driver"]
-            drv = driver_manifests.get(drv_name, {})
-            roles.append({
+            drivers = req.get("driver", [])
+            if isinstance(drivers, str):
+                drivers = [drivers]
+
+            # Збираємо hw_types та requires_address з усіх допустимих драйверів
+            hw_types = []
+            requires_address = False
+            for drv_name in drivers:
+                drv = driver_manifests.get(drv_name, {})
+                hw_t = drv.get("hardware_type", "")
+                if hw_t and hw_t not in hw_types:
+                    hw_types.append(hw_t)
+                if drv.get("requires_address", False):
+                    requires_address = True
+
+            role_entry = {
                 "role": req["role"],
                 "type": req["type"],
-                "driver": drv_name,
-                "hw_type": drv.get("hardware_type", ""),
-                "requires_address": drv.get("requires_address", False),
+                "drivers": drivers,
+                "hw_types": hw_types,
+                "requires_address": requires_address,
                 "label": req.get("label", req["role"]),
                 "optional": req.get("optional", False),
-            })
+            }
+            # Backward compat: single driver → також emit driver/hw_type
+            if len(drivers) == 1:
+                role_entry["driver"] = drivers[0]
+                role_entry["hw_type"] = hw_types[0] if hw_types else ""
+            roles.append(role_entry)
 
         # Hardware inventory з board.json (для select options у BindingsEditor)
         hardware = []

@@ -20,6 +20,8 @@ class DS18B20Driver;
 class RelayDriver;
 class DigitalInputDriver;
 class NtcDriver;
+class PCF8574RelayDriver;
+class PCF8574InputDriver;
 
 namespace modesp {
 
@@ -63,6 +65,8 @@ private:
     ISensorDriver*   create_di_sensor(const Binding& binding, HAL& hal);
     ISensorDriver*   create_ntc_sensor(const Binding& binding, HAL& hal);
     IActuatorDriver* create_actuator(const Binding& binding, HAL& hal);
+    IActuatorDriver* create_pcf_actuator(const Binding& binding, HAL& hal);
+    ISensorDriver*   create_pcf_sensor(const Binding& binding, HAL& hal);
 };
 
 } // namespace modesp
