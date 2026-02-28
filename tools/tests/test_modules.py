@@ -558,8 +558,9 @@ class TestUIJsonFullProject:
         assert "system" in page_ids
         # protection UI merged into thermostat page
         assert "protection" not in page_ids
-        # equipment UI видалено — статус на сторінці bindings
+        # equipment UI видалено — налаштування на сторінці bindings
         assert "equipment" not in page_ids
+        assert "sensors" not in page_ids
         # firmware merged into system
         assert "firmware" not in page_ids
 

@@ -115,9 +115,17 @@ export default {
   'bind.onewire': 'Виявлення OneWire',
   'bind.add_equip': 'Додати обладнання',
   'bind.used': 'зайнято',
+  'bind.choose_hw': 'Оберіть обладнання',
   'bind.role': '-- Роль --',
   'bind.found': 'Знайдено {0} пристроїв, {1} вже призначено',
   'bind.new_device': 'новий',
+
+  // Equipment / driver settings
+  'eq.filter': 'Цифровий фільтр',
+  'eq.offset': 'Корекція °C',
+  'eq.ntc_beta': 'B-коефіцієнт',
+  'eq.ntc_series': 'Послідовний резистор',
+  'eq.ntc_nominal': 'Номінальний опір (25°C)',
 
   // Chart
   'chart.title': 'Температура',

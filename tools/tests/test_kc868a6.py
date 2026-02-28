@@ -189,10 +189,13 @@ class TestEquipmentMultiDriver:
         assert "digital_input" in drivers
         assert "pcf8574_input" in drivers
 
-    def test_air_temp_single_driver(self, equipment):
-        """air_temp залишається single driver ds18b20."""
+    def test_air_temp_multi_driver(self, equipment):
+        """air_temp підтримує ds18b20 та ntc."""
         req = next(r for r in equipment["requires"] if r["role"] == "air_temp")
-        assert req["driver"] == "ds18b20"
+        drivers = req["driver"]
+        assert isinstance(drivers, list)
+        assert "ds18b20" in drivers
+        assert "ntc" in drivers
 
     def test_cross_validate_with_all_drivers(self, equipment, all_drivers):
         """Cross-validation проходить з усіма реальними drivers."""
@@ -360,14 +363,16 @@ class TestBindingsPageMultiDriver:
         assert "relay" in comp["drivers"]
         assert "pcf8574_relay" in comp["drivers"]
 
-    def test_air_temp_single_driver_compat(self, generator_output):
-        """air_temp (single driver) має backward-compat driver/hw_type."""
+    def test_air_temp_multi_driver_role(self, generator_output):
+        """air_temp (multi driver) має drivers та hw_types."""
         pages = generator_output["pages"]
         bp = next(p for p in pages if p["id"] == "bindings")
         roles = bp["roles"]
         air = next(r for r in roles if r["role"] == "air_temp")
-        assert air["driver"] == "ds18b20"
-        assert air["hw_type"] == "onewire_bus"
+        assert "ds18b20" in air["drivers"]
+        assert "ntc" in air["drivers"]
+        assert "onewire_bus" in air["hw_types"]
+        assert "adc_channel" in air["hw_types"]
 
     def test_hardware_includes_expander_outputs(self, generator_output):
         """Hardware inventory включає expander_outputs."""

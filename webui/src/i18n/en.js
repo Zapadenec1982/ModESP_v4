@@ -101,9 +101,16 @@ export default {
   'bind.onewire': 'OneWire Discovery',
   'bind.add_equip': 'Add Equipment',
   'bind.used': 'used',
+  'bind.choose_hw': 'Choose hardware',
   'bind.role': '-- Role --',
   'bind.found': 'Found {0} device(s), {1} already assigned',
   'bind.new_device': 'new',
+
+  'eq.filter': 'Digital filter',
+  'eq.offset': 'Offset °C',
+  'eq.ntc_beta': 'B-coefficient',
+  'eq.ntc_series': 'Series resistor',
+  'eq.ntc_nominal': 'Nominal resistance (25°C)',
 
   'chart.title': 'Temperature',
 };

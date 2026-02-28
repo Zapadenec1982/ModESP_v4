@@ -16,9 +16,12 @@
     <button class="remove-btn" on:click={() => dispatch('remove', roleDef.role)}
             title={$t['btn.remove']}>&#x2715;</button>
   </div>
-  <select class="hw-select"
+  <select class="hw-select" class:hw-empty={!binding.hardware}
           value={binding.hardware}
           on:change={e => dispatch('changeHw', { role: roleDef.role, hw: e.target.value })}>
+    {#if !binding.hardware}
+      <option value="" disabled>— {$t['bind.choose_hw'] || 'Оберіть обладнання'} —</option>
+    {/if}
     {#each hwList as hw}
       {@const used = usedIds.has(hw.id)}
       <option value={hw.id} disabled={used}>
@@ -74,6 +77,7 @@
     appearance: auto;
   }
   .hw-select:focus { outline: none; border-color: var(--accent); }
+  .hw-empty { border-color: var(--warning); color: var(--warning); }
   .addr-input {
     width: 100%;
     margin-top: 8px;

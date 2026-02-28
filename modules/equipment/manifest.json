@@ -55,31 +55,6 @@
                                    "unit": "°C", "description": "Корекція показань DS18B20"}
   },
 
-  "ui": {
-    "page": "Датчики",
-    "page_id": "sensors",
-    "order": 75,
-    "icon": "thermometer",
-    "cards": [
-      {
-        "title": "NTC Термістор",
-        "visible_when": {"key": "equipment.has_ntc_driver", "eq": true},
-        "widgets": [
-          {"key": "equipment.ntc_beta",      "widget": "number_input"},
-          {"key": "equipment.ntc_r_series",  "widget": "number_input"},
-          {"key": "equipment.ntc_r_nominal", "widget": "number_input"}
-        ]
-      },
-      {
-        "title": "DS18B20",
-        "visible_when": {"key": "equipment.has_ds18b20_driver", "eq": true},
-        "widgets": [
-          {"key": "equipment.filter_coeff",    "widget": "number_input"},
-          {"key": "equipment.ds18b20_offset",  "widget": "number_input"}
-        ]
-      }
-    ]
-  },
 
   "mqtt": {
     "publish": [

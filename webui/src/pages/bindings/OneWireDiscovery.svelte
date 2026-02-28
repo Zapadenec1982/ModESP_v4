@@ -1,8 +1,10 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { apiGet } from '../../lib/api.js';
+  import { state } from '../../stores/state.js';
   import { t } from '../../stores/i18n.js';
   import Card from '../../components/Card.svelte';
+  import NumberInput from '../../components/widgets/NumberInput.svelte';
 
   export let owBuses = [];
   export let assignedAddresses = new Set();
@@ -14,6 +16,8 @@
   let scanResults = [];
   let selectedBus = '';
   let error = null;
+
+  $: hasDs18b20 = !!$state['equipment.has_ds18b20_driver'];
 
   $: if (owBuses.length > 0 && !selectedBus) selectedBus = owBuses[0].id;
 
@@ -47,7 +51,23 @@
   }
 </script>
 
-<Card title={$t['bind.onewire']}>
+<Card title="DS18B20 / OneWire">
+  <!-- DS18B20 settings -->
+  {#if hasDs18b20}
+    <div class="settings-section">
+      <NumberInput
+        config={{ key: 'equipment.filter_coeff', description: $t['eq.filter'] || 'Цифровий фільтр', min: 0, max: 10, step: 1 }}
+        value={$state['equipment.filter_coeff']}
+      />
+      <NumberInput
+        config={{ key: 'equipment.ds18b20_offset', description: $t['eq.offset'] || 'Корекція °C', unit: '°C', min: -5, max: 5, step: 0.1 }}
+        value={$state['equipment.ds18b20_offset']}
+      />
+    </div>
+    <div class="divider"></div>
+  {/if}
+
+  <!-- OneWire scan -->
   <div class="scan-controls">
     {#if owBuses.length > 1}
       <select class="hw-select" bind:value={selectedBus}>
@@ -113,6 +133,16 @@
 </Card>
 
 <style>
+  .settings-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 12px 0;
+  }
   .scan-controls {
     display: flex;
     gap: 8px;

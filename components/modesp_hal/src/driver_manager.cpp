@@ -97,62 +97,66 @@ bool DriverManager::init(const BindingTable& bindings, HAL& hal) {
         return true;
     };
 
-    // Phase 1: Create drivers from bindings
+    // Phase 1: Create drivers from bindings (пропускає невдалі)
     for (const auto& binding : bindings.bindings) {
+        bool ok = false;
         if (binding.driver_type == "ds18b20") {
-            if (!add_sensor(create_sensor(binding, hal), binding)) {
-                ESP_LOGE(TAG, "  Failed to create sensor '%s'", binding.role.c_str());
-                return false;
-            }
+            ok = add_sensor(create_sensor(binding, hal), binding);
         } else if (binding.driver_type == "digital_input") {
-            if (!add_sensor(create_di_sensor(binding, hal), binding)) {
-                ESP_LOGE(TAG, "  Failed to create DI sensor '%s'", binding.role.c_str());
-                return false;
-            }
+            ok = add_sensor(create_di_sensor(binding, hal), binding);
         } else if (binding.driver_type == "ntc") {
-            if (!add_sensor(create_ntc_sensor(binding, hal), binding)) {
-                ESP_LOGE(TAG, "  Failed to create NTC sensor '%s'", binding.role.c_str());
-                return false;
-            }
+            ok = add_sensor(create_ntc_sensor(binding, hal), binding);
         } else if (binding.driver_type == "relay") {
-            if (!add_actuator(create_actuator(binding, hal), binding)) {
-                ESP_LOGE(TAG, "  Failed to create actuator '%s'", binding.role.c_str());
-                return false;
-            }
+            ok = add_actuator(create_actuator(binding, hal), binding);
         } else if (binding.driver_type == "pcf8574_relay") {
-            if (!add_actuator(create_pcf_actuator(binding, hal), binding)) {
-                ESP_LOGE(TAG, "  Failed to create PCF relay '%s'", binding.role.c_str());
-                return false;
-            }
+            ok = add_actuator(create_pcf_actuator(binding, hal), binding);
         } else if (binding.driver_type == "pcf8574_input") {
-            if (!add_sensor(create_pcf_sensor(binding, hal), binding)) {
-                ESP_LOGE(TAG, "  Failed to create PCF input '%s'", binding.role.c_str());
-                return false;
-            }
+            ok = add_sensor(create_pcf_sensor(binding, hal), binding);
         } else {
             ESP_LOGW(TAG, "  Unknown driver type '%s' for binding '%s'",
                      binding.driver_type.c_str(),
                      binding.hardware_id.c_str());
+            continue;
+        }
+        if (!ok) {
+            ESP_LOGW(TAG, "  Skipping '%s' [%s] — create failed",
+                     binding.role.c_str(), binding.driver_type.c_str());
         }
     }
 
-    // Phase 2: Initialize all created drivers
-    for (auto& entry : sensors_) {
-        if (!entry.driver->init()) {
-            ESP_LOGE(TAG, "Sensor '%s' init failed", entry.role.c_str());
-            return false;
+    // Phase 2: Initialize all created drivers (видаляє невдалі)
+    int failed = 0;
+    for (size_t i = 0; i < sensors_.size(); ) {
+        if (!sensors_[i].driver->init()) {
+            ESP_LOGW(TAG, "Sensor '%s' init failed — disabled",
+                     sensors_[i].role.c_str());
+            sensors_.erase(sensors_.begin() + i);
+            sensor_count_--;
+            failed++;
+        } else {
+            i++;
         }
     }
 
-    for (auto& entry : actuators_) {
-        if (!entry.driver->init()) {
-            ESP_LOGE(TAG, "Actuator '%s' init failed", entry.role.c_str());
-            return false;
+    for (size_t i = 0; i < actuators_.size(); ) {
+        if (!actuators_[i].driver->init()) {
+            ESP_LOGW(TAG, "Actuator '%s' init failed — disabled",
+                     actuators_[i].role.c_str());
+            actuators_.erase(actuators_.begin() + i);
+            actuator_count_--;
+            failed++;
+        } else {
+            i++;
         }
     }
 
-    ESP_LOGI(TAG, "DriverManager ready: %d sensors, %d actuators",
-             (int)sensor_count_, (int)actuator_count_);
+    if (failed > 0) {
+        ESP_LOGW(TAG, "DriverManager: %d driver(s) failed, continuing with %d sensors, %d actuators",
+                 failed, (int)sensor_count_, (int)actuator_count_);
+    } else {
+        ESP_LOGI(TAG, "DriverManager ready: %d sensors, %d actuators",
+                 (int)sensor_count_, (int)actuator_count_);
+    }
     return true;
 }
 

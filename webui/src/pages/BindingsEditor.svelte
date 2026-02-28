@@ -2,8 +2,10 @@
   import { onMount } from 'svelte';
   import { apiGet, apiPost } from '../lib/api.js';
   import { pages } from '../stores/ui.js';
+  import { state } from '../stores/state.js';
   import { t } from '../stores/i18n.js';
   import Card from '../components/Card.svelte';
+  import NumberInput from '../components/widgets/NumberInput.svelte';
   import EquipmentStatus from './bindings/EquipmentStatus.svelte';
   import BindingCard from './bindings/BindingCard.svelte';
   import OneWireDiscovery from './bindings/OneWireDiscovery.svelte';
@@ -47,10 +49,17 @@
     return idx >= 0 && idx < drivers.length ? drivers[idx] : drivers[0] || '';
   }
 
+  // Типи hardware що підтримують кілька ролей на одному порті
+  const SHAREABLE_HW = new Set(['onewire_bus']);
+
   function usedHwIds(excludeRole) {
     return new Set(bindings
       .filter(b => b.role !== excludeRole)
-      .map(b => b.hardware));
+      .map(b => b.hardware)
+      .filter(hwId => {
+        const hw = hwInventory.find(h => h.id === hwId);
+        return hw && !SHAREABLE_HW.has(hw.hw_type);
+      }));
   }
 
   function availableHw(roleDef) {
@@ -83,9 +92,11 @@
   function addRole(roleDef) {
     const hw = availableHw(roleDef);
     if (hw.length === 0) return;
+    // Якщо тільки один варіант — призначити одразу, інакше дати обрати
+    const autoAssign = hw.length === 1;
     bindings = [...bindings, {
-      hardware: hw[0].id,
-      driver: driverForHw(roleDef, hw[0].id),
+      hardware: autoAssign ? hw[0].id : '',
+      driver: autoAssign ? driverForHw(roleDef, hw[0].id) : '',
       role: roleDef.role,
       module: 'equipment',
       ...(roleDef.requires_address ? { address: '' } : {}),
@@ -109,12 +120,14 @@
   $: assignedAddresses = new Set(bindings.filter(b => b.address).map(b => b.address));
   $: requiredRoles = roles.filter(r => !r.optional);
   $: missingRequired = requiredRoles.filter(r => !assignedRoles.has(r.role));
-  $: canSave = missingRequired.length === 0 && !saving;
+  $: hasEmptyHw = bindings.some(b => !b.hardware);
+  $: canSave = missingRequired.length === 0 && !hasEmptyHw && !saving;
 
   $: assignedSensors = roles.filter(r => r.type === 'sensor' && assignedRoles.has(r.role));
   $: assignedActuators = roles.filter(r => r.type === 'actuator' && assignedRoles.has(r.role));
 
   $: owBuses = hwInventory.filter(h => h.hw_type === 'onewire_bus');
+  $: hasNtc = !!$state['equipment.has_ntc_driver'];
   $: freeAddrRoles = roles.filter(r => r.requires_address && !assignedRoles.has(r.role));
   $: unassignedOptional = roles
     .filter(r => r.optional && !assignedRoles.has(r.role))
@@ -203,24 +216,42 @@
         {/each}
       </Card>
     {/if}
+
+    <!-- OneWire Discovery + DS18B20 settings -->
+    {#if owBuses.length > 0}
+      <OneWireDiscovery {owBuses} {assignedAddresses} {freeAddrRoles}
+        on:assign={handleAssign} />
+    {/if}
+
+    <!-- NTC settings -->
+    {#if hasNtc}
+      <Card title="NTC">
+        <NumberInput
+          config={{ key: 'equipment.ntc_beta', description: $t['eq.ntc_beta'] || 'B-коефіцієнт', min: 2000, max: 5000, step: 1 }}
+          value={$state['equipment.ntc_beta']}
+        />
+        <NumberInput
+          config={{ key: 'equipment.ntc_r_series', description: $t['eq.ntc_series'] || 'Послідовний резистор', unit: 'Ом', min: 1000, max: 100000, step: 100 }}
+          value={$state['equipment.ntc_r_series']}
+        />
+        <NumberInput
+          config={{ key: 'equipment.ntc_r_nominal', description: $t['eq.ntc_nominal'] || 'Номінальний опір (25°C)', unit: 'Ом', min: 1000, max: 100000, step: 100 }}
+          value={$state['equipment.ntc_r_nominal']}
+        />
+      </Card>
+    {/if}
+
+    <!-- Add optional roles -->
+    {#if unassignedOptional.length > 0}
+      <Card title={$t['bind.add_equip']}>
+        {#each unassignedOptional as roleDef}
+          <button class="add-role-btn" on:click={() => addRole(roleDef)}>
+            + {roleDef.label}
+          </button>
+        {/each}
+      </Card>
+    {/if}
   </div>
-
-  <!-- OneWire Discovery (повна ширина) -->
-  {#if owBuses.length > 0}
-    <OneWireDiscovery {owBuses} {assignedAddresses} {freeAddrRoles}
-      on:assign={handleAssign} />
-  {/if}
-
-  <!-- Add optional roles -->
-  {#if unassignedOptional.length > 0}
-    <Card title={$t['bind.add_equip']}>
-      {#each unassignedOptional as roleDef}
-        <button class="add-role-btn" on:click={() => addRole(roleDef)}>
-          + {roleDef.label}
-        </button>
-      {/each}
-    </Card>
-  {/if}
 
   <!-- Save button -->
   <div class="save-area">
