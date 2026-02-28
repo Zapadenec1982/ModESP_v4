@@ -109,14 +109,17 @@ class TestEquipmentManifest:
         """Модуль називається 'equipment'."""
         assert equipment["module"] == "equipment"
 
-    def test_has_20_state_keys(self, equipment):
-        """Equipment має 20 state keys (12 base + 7 has_* + filter_coeff)."""
-        assert len(equipment["state"]) == 20
+    def test_has_24_state_keys(self, equipment):
+        """Equipment має 24 state keys."""
+        assert len(equipment["state"]) == 24
 
     def test_sensor_keys_readonly(self, equipment):
-        """Sensor/actuator state keys — read-only, filter_coeff — readwrite."""
+        """Sensor/actuator state keys — read-only, settings — readwrite."""
+        readwrite_keys = {"equipment.filter_coeff", "equipment.ntc_beta",
+                          "equipment.ntc_r_series", "equipment.ntc_r_nominal",
+                          "equipment.ds18b20_offset"}
         for key, info in equipment["state"].items():
-            if key == "equipment.filter_coeff":
+            if key in readwrite_keys:
                 assert info["access"] == "readwrite", f"{key} не readwrite"
             else:
                 assert info["access"] == "read", f"{key} не read-only"
@@ -130,7 +133,7 @@ class TestEquipmentManifest:
 
     def test_actuator_keys(self, equipment):
         """Має ключі актуаторів."""
-        for key in ["compressor", "heater", "evap_fan", "cond_fan", "hg_valve"]:
+        for key in ["compressor", "defrost_relay", "evap_fan", "cond_fan"]:
             assert f"equipment.{key}" in equipment["state"]
 
     def test_door_key(self, equipment):
@@ -147,8 +150,8 @@ class TestEquipmentManifest:
         """Додаткові drivers опціональні."""
         optional_roles = {r["role"]: r.get("optional", False) for r in equipment["requires"]}
         assert optional_roles.get("evap_temp") is True
-        assert optional_roles.get("heater") is True
-        assert optional_roles.get("hg_valve") is True
+        assert optional_roles.get("defrost_relay") is True
+        assert optional_roles.get("cond_fan") is True
 
     def test_no_inputs(self, equipment):
         """Equipment не має inputs (читає HAL напряму)."""
@@ -368,11 +371,11 @@ class TestDefrostManifest:
         """Defrost має 28 state keys."""
         assert len(defrost["state"]) == 28
 
-    def test_13_persist_readwrite_params(self, defrost):
-        """Defrost має 13 readwrite persist параметрів."""
+    def test_14_persist_readwrite_params(self, defrost):
+        """Defrost має 14 readwrite persist параметрів."""
         rw_persist = sum(1 for v in defrost["state"].values()
                          if v.get("access") == "readwrite" and v.get("persist") is True)
-        assert rw_persist == 13
+        assert rw_persist == 14
 
     def test_no_readonly_persist_params(self, defrost):
         """Defrost не має read-only persist params (interval_timer/defrost_count скидаються при ребуті)."""
@@ -412,12 +415,12 @@ class TestDefrostManifest:
         values = [o["value"] for o in i["options"]]
         assert values == [0, 1, 2, 3]
 
-    def test_5_request_keys(self, defrost):
-        """Defrost має 5 request keys."""
+    def test_4_request_keys(self, defrost):
+        """Defrost має 4 request keys."""
         req_keys = [k for k in defrost["state"] if k.startswith("defrost.req.")]
-        assert len(req_keys) == 5
-        expected = {"defrost.req.compressor", "defrost.req.heater",
-                    "defrost.req.evap_fan", "defrost.req.cond_fan", "defrost.req.hg_valve"}
+        assert len(req_keys) == 4
+        expected = {"defrost.req.compressor", "defrost.req.defrost_relay",
+                    "defrost.req.evap_fan", "defrost.req.cond_fan"}
         assert set(req_keys) == expected
 
     def test_has_5_inputs(self, defrost):
@@ -444,9 +447,9 @@ class TestDefrostManifest:
         """MQTT публікує 10 keys."""
         assert len(defrost["mqtt"]["publish"]) == 10
 
-    def test_mqtt_14_subscribe(self, defrost):
-        """MQTT підписка на 14 settings."""
-        assert len(defrost["mqtt"]["subscribe"]) == 14
+    def test_mqtt_15_subscribe(self, defrost):
+        """MQTT підписка на 15 settings."""
+        assert len(defrost["mqtt"]["subscribe"]) == 15
 
     def test_end_temp_range(self, defrost):
         """end_temp: min=-5, max=30, default=8."""
@@ -523,9 +526,9 @@ class TestCrossModuleValidation:
         assert len(therm_errors) == 0, f"Thermostat errors: {therm_errors}"
 
     def test_total_state_keys(self, all_manifests):
-        """Всього 100 state keys у 5 модулях."""
+        """Всього 104 state keys у 5 модулях."""
         total = sum(len(m.get("state", {})) for m in all_manifests)
-        assert total == 100
+        assert total == 104
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -644,17 +647,20 @@ class TestStateMetaFullProject:
         # Рахуємо: equipment=0rw, protection=8rw, thermostat=17rw, defrost=15rw(14+manual_start)
         # protection: high_limit, low_limit, high_alarm_delay, low_alarm_delay,
         #   door_delay, manual_reset, reset_alarms, post_defrost_delay = 8
+        # equipment: filter_coeff, ntc_beta, ntc_r_series, ntc_r_nominal, ds18b20_offset = 5
+        # protection: high_limit, low_limit, high_alarm_delay, low_alarm_delay,
+        #   door_delay, manual_reset, post_defrost_delay, reset_alarms = 8
         # thermostat: setpoint, differential, min_off_time, min_on_time, startup_delay,
         #   evap_fan_mode, fan_stop_temp, fan_stop_hyst, cond_fan_delay, safety_run_on,
         #   safety_run_off, night_setback, night_mode, night_start, night_end,
         #   night_active, display_defrost = 17
-        # defrost: type, interval, counter_mode, initiation, end_temp, max_duration,
-        #   demand_temp, drip_time, fan_delay, fad_temp, stabilize_time, valve_delay,
-        #   equalize_time, manual_start, manual_stop = 15 rw
+        # defrost: type, interval, counter_mode, initiation, termination, end_temp,
+        #   max_duration, demand_temp, drip_time, fan_delay, fad_temp,
+        #   stabilize_time, valve_delay, equalize_time, manual_start, manual_stop = 16 rw
         # datalogger: enabled, retention_hours, sample_interval, log_evap, log_cond,
         #   log_setpoint, log_humidity = 7 rw
-        # Total: 1 + 8 + 17 + 15 + 7 = 48
-        assert "STATE_META_COUNT = 48" in result
+        # Total: 5 + 8 + 17 + 16 + 7 = 53
+        assert "STATE_META_COUNT = 53" in result
 
     def test_persist_true_for_setpoint(self, all_manifests):
         """thermostat.setpoint — writable=true, persist=true."""
@@ -699,8 +705,8 @@ class TestMqttTopicsFullProject:
         """Загальна кількість MQTT subscribe topics."""
         gen = MqttTopicsGenerator()
         result = gen.generate(all_manifests)
-        # equipment=0, protection=8, thermostat=17, defrost=14, datalogger=7 = 46
-        assert "MQTT_SUBSCRIBE_COUNT = 46" in result
+        # equipment=5, protection=8, thermostat=17, defrost=15, datalogger=7 = 52
+        assert "MQTT_SUBSCRIBE_COUNT = 52" in result
 
     def test_contains_all_module_topics(self, all_manifests):
         """Містить topics від усіх модулів."""

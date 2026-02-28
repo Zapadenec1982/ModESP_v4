@@ -43,10 +43,9 @@
  *   defrost.last_termination    — string (temp/timeout)
  *   defrost.consecutive_timeouts — int
  *   defrost.req.compressor      — bool
- *   defrost.req.heater          — bool
+ *   defrost.req.defrost_relay   — bool
  *   defrost.req.evap_fan        — bool
  *   defrost.req.cond_fan        — bool
- *   defrost.req.hg_valve        — bool
  *   defrost.manual_start        — bool (write trigger)
  */
 
@@ -88,7 +87,7 @@ private:
     void finish_defrost();
 
     // Requests до EM
-    void set_requests(bool comp, bool heater, bool evap_fan, bool cond_fan, bool hg_valve);
+    void set_requests(bool comp, bool relay, bool evap_fan, bool cond_fan);
     void clear_requests();
 
     // Helpers
@@ -120,10 +119,9 @@ private:
 
     // Кешований стан requests (для delta-update)
     bool req_comp_    = false;
-    bool req_heater_  = false;
+    bool req_relay_   = false;
     bool req_evap_    = false;
     bool req_cond_    = false;
-    bool req_hg_      = false;
 
     // Inputs cache
     float evap_temp_      = 0.0f;

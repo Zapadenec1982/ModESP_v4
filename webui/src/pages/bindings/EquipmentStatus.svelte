@@ -9,9 +9,9 @@
   const ROLE_STATE_KEY = {
     air_temp: 'equipment.air_temp', evap_temp: 'equipment.evap_temp',
     condenser_temp: 'equipment.cond_temp',
-    compressor: 'equipment.compressor', heater: 'equipment.heater',
+    compressor: 'equipment.compressor', defrost_relay: 'equipment.defrost_relay',
     evap_fan: 'equipment.evap_fan', cond_fan: 'equipment.cond_fan',
-    hg_valve: 'equipment.hg_valve', door_contact: 'equipment.door_open',
+    door_contact: 'equipment.door_open',
   };
   const ROLE_OK_KEY = {
     air_temp: 'equipment.sensor1_ok', evap_temp: 'equipment.sensor2_ok',

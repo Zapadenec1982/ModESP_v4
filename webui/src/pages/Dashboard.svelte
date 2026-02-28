@@ -10,7 +10,7 @@
   $: setpoint = $state['thermostat.setpoint'];
   $: compressor = $state['equipment.compressor'];
   $: evapFan = $state['equipment.evap_fan'];
-  $: heater = $state['equipment.heater'];
+  $: defrostRelay = $state['equipment.defrost_relay'];
   $: thermoState = $state['thermostat.state'];
   $: defrostActive = $state['defrost.active'];
   $: defrostPhase = $state['defrost.phase'];
@@ -81,8 +81,8 @@
         </svg>
       </div>
 
-      <!-- Heater -->
-      {#if heater}
+      <!-- Defrost relay (heater or HG valve) -->
+      {#if defrostRelay}
         <div class="status-item" title={$t['dash.heater']}>
           <svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
             <path d="M12 2c0 4-4 6-4 10a4 4 0 0 0 8 0c0-4-4-6-4-10z" fill="rgba(239,68,68,0.2)"/>

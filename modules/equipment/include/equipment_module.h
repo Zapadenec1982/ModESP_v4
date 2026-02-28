@@ -7,39 +7,36 @@
  *   Business modules (Thermostat, Defrost, Protection) communicate
  *   through SharedState only:
  *     - EM publishes sensor readings: equipment.air_temp, equipment.sensor1_ok
- *     - EM publishes actuator states: equipment.compressor, equipment.heater
- *     - Business modules publish requests: thermostat.req.compressor, defrost.req.heater
+ *     - EM publishes actuator states: equipment.compressor, equipment.defrost_relay
+ *     - Business modules publish requests: thermostat.req.compressor, defrost.req.defrost_relay
  *     - EM reads requests, applies arbitration, drives outputs
  *
  * Arbitration priority: Protection LOCKOUT > Defrost active > Thermostat
  *
  * Interlocks (hardcoded, cannot be bypassed):
- *   - Heater and compressor NEVER simultaneously
- *   - Heater and hot gas valve NEVER simultaneously
+ *   - Electric defrost relay and compressor NEVER simultaneously
  *   - Protection lockout = everything OFF
  *
  * SharedState keys published:
- *   equipment.air_temp      — float (°C), main chamber sensor
- *   equipment.evap_temp     — float (°C), evaporator sensor (optional)
- *   equipment.sensor1_ok    — bool, air sensor healthy
- *   equipment.sensor2_ok    — bool, evap sensor healthy
- *   equipment.compressor    — bool, actual relay state
- *   equipment.heater        — bool, actual relay state
- *   equipment.evap_fan      — bool, actual relay state
- *   equipment.cond_fan      — bool, actual relay state
- *   equipment.hg_valve      — bool, actual relay state
+ *   equipment.air_temp       — float (°C), main chamber sensor
+ *   equipment.evap_temp      — float (°C), evaporator sensor (optional)
+ *   equipment.sensor1_ok     — bool, air sensor healthy
+ *   equipment.sensor2_ok     — bool, evap sensor healthy
+ *   equipment.compressor     — bool, actual relay state
+ *   equipment.defrost_relay  — bool, actual relay state
+ *   equipment.evap_fan       — bool, actual relay state
+ *   equipment.cond_fan       — bool, actual relay state
  *
  * SharedState keys read (requests from other modules):
- *   thermostat.req.compressor   — bool
- *   thermostat.req.evap_fan     — bool
- *   thermostat.req.cond_fan     — bool
- *   defrost.active              — bool
- *   defrost.req.compressor      — bool
- *   defrost.req.heater          — bool
- *   defrost.req.evap_fan        — bool
- *   defrost.req.cond_fan        — bool
- *   defrost.req.hg_valve        — bool
- *   protection.lockout          — bool
+ *   thermostat.req.compressor    — bool
+ *   thermostat.req.evap_fan      — bool
+ *   thermostat.req.cond_fan      — bool
+ *   defrost.active               — bool
+ *   defrost.req.compressor       — bool
+ *   defrost.req.defrost_relay    — bool
+ *   defrost.req.evap_fan         — bool
+ *   defrost.req.cond_fan         — bool
+ *   protection.lockout           — bool
  */
 
 #pragma once
@@ -70,11 +67,10 @@ private:
     modesp::ISensorDriver* sensor_cond_ = nullptr;  // Опціональний (DS18B20 або NTC)
 
     // === Актуатори ===
-    modesp::IActuatorDriver* compressor_ = nullptr;  // Обов'язковий
-    modesp::IActuatorDriver* heater_     = nullptr;  // Опціональний
-    modesp::IActuatorDriver* evap_fan_   = nullptr;  // Опціональний
-    modesp::IActuatorDriver* cond_fan_   = nullptr;  // Опціональний
-    modesp::IActuatorDriver* hg_valve_   = nullptr;  // Опціональний
+    modesp::IActuatorDriver* compressor_    = nullptr;  // Обов'язковий
+    modesp::IActuatorDriver* defrost_relay_ = nullptr;  // Опціональний (тен або клапан ГГ)
+    modesp::IActuatorDriver* evap_fan_      = nullptr;  // Опціональний
+    modesp::IActuatorDriver* cond_fan_      = nullptr;  // Опціональний
 
     // === Дискретні входи ===
     modesp::ISensorDriver* door_sensor_  = nullptr;  // Опціональний
@@ -108,12 +104,11 @@ private:
         bool therm_cond_fan   = false;
 
         // Defrost
-        bool defrost_active   = false;
-        bool def_compressor   = false;
-        bool def_heater       = false;
-        bool def_evap_fan     = false;
-        bool def_cond_fan     = false;
-        bool def_hg_valve     = false;
+        bool defrost_active    = false;
+        bool def_compressor    = false;
+        bool def_defrost_relay = false;
+        bool def_evap_fan      = false;
+        bool def_cond_fan      = false;
 
         // Protection
         bool protection_lockout = false;
@@ -121,11 +116,10 @@ private:
 
     // Фінальний вихід (після арбітражу)
     struct Outputs {
-        bool compressor = false;
-        bool heater     = false;
-        bool evap_fan   = false;
-        bool cond_fan   = false;
-        bool hg_valve   = false;
+        bool compressor    = false;
+        bool defrost_relay = false;
+        bool evap_fan      = false;
+        bool cond_fan      = false;
     } out_;
 
     // Defrost transition tracking (логуємо тільки при зміні стану)

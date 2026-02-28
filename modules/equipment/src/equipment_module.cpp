@@ -43,10 +43,9 @@ void EquipmentModule::bind_drivers(modesp::DriverManager& dm) {
     sensor_cond_ = dm.find_sensor("condenser_temp");
 
     // Актуатори
-    heater_      = dm.find_actuator("heater");
-    evap_fan_    = dm.find_actuator("evap_fan");
-    cond_fan_    = dm.find_actuator("cond_fan");
-    hg_valve_    = dm.find_actuator("hg_valve");
+    defrost_relay_ = dm.find_actuator("defrost_relay");
+    evap_fan_      = dm.find_actuator("evap_fan");
+    cond_fan_      = dm.find_actuator("cond_fan");
 
     // Дискретні входи
     door_sensor_  = dm.find_sensor("door_contact");
@@ -58,14 +57,13 @@ void EquipmentModule::bind_drivers(modesp::DriverManager& dm) {
     if (!compressor_) {
         ESP_LOGE(TAG, "Actuator 'compressor' not found — REQUIRED");
     }
-    if (sensor_evap_) ESP_LOGI(TAG, "Evaporator sensor bound");
-    if (sensor_cond_) ESP_LOGI(TAG, "Condenser sensor bound");
-    if (heater_)      ESP_LOGI(TAG, "Heater bound");
-    if (evap_fan_)    ESP_LOGI(TAG, "Evaporator fan bound");
-    if (cond_fan_)    ESP_LOGI(TAG, "Condenser fan bound");
-    if (hg_valve_)    ESP_LOGI(TAG, "Hot gas valve bound");
-    if (door_sensor_) ESP_LOGI(TAG, "Door contact bound");
-    if (night_sensor_) ESP_LOGI(TAG, "Night input bound");
+    if (sensor_evap_)   ESP_LOGI(TAG, "Evaporator sensor bound");
+    if (sensor_cond_)   ESP_LOGI(TAG, "Condenser sensor bound");
+    if (defrost_relay_) ESP_LOGI(TAG, "Defrost relay bound");
+    if (evap_fan_)      ESP_LOGI(TAG, "Evaporator fan bound");
+    if (cond_fan_)      ESP_LOGI(TAG, "Condenser fan bound");
+    if (door_sensor_)   ESP_LOGI(TAG, "Door contact bound");
+    if (night_sensor_)  ESP_LOGI(TAG, "Night input bound");
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -89,17 +87,15 @@ bool EquipmentModule::on_init() {
     state_set("equipment.sensor1_ok", true);
     state_set("equipment.sensor2_ok", true);
     state_set("equipment.compressor", false);
-    state_set("equipment.heater", false);
+    state_set("equipment.defrost_relay", false);
     state_set("equipment.evap_fan", false);
     state_set("equipment.cond_fan", false);
-    state_set("equipment.hg_valve", false);
     state_set("equipment.door_open", false);
     state_set("equipment.night_input", false);
 
     // Публікуємо наявність опціонального обладнання —
     // UI (visible_when, disabled options) та бізнес-модулі перевіряють
-    state_set("equipment.has_heater", heater_ != nullptr);
-    state_set("equipment.has_hg_valve", hg_valve_ != nullptr);
+    state_set("equipment.has_defrost_relay", defrost_relay_ != nullptr);
     state_set("equipment.has_cond_fan", cond_fan_ != nullptr);
     state_set("equipment.has_door_contact", door_sensor_ != nullptr);
     state_set("equipment.has_evap_temp", sensor_evap_ != nullptr);
@@ -243,12 +239,11 @@ void EquipmentModule::read_requests() {
     req_.therm_cond_fan   = read_bool("thermostat.req.cond_fan");
 
     // Defrost requests
-    req_.defrost_active   = read_bool("defrost.active");
-    req_.def_compressor   = read_bool("defrost.req.compressor");
-    req_.def_heater       = read_bool("defrost.req.heater");
-    req_.def_evap_fan     = read_bool("defrost.req.evap_fan");
-    req_.def_cond_fan     = read_bool("defrost.req.cond_fan");
-    req_.def_hg_valve     = read_bool("defrost.req.hg_valve");
+    req_.defrost_active    = read_bool("defrost.active");
+    req_.def_compressor    = read_bool("defrost.req.compressor");
+    req_.def_defrost_relay = read_bool("defrost.req.defrost_relay");
+    req_.def_evap_fan      = read_bool("defrost.req.evap_fan");
+    req_.def_cond_fan      = read_bool("defrost.req.cond_fan");
 
     // Protection
     req_.protection_lockout = read_bool("protection.lockout");
@@ -267,15 +262,14 @@ void EquipmentModule::apply_arbitration() {
 
     // Defrost active = defrost requests мають пріоритет
     if (req_.defrost_active) {
-        out_.compressor = req_.def_compressor;
-        out_.heater     = req_.def_heater;
-        out_.evap_fan   = req_.def_evap_fan;
-        out_.cond_fan   = req_.def_cond_fan;
-        out_.hg_valve   = req_.def_hg_valve;
+        out_.compressor    = req_.def_compressor;
+        out_.defrost_relay = req_.def_defrost_relay;
+        out_.evap_fan      = req_.def_evap_fan;
+        out_.cond_fan      = req_.def_cond_fan;
         // Логуємо тільки при вході в defrost (не кожен цикл)
         if (!prev_defrost_active_) {
-            ESP_LOGI(TAG, "DEFROST arb START: comp=%d heat=%d efan=%d cfan=%d hg=%d",
-                     out_.compressor, out_.heater, out_.evap_fan, out_.cond_fan, out_.hg_valve);
+            ESP_LOGI(TAG, "DEFROST arb START: comp=%d relay=%d efan=%d cfan=%d",
+                     out_.compressor, out_.defrost_relay, out_.evap_fan, out_.cond_fan);
         }
     } else {
         // Логуємо при виході з defrost
@@ -283,11 +277,10 @@ void EquipmentModule::apply_arbitration() {
             ESP_LOGI(TAG, "DEFROST arb END — normal mode restored");
         }
         // Нормальний режим: thermostat requests
-        out_.compressor = req_.therm_compressor;
-        out_.heater     = false;   // Тільки defrost може ввімкнути
-        out_.evap_fan   = req_.therm_evap_fan;
-        out_.cond_fan   = req_.therm_cond_fan;
-        out_.hg_valve   = false;   // Тільки defrost може ввімкнути
+        out_.compressor    = req_.therm_compressor;
+        out_.defrost_relay = false;   // Тільки defrost може ввімкнути
+        out_.evap_fan      = req_.therm_evap_fan;
+        out_.cond_fan      = req_.therm_cond_fan;
     }
 
     // === AUDIT-003: Compressor anti-short-cycle (output-level) ===
@@ -315,16 +308,17 @@ void EquipmentModule::apply_arbitration() {
     // === ІНТЕРЛОКИ (hardcoded, неможливо обійти) ===
     // Виконуються ОСТАННІМИ — мають найвищий пріоритет після protection lockout.
 
-    // 1. Тен і компресор НІКОЛИ одночасно
-    if (out_.heater && out_.compressor) {
-        out_.compressor = false;
-        ESP_LOGW(TAG, "INTERLOCK: heater+compressor → compressor OFF");
-    }
-
-    // 2. Тен і клапан ГГ НІКОЛИ одночасно
-    if (out_.heater && out_.hg_valve) {
-        out_.hg_valve = false;
-        ESP_LOGW(TAG, "INTERLOCK: heater+hg_valve → hg_valve OFF");
+    // Електрична відтайка (тен) і компресор НІКОЛИ одночасно.
+    // Гарячий газ: компресор потрібен — інтерлок НЕ застосовується.
+    // Перевіряємо defrost.type щоб визначити чи реле = тен (type=1).
+    if (out_.defrost_relay && out_.compressor) {
+        int defrost_type = read_int("defrost.type", 0);
+        if (defrost_type == 1) {
+            // Електричний тен — компресор OFF
+            out_.compressor = false;
+            ESP_LOGW(TAG, "INTERLOCK: heater+compressor → compressor OFF");
+        }
+        // defrost_type == 2 (ГГ): обидва ON — це нормально
     }
 
     // Оновлюємо tracking для delta-логування
@@ -336,14 +330,10 @@ void EquipmentModule::apply_arbitration() {
 // ═══════════════════════════════════════════════════════════════
 
 void EquipmentModule::apply_outputs() {
-    // Антикороткоциклування компресора — на рівні apply_arbitration()
-    if (compressor_) {
-        compressor_->set(out_.compressor);
-    }
-    if (heater_)   heater_->set(out_.heater);
-    if (evap_fan_) evap_fan_->set(out_.evap_fan);
-    if (cond_fan_) cond_fan_->set(out_.cond_fan);
-    if (hg_valve_) hg_valve_->set(out_.hg_valve);
+    if (compressor_)    compressor_->set(out_.compressor);
+    if (defrost_relay_) defrost_relay_->set(out_.defrost_relay);
+    if (evap_fan_)      evap_fan_->set(out_.evap_fan);
+    if (cond_fan_)      cond_fan_->set(out_.cond_fan);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -361,9 +351,8 @@ void EquipmentModule::publish_state() {
         ESP_LOGI(TAG, "Compressor → %s", comp_now ? "ON" : "OFF");
     }
 
-    state_set("equipment.compressor", comp_now);
-    state_set("equipment.heater",     heater_     ? heater_->get_state()     : false);
-    state_set("equipment.evap_fan",   evap_fan_   ? evap_fan_->get_state()   : false);
-    state_set("equipment.cond_fan",   cond_fan_   ? cond_fan_->get_state()   : false);
-    state_set("equipment.hg_valve",   hg_valve_   ? hg_valve_->get_state()   : false);
+    state_set("equipment.compressor",    comp_now);
+    state_set("equipment.defrost_relay", defrost_relay_ ? defrost_relay_->get_state() : false);
+    state_set("equipment.evap_fan",      evap_fan_      ? evap_fan_->get_state()      : false);
+    state_set("equipment.cond_fan",      cond_fan_      ? cond_fan_->get_state()      : false);
 }

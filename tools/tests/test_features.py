@@ -159,9 +159,8 @@ class TestFeatureResolver:
             if mod_name == "equipment":
                 continue
             for feat_name, active in features.items():
-                # hg_valve не в bindings_full (немає relay_5)
                 # night_input не в bindings_full (немає din для night)
-                if feat_name in ("defrost_hot_gas", "night_di"):
+                if feat_name in ("night_di",):
                     continue
                 assert active is True, f"{mod_name}.{feat_name} should be active"
 
@@ -185,11 +184,11 @@ class TestConstraintsResolver:
         assert len(type_opts) == 3
         # Option 0 (за часом) — без requires_state
         assert "requires_state" not in type_opts[0]
-        # Option 1 (електрична) — requires_state = equipment.has_heater
-        assert type_opts[1]["requires_state"] == "equipment.has_heater"
+        # Option 1 (електрична) — requires_state = equipment.has_defrost_relay
+        assert type_opts[1]["requires_state"] == "equipment.has_defrost_relay"
         assert "disabled_hint" in type_opts[1]
-        # Option 2 (гарячий газ) — requires_state = equipment.has_hg_valve
-        assert type_opts[2]["requires_state"] == "equipment.has_hg_valve"
+        # Option 2 (гарячий газ) — requires_state = equipment.has_defrost_relay
+        assert type_opts[2]["requires_state"] == "equipment.has_defrost_relay"
 
     def test_defrost_initiation_constraints(self, equipment, defrost):
         """Defrost initiation constraints — sensor options мають requires_state."""

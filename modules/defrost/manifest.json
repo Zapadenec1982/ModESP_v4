@@ -57,12 +57,12 @@
     },
     "defrost_electric": {
       "description": "Розморозка електричним теном",
-      "requires_roles": ["heater"],
+      "requires_roles": ["defrost_relay"],
       "controls_settings": []
     },
     "defrost_hot_gas": {
       "description": "Розморозка гарячим газом",
-      "requires_roles": ["hg_valve"],
+      "requires_roles": ["defrost_relay"],
       "controls_settings": [
         "defrost.stabilize_time", "defrost.valve_delay", "defrost.equalize_time"
       ]
@@ -74,8 +74,8 @@
       "type": "enum_filter",
       "values": {
         "0": {"always": true},
-        "1": {"requires_feature": "defrost_electric", "disabled_hint": "Потрібен тен (heater)"},
-        "2": {"requires_feature": "defrost_hot_gas", "disabled_hint": "Потрібен клапан ГГ (hg_valve)"}
+        "1": {"requires_feature": "defrost_electric", "disabled_hint": "Потрібне реле відтайки (defrost_relay)"},
+        "2": {"requires_feature": "defrost_hot_gas", "disabled_hint": "Потрібне реле відтайки (defrost_relay)"}
       }
     },
     "defrost.initiation": {
@@ -144,10 +144,10 @@
       "access": "read",
       "description": "Запит на компресор (до Equipment Manager)"
     },
-    "defrost.req.heater": {
+    "defrost.req.defrost_relay": {
       "type": "bool",
       "access": "read",
-      "description": "Запит на тен (до Equipment Manager)"
+      "description": "Запит на реле відтайки (до Equipment Manager)"
     },
     "defrost.req.evap_fan": {
       "type": "bool",
@@ -158,11 +158,6 @@
       "type": "bool",
       "access": "read",
       "description": "Запит на вент. конденсатора (до Equipment Manager)"
-    },
-    "defrost.req.hg_valve": {
-      "type": "bool",
-      "access": "read",
-      "description": "Запит на клапан ГГ (до Equipment Manager)"
     },
     "defrost.manual_start": {
       "type": "bool",
@@ -464,7 +459,7 @@
       "defrost.last_termination",
       "defrost.consecutive_timeouts",
       "defrost.req.compressor",
-      "defrost.req.heater"
+      "defrost.req.defrost_relay"
     ],
     "subscribe": [
       "defrost.type",

@@ -624,8 +624,8 @@ class FeatureResolver:
 
     # Маппінг feature → equipment.has_* state key (для runtime disabled options)
     FEATURE_TO_STATE = {
-        "defrost_electric":  "equipment.has_heater",
-        "defrost_hot_gas":   "equipment.has_hg_valve",
+        "defrost_electric":  "equipment.has_defrost_relay",
+        "defrost_hot_gas":   "equipment.has_defrost_relay",
         "defrost_by_sensor": "equipment.has_evap_temp",
         "fan_temp_control":  "equipment.has_evap_temp",
         "night_di":          "equipment.has_night_input",

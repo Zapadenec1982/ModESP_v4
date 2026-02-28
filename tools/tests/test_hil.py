@@ -461,7 +461,7 @@ class TestDefrost:
     def test_defrost_type_options(self, api):
         """defrost.type приймає 0 (natural), 1 (electric), 2 (hot gas)."""
         old_type = api.get_key("defrost.type")
-        # Тільки тип 0 гарантовано доступний (не потребує heater/valve)
+        # Тільки тип 0 гарантовано доступний (не потребує defrost_relay)
         api.set_settings(**{"defrost.type": 0})
         time.sleep(0.5)
         assert api.get_key("defrost.type") == 0
@@ -525,10 +525,8 @@ class TestDefrostCycle:
         # Type 0: все OFF
         assert state.get("defrost.req.compressor") is False, \
             "req.compressor=true при natural defrost"
-        assert state.get("defrost.req.heater") is False, \
-            "req.heater=true при natural defrost"
-        assert state.get("defrost.req.hg_valve") is False, \
-            "req.hg_valve=true при natural defrost"
+        assert state.get("defrost.req.defrost_relay") is False, \
+            "req.defrost_relay=true при natural defrost"
 
     def test_04_display_temp_during_defrost(self, api):
         """display_temp поводиться згідно з display_defrost mode."""
@@ -780,21 +778,16 @@ class TestEquipment:
         val = api.get_key("equipment.compressor")
         assert isinstance(val, bool), f"compressor не bool: {type(val)}"
 
-    def test_heater_compressor_interlock(self, api):
-        """Тен і компресор ніколи не ON одночасно (інтерлок)."""
+    def test_defrost_relay_compressor_interlock(self, api):
+        """Реле відтайки (тен) і компресор ніколи не ON одночасно при electric defrost."""
         state = api.get_state()
         comp = state.get("equipment.compressor", False)
-        heater = state.get("equipment.heater", False)
-        assert not (comp and heater), \
-            "INTERLOCK VIOLATION: компресор і тен одночасно ON!"
-
-    def test_heater_hg_valve_interlock(self, api):
-        """Тен і клапан гарячого газу ніколи не ON одночасно."""
-        state = api.get_state()
-        heater = state.get("equipment.heater", False)
-        valve = state.get("equipment.hg_valve", False)
-        assert not (heater and valve), \
-            "INTERLOCK VIOLATION: тен і клапан ГГ одночасно ON!"
+        relay = state.get("equipment.defrost_relay", False)
+        defrost_type = state.get("defrost.type", 0)
+        # Інтерлок тільки при електричній відтайці (type=1)
+        if defrost_type == 1:
+            assert not (comp and relay), \
+                "INTERLOCK VIOLATION: компресор і тен одночасно ON!"
 
     def test_no_outputs_without_sensor(self, api):
         """Якщо sensor1_ok=false, система в безпечному режимі."""
@@ -1028,8 +1021,9 @@ class TestScenarios:
         if state.get("defrost.active"):
             assert state.get("defrost.phase") != "idle"
 
-        # 3. Компресор і тен ніколи одночасно
-        assert not (state.get("equipment.compressor") and state.get("equipment.heater"))
+        # 3. Компресор і реле відтайки ніколи одночасно при електричній відтайці
+        if state.get("defrost.type", 0) == 1:
+            assert not (state.get("equipment.compressor") and state.get("equipment.defrost_relay"))
 
         # 4. effective_sp >= setpoint (бо night_setback >= 0)
         sp = state.get("thermostat.setpoint", 0)

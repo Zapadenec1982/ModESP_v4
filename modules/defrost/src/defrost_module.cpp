@@ -73,15 +73,15 @@ const char* DefrostModule::phase_name() const {
 // Requests до Equipment Manager
 // ═══════════════════════════════════════════════════════════════
 
-void DefrostModule::set_requests(bool comp, bool heater, bool evap_fan,
-                                  bool cond_fan, bool hg_valve) {
+void DefrostModule::set_requests(bool comp, bool relay, bool evap_fan,
+                                  bool cond_fan) {
     if (req_comp_ != comp) {
         req_comp_ = comp;
         state_set("defrost.req.compressor", comp);
     }
-    if (req_heater_ != heater) {
-        req_heater_ = heater;
-        state_set("defrost.req.heater", heater);
+    if (req_relay_ != relay) {
+        req_relay_ = relay;
+        state_set("defrost.req.defrost_relay", relay);
     }
     if (req_evap_ != evap_fan) {
         req_evap_ = evap_fan;
@@ -91,14 +91,10 @@ void DefrostModule::set_requests(bool comp, bool heater, bool evap_fan,
         req_cond_ = cond_fan;
         state_set("defrost.req.cond_fan", cond_fan);
     }
-    if (req_hg_ != hg_valve) {
-        req_hg_ = hg_valve;
-        state_set("defrost.req.hg_valve", hg_valve);
-    }
 }
 
 void DefrostModule::clear_requests() {
-    set_requests(false, false, false, false, false);
+    set_requests(false, false, false, false);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -120,15 +116,15 @@ void DefrostModule::enter_phase(Phase p) {
             break;
 
         case Phase::STABILIZE:
-            // dFT=2, Фаза 1: компресор ON + конд.вент ON, вип.вент OFF
+            // dFT=2, Фаза 1: компресор ON + конд.вент ON, реле OFF
             // Тиск стабілізується перед відкриттям клапана ГГ
-            set_requests(true, false, false, true, false);
+            set_requests(true, false, false, true);
             state_set("defrost.state", "stabilize");
             break;
 
         case Phase::VALVE_OPEN:
-            // dFT=2, Фаза 2: компресор ON + конд.вент ON + клапан ГГ ON
-            set_requests(true, false, false, true, true);
+            // dFT=2, Фаза 2: компресор ON + реле ON (клапан ГГ) + конд.вент ON
+            set_requests(true, true, false, true);
             state_set("defrost.state", "valve_open");
             break;
 
@@ -136,34 +132,35 @@ void DefrostModule::enter_phase(Phase p) {
             // Використовуємо active_defrost_type_ — кешований при старті циклу (BUG-002 fix)
             if (active_defrost_type_ == 0) {
                 // Природна: все OFF (компресор зупиняється)
-                set_requests(false, false, false, false, false);
+                set_requests(false, false, false, false);
                 state_set("defrost.state", "defrost_natural");
             } else if (active_defrost_type_ == 1) {
-                // Тен: heater ON, решта OFF
-                set_requests(false, true, false, false, false);
+                // Електричний тен: реле ON, компресор OFF
+                // EM інтерлок заблокує компресор при type=1
+                set_requests(false, true, false, false);
                 state_set("defrost.state", "defrost_heater");
             } else {
-                // ГГ: компресор ON + клапан ГГ ON
-                set_requests(true, false, false, false, true);
+                // ГГ: компресор ON + реле ON (клапан ГГ)
+                set_requests(true, true, false, false);
                 state_set("defrost.state", "defrost_hotgas");
             }
             break;
 
         case Phase::EQUALIZE:
             // dFT=2, Фаза 4: все OFF, тиск падає
-            set_requests(false, false, false, false, false);
+            set_requests(false, false, false, false);
             state_set("defrost.state", "equalize");
             break;
 
         case Phase::DRIP:
             // Все OFF, вода стікає
-            set_requests(false, false, false, false, false);
+            set_requests(false, false, false, false);
             state_set("defrost.state", "drip");
             break;
 
         case Phase::FAD:
-            // Компресор ON, конд. вент. ON, вент. вип. OFF
-            set_requests(true, false, false, true, false);
+            // Компресор ON, конд. вент. ON, реле OFF
+            set_requests(true, false, false, true);
             state_set("defrost.state", "fad");
             break;
     }
@@ -195,10 +192,9 @@ bool DefrostModule::on_init() {
     state_set("defrost.manual_start", false);
     state_set("defrost.manual_stop", false);
     state_set("defrost.req.compressor", false);
-    state_set("defrost.req.heater", false);
+    state_set("defrost.req.defrost_relay", false);
     state_set("defrost.req.evap_fan", false);
     state_set("defrost.req.cond_fan", false);
-    state_set("defrost.req.hg_valve", false);
 
     const char* type_name = defrost_type_ == 0 ? "natural" :
                             defrost_type_ == 1 ? "heater" : "hotgas";
@@ -342,17 +338,12 @@ void DefrostModule::start_defrost(const char* reason) {
     // Кешуємо тип defrost на весь цикл — зміна через WebUI не впливає mid-cycle (BUG-002 fix)
     active_defrost_type_ = defrost_type_;
 
-    // BUG-011: Валідація наявності обладнання для обраного типу дефросту.
-    // Якщо обрано hotgas але hg_valve не сконфігурований — fallback на natural.
-    // Якщо обрано heater але heater не сконфігурований — fallback на natural.
-    // Без цього компресор працює під час "дефросту" без перенаправлення газу,
-    // і холодильник фактично продовжує охолодження.
-    if (active_defrost_type_ == 2 && !read_bool("equipment.has_hg_valve")) {
-        ESP_LOGW(TAG, "Hotgas defrost selected but hg_valve NOT configured — fallback to NATURAL");
-        active_defrost_type_ = 0;
-    }
-    if (active_defrost_type_ == 1 && !read_bool("equipment.has_heater")) {
-        ESP_LOGW(TAG, "Heater defrost selected but heater NOT configured — fallback to NATURAL");
+    // BUG-011: Валідація наявності реле відтайки для обраного типу дефросту.
+    // Якщо обрано тен або ГГ але defrost_relay не сконфігурований — fallback на natural.
+    if ((active_defrost_type_ == 1 || active_defrost_type_ == 2)
+        && !read_bool("equipment.has_defrost_relay")) {
+        ESP_LOGW(TAG, "Defrost type %ld selected but defrost_relay NOT configured — fallback to NATURAL",
+                 static_cast<long>(active_defrost_type_));
         active_defrost_type_ = 0;
     }
 
