@@ -103,6 +103,7 @@ bool EquipmentModule::on_init() {
     state_set("equipment.has_door_contact", door_sensor_ != nullptr);
     state_set("equipment.has_evap_temp", sensor_evap_ != nullptr);
     state_set("equipment.has_cond_temp", sensor_cond_ != nullptr);
+    state_set("equipment.has_night_input", night_sensor_ != nullptr);
 
     ESP_LOGI(TAG, "Initialized (air_sensor=%s, compressor=%s)",
              sensor_air_ ? "OK" : "MISSING",
@@ -218,28 +219,21 @@ void EquipmentModule::read_sensors() {
 // ═══════════════════════════════════════════════════════════════
 
 void EquipmentModule::read_requests() {
-    auto get_bool = [this](const char* key) -> bool {
-        auto v = state_get(key);
-        if (!v.has_value()) return false;
-        const auto* bp = etl::get_if<bool>(&v.value());
-        return bp ? *bp : false;
-    };
-
     // Thermostat requests
-    req_.therm_compressor = get_bool("thermostat.req.compressor");
-    req_.therm_evap_fan   = get_bool("thermostat.req.evap_fan");
-    req_.therm_cond_fan   = get_bool("thermostat.req.cond_fan");
+    req_.therm_compressor = read_bool("thermostat.req.compressor");
+    req_.therm_evap_fan   = read_bool("thermostat.req.evap_fan");
+    req_.therm_cond_fan   = read_bool("thermostat.req.cond_fan");
 
     // Defrost requests
-    req_.defrost_active   = get_bool("defrost.active");
-    req_.def_compressor   = get_bool("defrost.req.compressor");
-    req_.def_heater       = get_bool("defrost.req.heater");
-    req_.def_evap_fan     = get_bool("defrost.req.evap_fan");
-    req_.def_cond_fan     = get_bool("defrost.req.cond_fan");
-    req_.def_hg_valve     = get_bool("defrost.req.hg_valve");
+    req_.defrost_active   = read_bool("defrost.active");
+    req_.def_compressor   = read_bool("defrost.req.compressor");
+    req_.def_heater       = read_bool("defrost.req.heater");
+    req_.def_evap_fan     = read_bool("defrost.req.evap_fan");
+    req_.def_cond_fan     = read_bool("defrost.req.cond_fan");
+    req_.def_hg_valve     = read_bool("defrost.req.hg_valve");
 
     // Protection
-    req_.protection_lockout = get_bool("protection.lockout");
+    req_.protection_lockout = read_bool("protection.lockout");
 }
 
 // ═══════════════════════════════════════════════════════════════

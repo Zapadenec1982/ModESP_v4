@@ -629,7 +629,6 @@ class FeatureResolver:
         "defrost_by_sensor": "equipment.has_evap_temp",
         "fan_temp_control":  "equipment.has_evap_temp",
         "night_di":          "equipment.has_night_input",
-        "cond_temp":         "equipment.has_cond_temp",
     }
 
     def resolve_constraints(self, module_manifest, active_features):

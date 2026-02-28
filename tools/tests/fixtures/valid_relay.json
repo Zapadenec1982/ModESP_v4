@@ -1,14 +1,11 @@
 {
   "manifest_version": 1,
   "driver": "relay",
-  "description": "GPIO реле (on/off з захистом мін. часу)",
+  "description": "GPIO реле (on/off)",
   "category": "actuator",
   "hardware_type": "gpio_output",
   "requires_address": false,
   "multiple_per_bus": false,
   "provides": {"type": "bool"},
-  "settings": [
-    {"key": "min_off_time_s", "type": "int", "default": 180, "min": 0, "max": 600, "step": 10, "unit": "с", "description": "Мін. час вимкнення"},
-    {"key": "min_on_time_s",  "type": "int", "default": 60,  "min": 0, "max": 600, "step": 10, "unit": "с", "description": "Мін. час увімкнення"}
-  ]
+  "settings": []
 }
