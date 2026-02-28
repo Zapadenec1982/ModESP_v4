@@ -8,7 +8,7 @@
 
   const ROLE_STATE_KEY = {
     air_temp: 'equipment.air_temp', evap_temp: 'equipment.evap_temp',
-    condenser_temp: 'equipment.condenser_temp',
+    condenser_temp: 'equipment.cond_temp',
     compressor: 'equipment.compressor', heater: 'equipment.heater',
     evap_fan: 'equipment.evap_fan', cond_fan: 'equipment.cond_fan',
     hg_valve: 'equipment.hg_valve', door_contact: 'equipment.door_open',
