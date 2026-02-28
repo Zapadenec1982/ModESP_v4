@@ -17,6 +17,7 @@
 #include "equipment_module.h"
 #include "modesp/hal/driver_manager.h"
 #include "esp_log.h"
+#include <cstring>
 
 static const char* TAG = "Equipment";
 
@@ -105,9 +106,26 @@ bool EquipmentModule::on_init() {
     state_set("equipment.has_cond_temp", sensor_cond_ != nullptr);
     state_set("equipment.has_night_input", night_sensor_ != nullptr);
 
-    ESP_LOGI(TAG, "Initialized (air_sensor=%s, compressor=%s)",
+    // Тип драйверів — для visibility карток налаштувань в UI
+    // ISensorDriver::type() повертає "ds18b20", "ntc", "digital_input" тощо
+    bool uses_ntc = false;
+    bool uses_ds18b20 = false;
+    auto check_type = [&](modesp::ISensorDriver* s) {
+        if (!s) return;
+        if (strcmp(s->type(), "ntc") == 0) uses_ntc = true;
+        if (strcmp(s->type(), "ds18b20") == 0) uses_ds18b20 = true;
+    };
+    check_type(sensor_air_);
+    check_type(sensor_evap_);
+    check_type(sensor_cond_);
+    state_set("equipment.has_ntc_driver", uses_ntc);
+    state_set("equipment.has_ds18b20_driver", uses_ds18b20);
+
+    ESP_LOGI(TAG, "Initialized (air_sensor=%s, compressor=%s, ntc=%s, ds18b20=%s)",
              sensor_air_ ? "OK" : "MISSING",
-             compressor_ ? "OK" : "MISSING");
+             compressor_ ? "OK" : "MISSING",
+             uses_ntc ? "yes" : "no",
+             uses_ds18b20 ? "yes" : "no");
     return true;
 }
 

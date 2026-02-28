@@ -36,10 +36,52 @@
     "equipment.has_evap_temp":    {"type": "bool",  "access": "read", "description": "Датчик випарника доступний"},
     "equipment.has_cond_temp":    {"type": "bool",  "access": "read", "description": "Датчик конденсатора доступний"},
     "equipment.has_night_input":  {"type": "bool",  "access": "read", "description": "Вхід нічного режиму доступний"},
+    "equipment.has_ntc_driver":   {"type": "bool",  "access": "read", "description": "Використовується NTC драйвер"},
+    "equipment.has_ds18b20_driver": {"type": "bool", "access": "read", "description": "Використовується DS18B20 драйвер"},
 
     "equipment.filter_coeff":    {"type": "int", "access": "readwrite", "persist": true,
                                   "min": 0, "max": 10, "step": 1, "default": 4,
-                                  "description": "Цифровий фільтр"}
+                                  "description": "Цифровий фільтр"},
+
+    "equipment.ntc_beta":        {"type": "int",   "access": "readwrite", "persist": true,
+                                  "min": 2000, "max": 5000, "step": 1, "default": 3950,
+                                  "description": "B-коефіцієнт NTC"},
+    "equipment.ntc_r_series":    {"type": "int",   "access": "readwrite", "persist": true,
+                                  "min": 1000, "max": 100000, "step": 100, "default": 10000,
+                                  "unit": "Ом", "description": "Послідовний резистор NTC"},
+    "equipment.ntc_r_nominal":   {"type": "int",   "access": "readwrite", "persist": true,
+                                  "min": 1000, "max": 100000, "step": 100, "default": 10000,
+                                  "unit": "Ом", "description": "Номінальний опір NTC (25°C)"},
+
+    "equipment.ds18b20_offset":   {"type": "float", "access": "readwrite", "persist": true,
+                                   "min": -5.0, "max": 5.0, "step": 0.1, "default": 0.0,
+                                   "unit": "°C", "description": "Корекція показань DS18B20"}
+  },
+
+  "ui": {
+    "page": "Датчики",
+    "page_id": "sensors",
+    "order": 75,
+    "icon": "thermometer",
+    "cards": [
+      {
+        "title": "NTC Термістор",
+        "visible_when": {"key": "equipment.has_ntc_driver", "eq": true},
+        "widgets": [
+          {"key": "equipment.ntc_beta",      "widget": "number_input"},
+          {"key": "equipment.ntc_r_series",  "widget": "number_input"},
+          {"key": "equipment.ntc_r_nominal", "widget": "number_input"}
+        ]
+      },
+      {
+        "title": "DS18B20",
+        "visible_when": {"key": "equipment.has_ds18b20_driver", "eq": true},
+        "widgets": [
+          {"key": "equipment.filter_coeff",    "widget": "number_input"},
+          {"key": "equipment.ds18b20_offset",  "widget": "number_input"}
+        ]
+      }
+    ]
   },
 
   "mqtt": {
@@ -51,7 +93,13 @@
       "equipment.heater",
       "equipment.sensor1_ok"
     ],
-    "subscribe": []
+    "subscribe": [
+      "equipment.ntc_beta",
+      "equipment.ntc_r_series",
+      "equipment.ntc_r_nominal",
+      "equipment.ds18b20_offset",
+      "equipment.filter_coeff"
+    ]
   },
 
   "display": {

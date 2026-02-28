@@ -170,40 +170,42 @@
     <EquipmentStatus sensors={assignedSensors} actuators={assignedActuators} />
   {/if}
 
-  <!-- Sensors card -->
-  {#if assignedSensors.length > 0}
-    <Card title={$t['bind.sensors']}>
-      {#each assignedSensors as roleDef}
-        {@const binding = getBinding(roleDef.role)}
-        {#if binding}
-          <BindingCard {roleDef} {binding}
-            hwList={compatibleHw(roleDef)}
-            usedIds={usedHwIds(roleDef.role)}
-            on:changeHw={e => setHardware(e.detail.role, e.detail.hw)}
-            on:changeAddr={e => setAddress(e.detail.role, e.detail.addr)}
-            on:remove={e => removeRole(e.detail)} />
-        {/if}
-      {/each}
-    </Card>
-  {/if}
+  <div class="bind-grid">
+    <!-- Sensors card -->
+    {#if assignedSensors.length > 0}
+      <Card title={$t['bind.sensors']}>
+        {#each assignedSensors as roleDef}
+          {@const binding = getBinding(roleDef.role)}
+          {#if binding}
+            <BindingCard {roleDef} {binding}
+              hwList={compatibleHw(roleDef)}
+              usedIds={usedHwIds(roleDef.role)}
+              on:changeHw={e => setHardware(e.detail.role, e.detail.hw)}
+              on:changeAddr={e => setAddress(e.detail.role, e.detail.addr)}
+              on:remove={e => removeRole(e.detail)} />
+          {/if}
+        {/each}
+      </Card>
+    {/if}
 
-  <!-- Actuators card -->
-  {#if assignedActuators.length > 0}
-    <Card title={$t['bind.actuators']}>
-      {#each assignedActuators as roleDef}
-        {@const binding = getBinding(roleDef.role)}
-        {#if binding}
-          <BindingCard {roleDef} {binding}
-            hwList={compatibleHw(roleDef)}
-            usedIds={usedHwIds(roleDef.role)}
-            on:changeHw={e => setHardware(e.detail.role, e.detail.hw)}
-            on:remove={e => removeRole(e.detail)} />
-        {/if}
-      {/each}
-    </Card>
-  {/if}
+    <!-- Actuators card -->
+    {#if assignedActuators.length > 0}
+      <Card title={$t['bind.actuators']}>
+        {#each assignedActuators as roleDef}
+          {@const binding = getBinding(roleDef.role)}
+          {#if binding}
+            <BindingCard {roleDef} {binding}
+              hwList={compatibleHw(roleDef)}
+              usedIds={usedHwIds(roleDef.role)}
+              on:changeHw={e => setHardware(e.detail.role, e.detail.hw)}
+              on:remove={e => removeRole(e.detail)} />
+          {/if}
+        {/each}
+      </Card>
+    {/if}
+  </div>
 
-  <!-- OneWire Discovery -->
+  <!-- OneWire Discovery (повна ширина) -->
   {#if owBuses.length > 0}
     <OneWireDiscovery {owBuses} {assignedAddresses} {freeAddrRoles}
       on:assign={handleAssign} />
@@ -236,6 +238,18 @@
     font-size: 16px;
   }
   .center-msg.error { color: var(--error); }
+
+  .bind-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  @media (min-width: 768px) {
+    .bind-grid {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+  }
 
   .restart-banner {
     background: rgba(34, 197, 94, 0.15);
