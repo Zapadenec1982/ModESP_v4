@@ -34,6 +34,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 DRIVERS_DIR = PROJECT_ROOT / "drivers"
 MODULES_DIR = PROJECT_ROOT / "modules"
 DATA_DIR = PROJECT_ROOT / "data"
+BOARDS_DIR = PROJECT_ROOT / "boards"
 
 
 def load_driver_manifest(name):
@@ -50,6 +51,12 @@ def load_module_manifest(name):
 
 def load_data_file(name):
     path = DATA_DIR / name
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def load_board_file(board_name, filename):
+    path = BOARDS_DIR / board_name / filename
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -221,7 +228,7 @@ class TestBoardKC868A6:
 
     @pytest.fixture
     def board(self):
-        return load_data_file("board_kc868a6.json")
+        return load_board_file("kc868a6", "board.json")
 
     def test_board_name(self, board):
         assert board["board"] == "kc868_a6"
@@ -285,7 +292,7 @@ class TestBindingsKC868A6:
 
     @pytest.fixture
     def bindings(self):
-        return load_data_file("bindings_kc868a6.json")
+        return load_board_file("kc868a6", "bindings.json")
 
     def test_manifest_version(self, bindings):
         assert bindings["manifest_version"] == 1
@@ -319,8 +326,8 @@ class TestBindingsPageMultiDriver:
         project = load_project()
         equipment = load_module_manifest("equipment")
 
-        board = load_data_file("board_kc868a6.json")
-        bindings = load_data_file("bindings_kc868a6.json")
+        board = load_board_file("kc868a6", "board.json")
+        bindings = load_board_file("kc868a6", "bindings.json")
 
         gen = UIJsonGenerator()
         resolver = FeatureResolver(bindings, equipment)
@@ -409,8 +416,8 @@ class TestDevBoardBackwardCompat:
         project = load_project()
         equipment = load_module_manifest("equipment")
 
-        board = load_data_file("board.json")
-        bindings = load_data_file("bindings.json")
+        board = load_board_file("dev", "board.json")
+        bindings = load_board_file("dev", "bindings.json")
 
         gen = UIJsonGenerator()
         resolver = FeatureResolver(bindings, equipment)

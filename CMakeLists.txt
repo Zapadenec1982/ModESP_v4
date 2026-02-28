@@ -6,6 +6,25 @@ set(EXTRA_COMPONENT_DIRS
     "modules"
 )
 
+# ── Board selection: читаємо з sdkconfig (menuconfig) ──
+set(_BOARD_DIR "dev")
+if(EXISTS "${CMAKE_SOURCE_DIR}/sdkconfig")
+    file(STRINGS "${CMAKE_SOURCE_DIR}/sdkconfig" _sdkconfig_lines)
+    foreach(_line ${_sdkconfig_lines})
+        if(_line MATCHES "^CONFIG_MODESP_BOARD_DIR=\"(.+)\"$")
+            set(_BOARD_DIR "${CMAKE_MATCH_1}")
+        endif()
+    endforeach()
+endif()
+
+set(_BOARD_PATH "${CMAKE_SOURCE_DIR}/boards/${_BOARD_DIR}")
+if(NOT EXISTS "${_BOARD_PATH}/board.json")
+    message(FATAL_ERROR "Board '${_BOARD_DIR}' not found in boards/")
+endif()
+file(COPY "${_BOARD_PATH}/board.json" DESTINATION "${CMAKE_SOURCE_DIR}/data")
+file(COPY "${_BOARD_PATH}/bindings.json" DESTINATION "${CMAKE_SOURCE_DIR}/data")
+message(STATUS "ModESP board: ${_BOARD_DIR}")
+
 # ── Pre-build: generate UI schema and C++ headers from module manifests ──
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_FOUND)
