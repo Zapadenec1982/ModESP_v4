@@ -1,0 +1,123 @@
+/**
+ * ModESP v4 — Design Tokens
+ * Single source of truth for all design values.
+ *
+ * Principles (Industrial HMI):
+ * - Touch targets >= 44px (WCAG 2.1 AA)
+ * - High contrast for readability
+ * - Semantic colors from industrial standards
+ * - Consistent spacing scale (4px base)
+ */
+
+:root {
+  /* ── Spacing scale (4px base) ────────────────────── */
+  --sp-0: 0px;
+  --sp-0-5: 2px;
+  --sp-1: 4px;
+  --sp-1-5: 6px;
+  --sp-2: 8px;
+  --sp-2-5: 10px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+
+  /* ── Typography scale ────────────────────────────── */
+  --text-2xs: 9px;     /* chart axis, micro labels */
+  --text-xs: 10px;     /* chart ticks, signal bars */
+  --text-sm: 11px;     /* card titles (uppercase), hints */
+  --text-base: 13px;   /* badges, secondary text */
+  --text-md: 14px;     /* body, widget labels, inputs */
+  --text-lg: 16px;     /* widget values, nav items */
+  --text-xl: 18px;     /* page titles, error screen */
+  --text-2xl: 22px;    /* slider value display */
+  --text-3xl: 24px;    /* setpoint display, large values */
+  --text-4xl: 48px;    /* error icon */
+  --text-hero: 56px;   /* main temperature (mobile) */
+  --text-hero-lg: 64px; /* main temperature (desktop) */
+
+  /* ── Font weights ────────────────────────────────── */
+  --fw-normal: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+  --fw-bold: 700;
+
+  /* ── Border radius ───────────────────────────────── */
+  --radius-xs: 3px;    /* progress bars, small pills */
+  --radius-sm: 4px;    /* value display, small elements */
+  --radius-md: 6px;    /* inputs, selects, small buttons */
+  --radius-lg: 8px;    /* standard buttons, modals */
+  --radius-xl: 10px;   /* action buttons (firmware, wifi) */
+  --radius-2xl: 12px;  /* cards, major containers */
+  --radius-pill: 20px; /* status badges, pills */
+  --radius-full: 50%;  /* circles (dots, toggle thumb) */
+
+  /* ── Semantic status colors (Industrial HMI) ─────── */
+  /* These do NOT change between light/dark themes.     */
+  /* Red = alarm/danger, Blue = compressor/info,        */
+  /* Green = normal/OK, Amber = warning/defrost         */
+
+  --status-compressor: #2563eb;   /* blue — NOT green */
+  --status-fan: #0891b2;          /* cyan */
+  --status-heater: #dc2626;       /* red */
+  --status-defrost: #f59e0b;      /* amber */
+  --status-ok: #16a34a;           /* green = normal */
+  --status-idle: var(--fg-muted); /* grey = inactive */
+  --status-night: #7c3aed;        /* violet = night mode */
+
+  /* Alarm specific */
+  --alarm-bg: rgba(239, 68, 68, 0.08);
+  --alarm-bg-strong: rgba(239, 68, 68, 0.15);
+  --alarm-border: #ef4444;
+  --alarm-text: #dc2626;
+  --alarm-dark: #991b1b;
+
+  /* Defrost phase colors */
+  --defrost-stabilize: #f59e0b;
+  --defrost-valve: #f59e0b;
+  --defrost-active: #ef4444;
+  --defrost-equalize: #f59e0b;
+  --defrost-drip: #8b5cf6;
+  --defrost-fad: #06b6d4;
+
+  /* Chart palette */
+  --chart-1: #3b82f6;  /* blue — air temp */
+  --chart-2: #10b981;  /* teal — evap */
+  --chart-3: #f59e0b;  /* amber — cond */
+  --chart-4: #f97316;  /* orange */
+  --chart-5: #8b5cf6;  /* purple */
+  --chart-6: #ec4899;  /* pink */
+  --chart-setpoint: #f59e0b;
+  --chart-comp-zone: rgba(34, 197, 94, 0.15);
+  --chart-defrost-zone: rgba(249, 115, 22, 0.2);
+
+  /* ── Touch & interactive targets ─────────────────── */
+  --touch-min: 44px;        /* WCAG minimum */
+  --touch-comfortable: 48px;
+
+  /* ── Layout sizes ────────────────────────────────── */
+  --sidebar-width: 220px;
+  --sidebar-compact: 64px;
+  --content-max: 960px;
+  --toast-width: 360px;
+
+  /* ── Shadows ─────────────────────────────────────── */
+  --shadow-xs: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 2px 8px rgba(59, 130, 246, 0.3);
+  --shadow-lg: 0 4px 12px rgba(59, 130, 246, 0.4);
+  --shadow-toast: 0 4px 12px rgba(0, 0, 0, 0.3);
+
+  /* ── Transitions ─────────────────────────────────── */
+  --transition-fast: 0.15s ease;
+  --transition-normal: 0.2s ease;
+  --transition-slow: 0.3s ease;
+
+  /* ── Widget feedback states ──────────────────────── */
+  --widget-pending-opacity: 0.7;
+  --widget-success-border: var(--status-ok);
+  --widget-error-border: var(--alarm-border);
+}

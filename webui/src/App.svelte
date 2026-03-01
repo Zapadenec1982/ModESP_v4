@@ -59,6 +59,7 @@
 <Toast />
 
 <style>
+  /* Theme colors (override per theme, complement tokens.css) */
   :global(:root) {
     --bg: #0f172a;
     --bg2: #1e293b;
