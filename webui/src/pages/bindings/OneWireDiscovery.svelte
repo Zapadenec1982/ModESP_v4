@@ -9,6 +9,8 @@
   export let owBuses = [];
   export let assignedAddresses = new Set();
   export let freeAddrRoles = [];
+  // Маппінг адреса → роль для показу поточної прив'язки
+  export let addressToRole = {};
 
   const dispatch = createEventDispatcher();
 
@@ -46,6 +48,16 @@
     scanResults = scanResults.map(d =>
       d.address === device.address
         ? {...d, status: 'assigned', role: device.selectedRole}
+        : d
+    );
+  }
+
+  function unbindDevice(device) {
+    dispatch('unbind', { address: device.address });
+    // Оновити локальний стан — датчик тепер "новий"
+    scanResults = scanResults.map(d =>
+      d.address === device.address
+        ? {...d, status: 'new', role: null}
         : d
     );
   }
@@ -88,16 +100,14 @@
   {/if}
 
   {#if scanResults.length > 0}
-    {@const newDevices = scanResults.filter(d =>
-      d.status !== 'assigned' && !assignedAddresses.has(d.address)
-    )}
-    {@const assignedCount = scanResults.length - newDevices.length}
-    {#if assignedCount > 0}
-      <div class="scan-summary">{$t['bind.found'].replace('{0}', scanResults.length).replace('{1}', assignedCount)}</div>
-    {/if}
+    <div class="scan-summary">
+      {$t['bind.found_total'] || `Знайдено ${scanResults.length} датчик(ів)`}
+    </div>
     <div class="scan-results">
-      {#each newDevices as device}
-        <div class="device-row">
+      {#each scanResults as device}
+        {@const isAssigned = assignedAddresses.has(device.address)}
+        {@const currentRole = addressToRole[device.address]}
+        <div class="device-row" class:device-assigned={isAssigned}>
           <div class="device-info">
             <span class="device-addr">{device.address}</span>
             {#if device.temperature !== undefined}
@@ -105,7 +115,14 @@
             {/if}
           </div>
           <div class="device-action">
-            {#if freeAddrRoles.length > 0}
+            {#if isAssigned && currentRole}
+              <span class="device-role assigned">{currentRole}</span>
+              <button class="unbind-btn"
+                      on:click={() => unbindDevice(device)}
+                      title={$t['bind.unbind'] || 'Відкріпити'}>
+                &#x2715;
+              </button>
+            {:else if freeAddrRoles.length > 0}
               <select class="role-select" bind:value={device.selectedRole}>
                 <option value="">{$t['bind.role']}</option>
                 {#each freeAddrRoles as r}
@@ -118,14 +135,11 @@
                 {$t['bind.add']}
               </button>
             {:else}
-              <span class="device-role new">{$t['bind.new_device']}</span>
+              <span class="device-role new">{$t['bind.no_free_roles'] || 'Немає вільних ролей'}</span>
             {/if}
           </div>
         </div>
       {/each}
-      {#if newDevices.length === 0}
-        <div class="scan-hint">{$t['bind.all_assigned']}</div>
-      {/if}
     </div>
   {:else if !scanning}
     <div class="scan-hint">{$t['bind.scan_hint']}</div>
@@ -225,15 +239,31 @@
     align-items: center;
     flex-shrink: 0;
   }
+  .device-assigned {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+  }
   .device-role {
     font-size: 13px;
-    color: var(--success);
     font-weight: 500;
+  }
+  .device-role.assigned {
+    color: var(--accent);
   }
   .device-role.new {
     color: var(--fg-muted);
     font-style: italic;
   }
+  .unbind-btn {
+    background: none;
+    border: none;
+    color: var(--fg-muted);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .unbind-btn:hover { color: var(--error); background: rgba(239, 68, 68, 0.1); }
   .role-select {
     padding: 4px 8px;
     font-size: 13px;

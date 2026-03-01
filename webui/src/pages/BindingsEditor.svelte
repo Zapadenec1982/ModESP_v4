@@ -89,6 +89,10 @@
     bindings = bindings.filter(b => b.role !== role);
   }
 
+  function removeByAddress(address) {
+    bindings = bindings.filter(b => b.address !== address);
+  }
+
   function addRole(roleDef) {
     const hw = availableHw(roleDef);
     if (hw.length === 0) return;
@@ -121,7 +125,7 @@
   $: requiredRoles = roles.filter(r => !r.optional);
   $: missingRequired = requiredRoles.filter(r => !assignedRoles.has(r.role));
   $: hasEmptyHw = bindings.some(b => !b.hardware);
-  $: canSave = missingRequired.length === 0 && !hasEmptyHw && !saving;
+  $: canSave = !hasEmptyHw && !saving;
 
   $: assignedSensors = roles.filter(r => r.type === 'sensor' && assignedRoles.has(r.role));
   $: assignedActuators = roles.filter(r => r.type === 'actuator' && assignedRoles.has(r.role));
@@ -129,12 +133,27 @@
   $: owBuses = hwInventory.filter(h => h.hw_type === 'onewire_bus');
   $: hasNtc = !!$state['equipment.has_ntc_driver'];
   $: freeAddrRoles = roles.filter(r => r.requires_address && !assignedRoles.has(r.role));
+  // Маппінг адреса → label ролі для OneWireDiscovery
+  $: addressToRole = Object.fromEntries(
+    bindings
+      .filter(b => b.address)
+      .map(b => {
+        const rd = roles.find(r => r.role === b.role);
+        return [b.address, rd ? rd.label : b.role];
+      })
+  );
   $: unassignedOptional = roles
     .filter(r => r.optional && !assignedRoles.has(r.role))
     .filter(r => availableHw(r).length > 0);
 
   // ── Save / Restart ──
   async function save() {
+    if (missingRequired.length > 0) {
+      const names = missingRequired.map(r => r.label).join(', ');
+      if (!confirm(`${$t['bind.confirm_missing'] || 'Відсутні обов\'язкові ролі'}: ${names}.\n${$t['bind.confirm_alarm'] || 'Система запуститься в аварійному режимі. Продовжити?'}`)) {
+        return;
+      }
+    }
     saving = true;
     error = null;
     try {
@@ -219,8 +238,9 @@
 
     <!-- OneWire Discovery + DS18B20 settings -->
     {#if owBuses.length > 0}
-      <OneWireDiscovery {owBuses} {assignedAddresses} {freeAddrRoles}
-        on:assign={handleAssign} />
+      <OneWireDiscovery {owBuses} {assignedAddresses} {freeAddrRoles} {addressToRole}
+        on:assign={handleAssign}
+        on:unbind={e => removeByAddress(e.detail.address)} />
     {/if}
 
     <!-- NTC settings -->

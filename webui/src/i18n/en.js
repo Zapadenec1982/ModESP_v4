@@ -108,7 +108,12 @@ export default {
   'bind.choose_hw': 'Choose hardware',
   'bind.role': '-- Role --',
   'bind.found': 'Found {0} device(s), {1} already assigned',
+  'bind.found_total': 'Found on bus:',
   'bind.new_device': 'new',
+  'bind.unbind': 'Unbind',
+  'bind.no_free_roles': 'No free roles',
+  'bind.confirm_missing': 'Missing required roles',
+  'bind.confirm_alarm': 'System will start in alarm mode. Continue?',
 
   'eq.filter': 'Digital filter',
   'eq.offset': 'Offset °C',

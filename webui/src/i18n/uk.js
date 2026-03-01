@@ -123,7 +123,12 @@ export default {
   'bind.choose_hw': 'Оберіть обладнання',
   'bind.role': '-- Роль --',
   'bind.found': 'Знайдено {0} пристроїв, {1} вже призначено',
+  'bind.found_total': 'Знайдено на шині:',
   'bind.new_device': 'новий',
+  'bind.unbind': 'Відкріпити',
+  'bind.no_free_roles': 'Немає вільних ролей',
+  'bind.confirm_missing': 'Відсутні обов\'язкові ролі',
+  'bind.confirm_alarm': 'Система запуститься в аварійному режимі. Продовжити?',
 
   // Equipment / driver settings
   'eq.filter': 'Цифровий фільтр',
