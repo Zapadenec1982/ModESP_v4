@@ -9,97 +9,183 @@
 **Milestone M3: "Production Ready" — ДОСЯГНУТО (2026-02-20).**
 
 Повністю працюючий контролер холодильної камери:
-- 4 бізнес-модулі (Equipment Manager, Thermostat v2, Defrost 7-phase, Protection 5 alarms)
+- 5 бізнес-модулів (Equipment Manager, Thermostat v2, Defrost 7-phase, Protection 5 alarms, DataLogger)
 - 6 драйверів (DS18B20, Relay, Digital Input, NTC, PCF8574 Relay, PCF8574 Input)
 - Features System — UI показує тільки підключене обладнання
 - Runtime UI visibility — visible_when + per-option disabled
-- Svelte WebUI (24 widgets, Dashboard, dark/light theme, i18n UA/EN, 44KB gzipped)
+- Svelte WebUI (21 widget type, Dashboard, dark/light theme, i18n UA/EN, 52KB gzipped)
 - MQTT TLS, OTA з rollback, auto-persist NVS
-- 264 pytest + 90 host C++ (doctest) тестів зелені, генератор → 5 артефактів
-- KC868-A6 board support (Phase 12a) — I2C PCF8574 expander, pcf8574_relay + pcf8574_input drivers
-- Heap optimization: NVS batch API, WS broadcast 3000ms, float rounding, heap guard 40KB
+- 264 pytest + 90 host C++ (doctest) тестів
+- KC868-A6 board support (Phase 12a)
+- 97 state keys, 53 STATE_META, 37 MQTT pub, 52 MQTT sub
 
-**Поточна фаза: Phase 12a — KC868-A6 board support + heap optimization — DONE.**
+**Стабільність:** 30+ годин на реальному KC868-A6. Всі алгоритми працюють.
+
+**Відомі проблеми:**
+- Витік пам'яті виправлено костилями (WS heap guard 40KB, broadcast 3000ms)
+- WebUI — прототипний рівень, потребує UX/дизайн переосмислення
+- Немає HTTP авторизації
+- OTA без валідації розміру/підпису
+
+---
+
+## Roadmap: MVP → Production
+
+### ЧАСТИНА 1: MVP (14 сесій)
+
+> **Ціль:** Пристрій для реальних об'єктів під наглядом інженера.
+> **Фокус:** WebUI UX + Memory proper fix + базова безпека
+
+| Sprint | Сесії | Тема | Статус |
+|--------|-------|------|--------|
+| **Sprint 1** | 1-4 | Design System + Memory Fix | |
+| **Sprint 2** | 5-8 | Dashboard Redesign + Settings UX | |
+| **Sprint 3** | 9-11 | Mobile UX + Security | |
+| **Sprint 4** | 12-14 | Finishing Touches + HW Test | |
+
+#### Sprint 1: Design System + Memory Fix (сесії 1-4)
+
+- [ ] **Сесія 1a:** Design Tokens + CSS Architecture
+  - Створити `webui/src/styles/tokens.css`
+  - Рефакторинг CSS vars в App.svelte
+  - Промпт: `prompts/sprint1_session1a_design_tokens.md`
+
+- [ ] **Сесія 1b:** Base Components Refactor
+  - Card variants, Toast bottom-center, Layout reconnect overlay, WidgetRenderer gap
+  - Промпт: `prompts/sprint1_session1b_base_components.md`
+
+- [ ] **Сесія 1.1a:** Delta-Only WS Broadcasts
+  - SharedState change tracking bitset, for_each_changed(), delta serialization
+  - Промпт: `prompts/sprint1_session1_1a_delta_broadcasts.md`
+
+- [ ] **Сесія 1.1b:** Broadcast Tuning + Cleanup
+  - Знизити heap guard, зменшити interval до 1500ms, прибрати BUG-025 workaround
+  - Промпт: `prompts/sprint1_session1_1b_broadcast_tuning.md`
+
+#### Sprint 2: Dashboard Redesign + Settings UX (сесії 5-8)
+
+- [ ] **Сесія 1.2a:** Dashboard Layout + Information Hierarchy
+  - Alarm зверху, equipment pills з текстом, вторинні температури
+  - Промпт: `prompts/sprint2_session1_2a_dashboard_layout.md`
+
+- [ ] **Сесія 1.2b:** Slider + MiniChart Improvements
+  - Збільшити touch targets, min/max labels, pending save indicator
+  - Промпт: `prompts/sprint2_session1_2b_slider_minichart.md`
+
+- [ ] **Сесія 1.3a:** Debounce + Form Behavior
+  - createSettingSender() utility, debounce всіх widgets
+  - Промпт: `prompts/sprint2_session1_3a_debounce_forms.md`
+
+- [ ] **Сесія 1.3b:** Form Fixes + Error Handling
+  - MqttSave stores, API error enrichment, connection overlay
+  - Промпт: `prompts/sprint2_session1_3b_form_fixes_errors.md`
+
+#### Sprint 3: Mobile UX + Security (сесії 9-11)
+
+- [ ] **Сесія 1.4:** Mobile UX Polish
+  - Bottom tabs max 5 + "More", tablet 1-column, 44px touch targets
+  - Промпт: `prompts/sprint3_session1_4_mobile_ux.md`
+
+- [ ] **Сесія 1.5:** HTTP Basic Auth
+  - check_auth() middleware, NVS credentials, WebUI login prompt
+  - Промпт: `prompts/sprint3_session1_5_http_auth.md`
+
+- [ ] **Сесія 1.6:** OTA Safety
+  - Size validation, magic byte, rollback timeout 60s
+  - Промпт: `prompts/sprint3_session1_6_ota_safety.md`
+
+#### Sprint 4: Finishing Touches (сесії 12-14)
+
+- [ ] **Сесія 1.7:** MQTT Backoff + WiFi Recovery
+  - Exponential backoff, STA watchdog 10 хв
+  - Промпт: `prompts/sprint4_session1_7_mqtt_wifi.md`
+
+- [ ] **Сесія 1.8:** °C/°F + Alarm Relay
+  - system.temp_unit, format layer, alarm_relay role
+  - Промпт: `prompts/sprint4_session1_8_units_alarm.md`
+
+- [ ] **Сесія 1.9:** Hardware Integration Test
+  - Повний чеклист на KC868-A6: mobile, OTA, auth, memory, MQTT
+  - Промпт: `prompts/sprint4_session1_9_hw_test.md`
+
+---
+
+### ЧАСТИНА 2: PRODUCTION (15-20 сесій)
+
+> **Ціль:** Масове розгортання 100+ пристроїв
+
+| Sprint | Сесії | Тема | Статус |
+|--------|-------|------|--------|
+| **Sprint 5** | 15-17 | Security Hardening | |
+| **Sprint 6** | 18-20 | LCD/OLED Display | |
+| **Sprint 7** | 21-22 | Extended Testing | |
+| **Sprint 8** | 23 | CI/CD Pipeline | |
+| **Sprint 9** | 24-29 | Advanced Features | |
+| **Sprint 10** | 30-32 | Production WebUI | |
+| **Sprint 11** | 33+ | Fleet Management | |
+
+#### Sprint 5: Security Hardening (3 сесії)
+- [ ] HTTPS з self-signed cert per device
+- [ ] Secure Boot v2 + Flash Encryption
+- [ ] OTA Firmware Signing + CSRF + rate limiting
+- Промпти: `prompts/prod_sprint5_security.md`
+
+#### Sprint 6: LCD/OLED Display (3 сесії)
+- [ ] SSD1306 I2C driver + display service
+- [ ] Screen renderer (display_screens.h) + button navigation
+- [ ] Menu system для параметрів без WiFi
+- Промпти: `prompts/prod_sprint6_display.md`
+
+#### Sprint 7: Extended Testing (2 сесії)
+- [ ] Equipment + DataLogger host tests
+- [ ] Driver unit tests + WebUI integration tests (Playwright)
+- Промпти: `prompts/prod_sprint7_testing.md`
+
+#### Sprint 8: CI/CD (1 сесія)
+- [ ] GitHub Actions: build + pytest + host tests + WebUI build + bundle size check
+- Промпт: `prompts/prod_sprint8_cicd.md`
+
+#### Sprint 9: Advanced Features (5-6 сесій)
+- [ ] Modbus RTU/TCP
+- [ ] Home Assistant MQTT Auto-Discovery + mDNS
+- [ ] Scheduled defrost (AUDIT-032)
+- [ ] Pressure switches (AUDIT-031)
+- [ ] PID controller
+- Промпти: `prompts/prod_sprint9_features.md`
+
+#### Sprint 10: Production WebUI (3 сесії)
+- [ ] PWA + Service Worker
+- [ ] WCAG 2.1 AA accessibility
+- [ ] Performance optimization
+- Промпти: `prompts/prod_sprint10_webui.md`
+
+#### Sprint 11: Fleet Management (5+ сесій)
+- [ ] Backend dashboard (MQTT → Web)
+- [ ] Групове OTA
+- [ ] Alarm aggregation + notifications
+- Промпти: `prompts/prod_sprint11_fleet.md`
 
 ---
 
 ## Відкриті проблеми
 
-### Bugs
+### Memory Workarounds (костилі → proper fix у Sprint 1)
+| Костиль | Файл | Proper fix |
+|---------|------|-----------|
+| WS heap guard 40KB | ws_service.cpp:361 | Delta broadcasts (Sprint 1.1a) |
+| Broadcast 3000ms | ws_service.h:48 | Delta → зменшити до 1500ms (Sprint 1.1b) |
+| MQTT timer exclusion (BUG-025) | manifests | track_change=false в SharedState (Sprint 1.1a) |
+| Float rounding 0.01°C | equipment_module.cpp:186 | OK — proper optimization, залишити |
 
-Всі 8 знайдених багів виправлені (BUG-005/006/013/014/016/018/021/022).
-Деталі: `docs/archive/BUGFIXES_VERIFIED.md`
-
-### OPEN audit items
-
-**Пріоритет 2:** Всі закриті (AUDIT-011/012/013/019/020/021).
-
-**Пріоритет 3 (commercial viability):**
-| ID | Опис | Статус |
+### Open AUDIT Items (MVP + Production)
+| ID | Опис | Sprint |
 |----|------|--------|
-| AUDIT-030 | HTTP автентифікація (Basic Auth) | |
-| AUDIT-031 | HP/LP pressure switch digital inputs | |
-| AUDIT-032 | Scheduled defrost (за часом доби) | |
-| AUDIT-033 | Alarm relay output для BMS | |
-| AUDIT-034 | Password protection для параметрів | |
-| AUDIT-035 | °C/°F вибір одиниць | |
-
-### Перенесені задачі
-- MQTT auto-discovery (Home Assistant) — не критично
-
-
----
-
-## Що робити далі — кандидати
-
-### ~~Варіант A: WebUI Polish (Phase 7b-c)~~ — ЧАСТКОВО DONE
-~~Графіки температури~~, ~~анімації~~, ~~i18n~~, ~~light theme~~. Залишилось: PWA, CMake інтеграція.
-**Статус:** Theme toggle, i18n UA/EN, transitions — реалізовані. Bundle 43.7KB gz.
-
-### Варіант B: LCD/OLED Display (Phase 8)
-Локальний інтерфейс без WiFi для сервісних інженерів.
-display_screens.h вже генерується — залишилось підключити рендер.
-**Цінність:** standalone контролер. **Складність:** середня (3-4 сесії).
-
-### Варіант C: Hardening
-Закрити OPEN audit items P3 (AUDIT-030..035).
-**Цінність:** commercial viability. **Складність:** середня (2-3 сесії).
-
-### ~~Варіант D: Multi-sensor + PID (Phase 11b)~~ — DONE (без PID)
-NTC через ADC, кілька DS18B20, DigitalInput driver.
-**Статус:** Multi DS18B20 (MATCH_ROM) + NTC/ADC + DigitalInput + PCF8574 реалізовані (6 драйверів). PID — пізніше.
-
-### Майбутні покращення (Danfoss-inspired, після Phase 11a)
-- **Fan cycling** (duty cycle коли компресор OFF) — ERC 213
-- **Adaptive Defrost** (пропуск відтайки за аналізом випарника) — AK-CC 550
-- **Condenser overheat protection** (alarm + lockout при перегріві конденсатора) — ERC 214
-- **Pump Down** перед defrost (спорожнення випарника від фреону) — AK-CC 550
-- **Coordinated defrost** через MQTT (master/slave) — EKC 202D
-- **Drip tray heater** (нагрів піддону після defrost) — AK-CC 550
-
----
-
-## Завершені фази (стисло)
-
-| Фаза | Що | Коли |
-|------|----|------|
-| 1-5c | Ядро, HAL, WiFi, HTTP, WS, UI generation, тести | 02-12..02-17 |
-| 6 | MQTT TLS + OTA з rollback. **M2 ДОСЯГНУТО** | 02-17 |
-| 6.5 | Auto-persist settings (NVS, PersistService) | 02-17 |
-| 7a | Svelte WebUI (15 widgets, Dashboard, 17KB gz) | 02-17 |
-| 9 | Equipment Manager + Thermostat v2 + Defrost + Protection | 02-18 |
-| 9.5 | Audit (3 агенти) + Bugfixes (14/27 fixed) | 02-19..02-20 |
-| 10.5 | Features System + Select Widgets (209 тестів) | 02-20 |
-| **11a** | **Danfoss-level: Night Setback, Post-defrost, Display** | **DONE 02-21** |
-| **11b** | **Multi DS18B20 (MATCH_ROM) + NTC/ADC + DigitalInput** | **DONE 02-22** |
-| **13a** | **Runtime UI visibility (visible_when + disabled options)** | **DONE 02-23** |
-| **14** | **DataLogger + ChartWidget (LittleFS, SVG, streaming JSON)** | **DONE 02-24** |
-| **14a** | **Multi-channel DataLogger (3ch, event list, CSV export)** | **DONE 02-24** |
-| **14b** | **6-channel dynamic DataLogger + ChartWidget** | **DONE 02-24** |
-| **7b-c** | **WebUI Polish: theme, i18n, animations, Catmull-Rom** | **DONE 02-24** |
-| **12a** | **KC868-A6: I2C PCF8574 relay + input drivers** | **DONE 03-01** |
-
-**Детальна історія:** docs/06_roadmap.md, docs/archive/BUGFIXES_VERIFIED.md
+| AUDIT-030 | HTTP Basic Auth | MVP Sprint 3 (1.5) |
+| AUDIT-031 | HP/LP pressure switches | Prod Sprint 9 |
+| AUDIT-032 | Scheduled defrost | Prod Sprint 9 |
+| AUDIT-033 | Alarm relay output | MVP Sprint 4 (1.8) |
+| AUDIT-034 | Password protection | Prod (deferred) |
+| AUDIT-035 | °C/°F units | MVP Sprint 4 (1.8) |
 
 ---
 
@@ -113,44 +199,54 @@ NTC через ADC, кілька DS18B20, DigitalInput driver.
 | Таймери | Per-module (millis + FSM в on_update) |
 | Features | Static rebuild: bindings → FeatureResolver → features_config.h при boot |
 | UI | Manifest → generate_ui.py → ui.json → Svelte WebUI runtime |
+| **Design System** | Industrial HMI: tokens.css, semantic colors, 44px touch, mobile-first |
+| **WS Broadcast** | Delta-only (planned Sprint 1): changed keys bitmap, ~200B vs 3.5KB |
 
 ---
 
 ## Як працювати з Claude Code
 
-1. Claude Code читає `CLAUDE.md` (автоматично)
-2. Ти кажеш що хочеш зробити (або даєш CLAUDE_TASK.md)
+1. Відкрий промпт з `prompts/` для поточної сесії
+2. Вставь його як initial prompt для Claude Code
 3. Claude Code працює, ти перевіряєш
-
-**Після кожної сесії — Claude Code ОБОВ'ЯЗКОВО:**
-- Оновлює цей файл (зняти галочки, додати нове)
-- Оновлює CLAUDE.md якщо змінилась архітектура
-- Фіксує нові баги в OPEN таблицях вище
+4. Після сесії — Claude Code оновлює цей файл + CLAUDE.md
 
 **Якщо загубився:**
 - `ACTION_PLAN.md` → що робити
 - `CLAUDE.md` → як працює проект
+- `prompts/` → готові промпти для кожної сесії
 - `docs/06_roadmap.md` → куди йдемо
-- `docs/10_manifest_standard.md` → як писати маніфести
+
+---
+
+## Завершені фази
+
+| Фаза | Що | Коли |
+|------|----|------|
+| 1-5c | Ядро, HAL, WiFi, HTTP, WS, UI generation, тести | 02-12..02-17 |
+| 6 | MQTT TLS + OTA з rollback. **M2 ДОСЯГНУТО** | 02-17 |
+| 6.5 | Auto-persist settings (NVS, PersistService) | 02-17 |
+| 7a | Svelte WebUI (15 widgets, Dashboard, 17KB gz) | 02-17 |
+| 9 | Equipment Manager + Thermostat v2 + Defrost + Protection | 02-18 |
+| 9.5 | Audit (3 агенти) + Bugfixes (14/27 fixed) | 02-19..02-20 |
+| 10.5 | Features System + Select Widgets (209 тестів). **M3 ДОСЯГНУТО** | 02-20 |
+| 11a | Danfoss-level: Night Setback, Post-defrost, Display | 02-21 |
+| 11b | Multi DS18B20 (MATCH_ROM) + NTC/ADC + DigitalInput | 02-22 |
+| 13a | Runtime UI visibility (visible_when + disabled options) | 02-23 |
+| 14+14a+14b | 6-channel DataLogger + ChartWidget | 02-24 |
+| 7b-c | WebUI Polish: theme, i18n, animations | 02-24 |
+| 12a | KC868-A6: I2C PCF8574 relay + input drivers | 03-01 |
+
+**Детальна історія:** docs/CHANGELOG.md
 
 ---
 
 ## Changelog
 
-- 2026-03-01 — Phase 12a DONE: KC868-A6 board support (pcf8574_relay + pcf8574_input). defrost_relay merger. NVS batch API. Heap optimization (WS guard 40KB, float rounding, broadcast 3000ms). 6 drivers, 53 STATE_META, 52 MQTT sub.
-- 2026-02-24 — Phase 14b: 6-channel dynamic DataLogger (TempRecord 16 bytes, ch[6], ChannelDef table), dynamic ChartWidget (PALETTE, toggles, setpoint dual-mode). +log_setpoint, +log_humidity. 97 state keys, 264 тестів.
-- 2026-02-24 — Phase 14a: Multi-channel DataLogger (air+evap+cond, TempRecord 12 bytes, JSON v2), event text list, CSV export. Equipment +has_cond_temp. Fix Cache-Control no-store. 95 state keys, 207 тестів.
-- 2026-02-24 — Phase 14 DONE: DataLogger module (append+rotate LittleFS, streaming chunked JSON, 10 event types) + ChartWidget (SVG polyline, downsample, zones, tooltip). 92 state keys, 207 тестів.
-- 2026-02-23 — Phase 13a DONE: Runtime UI visibility. visible_when на cards/widgets, requires_state на select options, equipment.has_* keys (+3), isVisible() Svelte utility. 84 state keys, 178 тестів.
-- 2026-02-23 — Phase 11b COMPLETE: SEARCH_ROM (Maxim AN187), GET /api/onewire/scan endpoint, WebUI OneWire Discovery (scan + assign in BindingsEditor). HttpService: set_hal() for scan. 206 тестів.
-- 2026-02-22 — Phase 11b: Multi DS18B20 (MATCH_ROM), NTC/ADC driver, DigitalInput C++ driver. HAL: GpioInputConfig, AdcChannelConfig, Binding.address. Equipment: condenser_temp + door_contact. 81 state keys, 206 тестів.
-- 2026-02-21 — Phase 11a DONE: Night Setback (4 modes: off/schedule/DI/manual), Post-defrost alarm suppression (0-120 хв), Display during defrost (real/frozen/-d-). Equipment: night_input role. 80 state keys, 206 тестів, WebUI deployed.
-- 2026-02-21 — BUG-022 FIXED: компресор не стартує після відтайки. Причина: thermostat залишався в COOLING з compressor_on_=false, enter_state(COOLING) блокувався re-entry guard. Фікс: force state→IDLE після defrost.
-- 2026-02-21 — Bugfix batch: BUG-006 (re-entry guard), BUG-021 (WS mutex), BUG-014 (flush_now), BUG-013 (read helpers→BaseModule), BUG-018 (ESP_LOGE+counter), AUDIT-019 (reset_alarms button), AUDIT-021 (buffer 4096). 0 OPEN bugs, 206 тестів зелені.
-- 2026-02-21 — Аудит багів: всі OPEN bugs перевірені (5 OPEN, AUDIT-020 CLOSED). Фікси сесії: interlock ordering (anti-short-cycle BEFORE interlocks), defrost toggle (start/stop), has_feature guards removed, constraints removed, TimezoneSelect, duration format HH:MM:SS, HTTP max_open_sockets=4.
-- 2026-02-21 — Повне перезаписування: стиснуто завершені фази, видалено дублювання, структуровано відкриті проблеми.
-- 2026-02-20 — Phase 10.5 DONE: Features System + Select Widgets. M3 ДОСЯГНУТО. 209 тестів.
-- 2026-02-20 — Audit: 10 critical + 7 quick-win fixes. Bugfixes: 14/27 fixed.
-- 2026-02-18 — Phase 9 COMPLETE: 4 промислові модулі. M2 вже досягнуто (Phase 6).
-- 2026-02-17 — Phase 6+6.5+7a DONE: MQTT, OTA, persist, Svelte WebUI.
-- 2026-02-16 — Створено.
+- 2026-03-01 — Повний план MVP→Production (14+20 сесій). WebUI UX redesign як #1 пріоритет. Створено prompts/ директорію з промптами для кожної сесії.
+- 2026-03-01 — Phase 12a DONE: KC868-A6 board support. Heap optimization.
+- 2026-02-24 — Phase 14b + 7b-c DONE: 6-channel DataLogger, WebUI Polish.
+- 2026-02-23 — Phase 13a DONE: Runtime UI visibility.
+- 2026-02-22 — Phase 11b DONE: Multi DS18B20, NTC/ADC, DigitalInput.
+- 2026-02-21 — Phase 11a DONE: Night Setback, Post-defrost, Display.
+- 2026-02-20 — Phase 10.5 DONE: Features System. M3 ДОСЯГНУТО.
