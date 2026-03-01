@@ -238,7 +238,11 @@ void ThermostatModule::on_update(uint32_t dt_ms) {
         ESP_LOGI(TAG, "Night mode %s (effective SP=%.1f°C)",
                  night_active_ ? "ON" : "OFF", effective_sp_);
     }
-    state_set("thermostat.effective_setpoint", effective_sp_);
+    // Публікуємо тільки при зміні — уникаємо зайвих version bumps
+    if (effective_sp_ != last_effective_sp_) {
+        state_set("thermostat.effective_setpoint", effective_sp_);
+        last_effective_sp_ = effective_sp_;
+    }
 
     // ═══ Defrost pause ═══
     // Під час відтайки термостат повністю зупиняється:
@@ -280,8 +284,11 @@ void ThermostatModule::on_update(uint32_t dt_ms) {
         ESP_LOGI(TAG, "Defrost ended — state→idle, timers reset");
     }
 
-    // Нормальна робота — display_temp = поточна температура
-    state_set("thermostat.display_temp", current_temp_);
+    // Нормальна робота — display_temp = поточна температура (тільки при зміні)
+    if (current_temp_ != last_display_temp_) {
+        state_set("thermostat.display_temp", current_temp_);
+        last_display_temp_ = current_temp_;
+    }
 
     // 4. Оновлюємо таймери по ФАКТИЧНОМУ стану компресора (BUG-009 fix)
     state_timer_ms_ += dt_ms;

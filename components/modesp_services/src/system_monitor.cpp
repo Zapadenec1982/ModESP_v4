@@ -8,6 +8,7 @@
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_timer.h"
+#include "esp_heap_caps.h"
 #include <ctime>
 
 static const char* TAG = "SystemMonitor";
@@ -72,8 +73,11 @@ void SystemMonitor::on_update(uint32_t dt_ms) {
         min_free_heap_ = free_heap;
     }
 
+    uint32_t largest_block = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+
     state_set("system.heap_free", static_cast<int32_t>(free_heap));
     state_set("system.heap_min", static_cast<int32_t>(min_free_heap_));
+    state_set("system.heap_largest", static_cast<int32_t>(largest_block));
 
     if (free_heap < heap_critical_threshold && !heap_critical_sent_) {
         heap_critical_sent_ = true;

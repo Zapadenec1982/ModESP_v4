@@ -150,5 +150,63 @@ bool erase_key(const char* ns, const char* key) {
     return err == ESP_OK || err == ESP_ERR_NVS_NOT_FOUND;
 }
 
+// --- Batch API: один open/close для множинних операцій ---
+
+nvs_handle_t batch_open(const char* ns, bool readonly) {
+    nvs_handle_t handle = 0;
+    esp_err_t err = nvs_open(ns, readonly ? NVS_READONLY : NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "NVS batch_open '%s' failed: %s", ns, esp_err_to_name(err));
+        return 0;
+    }
+    return handle;
+}
+
+void batch_close(nvs_handle_t handle) {
+    if (!handle) return;
+    nvs_commit(handle);
+    nvs_close(handle);
+}
+
+bool batch_read_float(nvs_handle_t handle, const char* key, float& out) {
+    if (!handle) return false;
+    size_t len = sizeof(float);
+    return nvs_get_blob(handle, key, &out, &len) == ESP_OK && len == sizeof(float);
+}
+
+bool batch_read_i32(nvs_handle_t handle, const char* key, int32_t& out) {
+    if (!handle) return false;
+    return nvs_get_i32(handle, key, &out) == ESP_OK;
+}
+
+bool batch_read_bool(nvs_handle_t handle, const char* key, bool& out) {
+    if (!handle) return false;
+    uint8_t val = 0;
+    esp_err_t err = nvs_get_u8(handle, key, &val);
+    if (err == ESP_OK) out = (val != 0);
+    return err == ESP_OK;
+}
+
+bool batch_write_float(nvs_handle_t handle, const char* key, float value) {
+    if (!handle) return false;
+    return nvs_set_blob(handle, key, &value, sizeof(float)) == ESP_OK;
+}
+
+bool batch_write_i32(nvs_handle_t handle, const char* key, int32_t value) {
+    if (!handle) return false;
+    return nvs_set_i32(handle, key, value) == ESP_OK;
+}
+
+bool batch_write_bool(nvs_handle_t handle, const char* key, bool value) {
+    if (!handle) return false;
+    return nvs_set_u8(handle, key, value ? 1 : 0) == ESP_OK;
+}
+
+bool batch_erase_key(nvs_handle_t handle, const char* key) {
+    if (!handle) return false;
+    esp_err_t err = nvs_erase_key(handle, key);
+    return err == ESP_OK || err == ESP_ERR_NVS_NOT_FOUND;
+}
+
 } // namespace nvs_helper
 } // namespace modesp

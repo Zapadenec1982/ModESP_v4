@@ -357,6 +357,12 @@ void WsService::send_to_all(const char* data, size_t len) {
     for (size_t i = 0; i < MAX_WS_CLIENTS; i++) {
         if (fds[i] == -1) continue;
 
+        // Захист від OOM — не алокуємо при низькому heap
+        if (esp_get_free_heap_size() < 40000) {
+            ESP_LOGW(TAG, "Heap < 40KB, skip WS send fd=%d", fds[i]);
+            continue;
+        }
+
         auto* ctx = static_cast<AsyncSendCtx*>(
             malloc(sizeof(AsyncSendCtx) + len));
         if (!ctx) {
@@ -399,6 +405,11 @@ void WsService::send_ping_to_all() {
 
     for (size_t i = 0; i < MAX_WS_CLIENTS; i++) {
         if (fds[i] == -1) continue;
+
+        if (esp_get_free_heap_size() < 40000) {
+            ESP_LOGW(TAG, "Heap < 40KB, skip WS ping fd=%d", fds[i]);
+            continue;
+        }
 
         auto* ctx = static_cast<AsyncSendCtx*>(
             malloc(sizeof(AsyncSendCtx)));

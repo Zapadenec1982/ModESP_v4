@@ -10,6 +10,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "nvs.h"
 
 namespace modesp {
 namespace nvs_helper {
@@ -43,6 +44,23 @@ bool write_bool(const char* ns, const char* key, bool value);
 
 /// Erase a single key from NVS. Returns false on error.
 bool erase_key(const char* ns, const char* key);
+
+// --- Batch API: один open/close для множинних операцій ---
+
+/// Відкрити NVS handle для batch операцій. Повертає 0 при помилці.
+nvs_handle_t batch_open(const char* ns, bool readonly);
+
+/// Закрити handle з commit (для write) або без (readonly).
+void batch_close(nvs_handle_t handle);
+
+/// Batch read/write — працюють з відкритим handle
+bool batch_read_float(nvs_handle_t handle, const char* key, float& out);
+bool batch_read_i32(nvs_handle_t handle, const char* key, int32_t& out);
+bool batch_read_bool(nvs_handle_t handle, const char* key, bool& out);
+bool batch_write_float(nvs_handle_t handle, const char* key, float value);
+bool batch_write_i32(nvs_handle_t handle, const char* key, int32_t value);
+bool batch_write_bool(nvs_handle_t handle, const char* key, bool value);
+bool batch_erase_key(nvs_handle_t handle, const char* key);
 
 } // namespace nvs_helper
 } // namespace modesp

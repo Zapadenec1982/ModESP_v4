@@ -72,11 +72,15 @@ void PersistService::restore_from_nvs() {
     int restored = 0;
     int migrated = 0;
 
+    // Batch: один handle для всіх read операцій (зменшує heap фрагментацію)
+    auto h_ro = nvs_helper::batch_open(NVS_NAMESPACE, true);
+    // RW handle для міграції (відкриваємо лише якщо потрібно)
+    nvs_handle_t h_rw = 0;
+
     for (size_t i = 0; i < gen::STATE_META_COUNT; i++) {
         const auto& meta = gen::STATE_META[i];
         if (!meta.persist) continue;
 
-        // BUG-012: спочатку пробуємо новий хеш-ключ, потім legacy "pi"
         char nvs_key[16];
         make_nvs_key(meta.key, nvs_key, sizeof(nvs_key));
 
@@ -85,38 +89,38 @@ void PersistService::restore_from_nvs() {
 
         if (strcmp(meta.type, "float") == 0) {
             float val = 0.0f;
-            if (nvs_helper::read_float(NVS_NAMESPACE, nvs_key, val)) {
-                // Знайдено в новому ключі
+            if (nvs_helper::batch_read_float(h_ro, nvs_key, val)) {
                 ext_state_->set(meta.key, val);
                 ESP_LOGI(TAG, "Restored %s = %.2f (key: %s)",
                          meta.key, static_cast<double>(val), nvs_key);
                 restored++;
-            } else if (nvs_helper::read_float(NVS_NAMESPACE, legacy_key, val)) {
-                // Міграція: знайдено в legacy ключі → зберігаємо в новий
+            } else if (nvs_helper::batch_read_float(h_ro, legacy_key, val)) {
+                // Міграція: legacy → новий ключ
                 ext_state_->set(meta.key, val);
-                nvs_helper::write_float(NVS_NAMESPACE, nvs_key, val);
-                nvs_helper::erase_key(NVS_NAMESPACE, legacy_key);
+                if (!h_rw) h_rw = nvs_helper::batch_open(NVS_NAMESPACE, false);
+                nvs_helper::batch_write_float(h_rw, nvs_key, val);
+                nvs_helper::batch_erase_key(h_rw, legacy_key);
                 ESP_LOGI(TAG, "Migrated %s = %.2f (%s → %s)",
                          meta.key, static_cast<double>(val), legacy_key, nvs_key);
                 restored++;
                 migrated++;
             } else {
-                // Немає в NVS — default
                 ext_state_->set(meta.key, meta.default_val);
                 ESP_LOGI(TAG, "Default %s = %.2f (not in NVS)",
                          meta.key, static_cast<double>(meta.default_val));
             }
         } else if (strcmp(meta.type, "int") == 0) {
             int32_t val = 0;
-            if (nvs_helper::read_i32(NVS_NAMESPACE, nvs_key, val)) {
+            if (nvs_helper::batch_read_i32(h_ro, nvs_key, val)) {
                 ext_state_->set(meta.key, val);
                 ESP_LOGI(TAG, "Restored %s = %ld (key: %s)",
                          meta.key, (long)val, nvs_key);
                 restored++;
-            } else if (nvs_helper::read_i32(NVS_NAMESPACE, legacy_key, val)) {
+            } else if (nvs_helper::batch_read_i32(h_ro, legacy_key, val)) {
                 ext_state_->set(meta.key, val);
-                nvs_helper::write_i32(NVS_NAMESPACE, nvs_key, val);
-                nvs_helper::erase_key(NVS_NAMESPACE, legacy_key);
+                if (!h_rw) h_rw = nvs_helper::batch_open(NVS_NAMESPACE, false);
+                nvs_helper::batch_write_i32(h_rw, nvs_key, val);
+                nvs_helper::batch_erase_key(h_rw, legacy_key);
                 ESP_LOGI(TAG, "Migrated %s = %ld (%s → %s)",
                          meta.key, (long)val, legacy_key, nvs_key);
                 restored++;
@@ -126,15 +130,16 @@ void PersistService::restore_from_nvs() {
             }
         } else if (strcmp(meta.type, "bool") == 0) {
             bool val = false;
-            if (nvs_helper::read_bool(NVS_NAMESPACE, nvs_key, val)) {
+            if (nvs_helper::batch_read_bool(h_ro, nvs_key, val)) {
                 ext_state_->set(meta.key, val);
                 ESP_LOGI(TAG, "Restored %s = %s (key: %s)",
                          meta.key, val ? "true" : "false", nvs_key);
                 restored++;
-            } else if (nvs_helper::read_bool(NVS_NAMESPACE, legacy_key, val)) {
+            } else if (nvs_helper::batch_read_bool(h_ro, legacy_key, val)) {
                 ext_state_->set(meta.key, val);
-                nvs_helper::write_bool(NVS_NAMESPACE, nvs_key, val);
-                nvs_helper::erase_key(NVS_NAMESPACE, legacy_key);
+                if (!h_rw) h_rw = nvs_helper::batch_open(NVS_NAMESPACE, false);
+                nvs_helper::batch_write_bool(h_rw, nvs_key, val);
+                nvs_helper::batch_erase_key(h_rw, legacy_key);
                 ESP_LOGI(TAG, "Migrated %s = %s (%s → %s)",
                          meta.key, val ? "true" : "false", legacy_key, nvs_key);
                 restored++;
@@ -144,6 +149,9 @@ void PersistService::restore_from_nvs() {
             }
         }
     }
+
+    nvs_helper::batch_close(h_ro);
+    if (h_rw) nvs_helper::batch_close(h_rw);
 
     ESP_LOGI(TAG, "Restored %d keys from NVS", restored);
     if (migrated > 0) {
@@ -200,6 +208,10 @@ void PersistService::flush_now() {
 void PersistService::flush_to_nvs() {
     if (!ext_state_) return;
 
+    // Batch: один handle для всіх write операцій (зменшує heap фрагментацію)
+    auto h = nvs_helper::batch_open(NVS_NAMESPACE, false);
+    if (!h) return;
+
     int saved = 0;
 
     for (size_t i = 0; i < gen::STATE_META_COUNT && i < MAX_PERSIST_KEYS; i++) {
@@ -220,24 +232,24 @@ void PersistService::flush_to_nvs() {
         if (strcmp(meta.type, "float") == 0) {
             const auto* fp = etl::get_if<float>(&val.value());
             if (fp) {
-                ok = nvs_helper::write_float(NVS_NAMESPACE, nvs_key, *fp);
+                ok = nvs_helper::batch_write_float(h, nvs_key, *fp);
             } else {
                 // BUG-023: fallback — int32_t → float конвертація
                 const auto* ip = etl::get_if<int32_t>(&val.value());
-                if (ip) ok = nvs_helper::write_float(NVS_NAMESPACE, nvs_key, static_cast<float>(*ip));
+                if (ip) ok = nvs_helper::batch_write_float(h, nvs_key, static_cast<float>(*ip));
             }
         } else if (strcmp(meta.type, "int") == 0) {
             const auto* ip = etl::get_if<int32_t>(&val.value());
             if (ip) {
-                ok = nvs_helper::write_i32(NVS_NAMESPACE, nvs_key, *ip);
+                ok = nvs_helper::batch_write_i32(h, nvs_key, *ip);
             } else {
                 // BUG-023: fallback — float → int32_t конвертація
                 const auto* fp = etl::get_if<float>(&val.value());
-                if (fp) ok = nvs_helper::write_i32(NVS_NAMESPACE, nvs_key, static_cast<int32_t>(*fp));
+                if (fp) ok = nvs_helper::batch_write_i32(h, nvs_key, static_cast<int32_t>(*fp));
             }
         } else if (strcmp(meta.type, "bool") == 0) {
             const auto* bp = etl::get_if<bool>(&val.value());
-            if (bp) ok = nvs_helper::write_bool(NVS_NAMESPACE, nvs_key, *bp);
+            if (bp) ok = nvs_helper::batch_write_bool(h, nvs_key, *bp);
         }
 
         if (ok) {
@@ -247,6 +259,9 @@ void PersistService::flush_to_nvs() {
             ESP_LOGW(TAG, "Failed to save %s to NVS", meta.key);
         }
     }
+
+    // Один commit + close для всіх записів
+    nvs_helper::batch_close(h);
 
     if (saved > 0) {
         ESP_LOGI(TAG, "Flushed %d keys to NVS", saved);

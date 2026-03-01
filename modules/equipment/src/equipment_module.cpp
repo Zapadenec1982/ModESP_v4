@@ -18,6 +18,7 @@
 #include "modesp/hal/driver_manager.h"
 #include "esp_log.h"
 #include <cstring>
+#include <cmath>
 
 static const char* TAG = "Equipment";
 
@@ -181,7 +182,8 @@ void EquipmentModule::read_sensors() {
         if (sensor_air_->read(temp)) {
             if (!ema_air_init_) { ema_air_ = temp; ema_air_init_ = true; }
             else { ema_air_ += (temp - ema_air_) * alpha; }
-            air_temp_ = ema_air_;
+            // Округлення до 0.01°C — зменшує кількість version bumps
+            air_temp_ = roundf(ema_air_ * 100.0f) / 100.0f;
             state_set("equipment.air_temp", air_temp_);
         }
         // is_healthy() враховує consecutive_errors (драйвер відстежує).
@@ -196,7 +198,7 @@ void EquipmentModule::read_sensors() {
         if (sensor_evap_->read(temp)) {
             if (!ema_evap_init_) { ema_evap_ = temp; ema_evap_init_ = true; }
             else { ema_evap_ += (temp - ema_evap_) * alpha; }
-            evap_temp_ = ema_evap_;
+            evap_temp_ = roundf(ema_evap_ * 100.0f) / 100.0f;
             state_set("equipment.evap_temp", evap_temp_);
         }
         state_set("equipment.sensor2_ok", sensor_evap_->is_healthy());
@@ -208,7 +210,7 @@ void EquipmentModule::read_sensors() {
         if (sensor_cond_->read(temp)) {
             if (!ema_cond_init_) { ema_cond_ = temp; ema_cond_init_ = true; }
             else { ema_cond_ += (temp - ema_cond_) * alpha; }
-            cond_temp_ = ema_cond_;
+            cond_temp_ = roundf(ema_cond_ * 100.0f) / 100.0f;
             state_set("equipment.cond_temp", cond_temp_);
         }
     }

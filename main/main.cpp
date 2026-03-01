@@ -51,6 +51,7 @@
 #include "esp_task_wdt.h"
 #include "esp_ota_ops.h"
 #include "esp_sntp.h"
+#include "esp_heap_caps.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -306,13 +307,17 @@ extern "C" void app_main(void)
         // 2. Update all modules (business logic reads from drivers)
         app.modules().update_all(dt_ms);
 
-        // 3. Uptime in SharedState (once per second)
+        // 3. Uptime + heap diagnostics in SharedState (once per second)
         static uint32_t sec_counter = 0;
         sec_counter += dt_ms;
         if (sec_counter >= 1000) {
             sec_counter = 0;
             app.state().set("system.uptime",
                             static_cast<int32_t>(app.uptime_sec()));
+            // Найбільший вільний блок — показує фрагментацію heap
+            size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+            app.state().set("system.heap_largest",
+                            static_cast<int32_t>(largest));
         }
 
         // 4. HW watchdog reset

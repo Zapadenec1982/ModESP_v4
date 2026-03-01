@@ -45,7 +45,7 @@ private:
     // Delta detection
     uint32_t last_state_version_ = 0;
     uint32_t broadcast_timer_ = 0;
-    static constexpr uint32_t BROADCAST_INTERVAL_MS = 1000;
+    static constexpr uint32_t BROADCAST_INTERVAL_MS = 3000;
 
     // Heartbeat (ping) + cleanup
     // Must be well under httpd recv_wait_timeout (30s) so the PONG
