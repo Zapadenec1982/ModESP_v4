@@ -21,7 +21,7 @@ SharedState::~SharedState() {
     }
 }
 
-bool SharedState::set(const StateKey& key, const StateValue& value) {
+bool SharedState::set(const StateKey& key, const StateValue& value, bool track_change) {
     if (xSemaphoreTake(mutex_, pdMS_TO_TICKS(100)) != pdTRUE) {
         set_failures_++;  // BUG-018
         ESP_LOGE(TAG, "Mutex timeout on set('%s') [failures=%lu]",
@@ -46,9 +46,27 @@ bool SharedState::set(const StateKey& key, const StateValue& value) {
     }
 
     map_[key] = value;
-    // Інкрементуємо version тільки при реальній зміні (BUG-017 fix)
+
     if (changed) {
-        version_++;
+        // Інкрементуємо version тільки при реальній зміні (BUG-017 fix)
+        if (track_change) {
+            version_++;
+        }
+
+        // Delta tracking: додаємо ключ до changed_keys_ (без дублікатів)
+        if (track_change) {
+            bool found = false;
+            for (const auto& k : changed_keys_) {
+                if (k == key) { found = true; break; }
+            }
+            if (!found) {
+                if (!changed_keys_.full()) {
+                    changed_keys_.push_back(key);
+                } else {
+                    force_full_ = true;  // Переповнення — fallback на full broadcast
+                }
+            }
+        }
     }
 
     // Зберігаємо callback локально перед звільненням mutex
@@ -56,7 +74,7 @@ bool SharedState::set(const StateKey& key, const StateValue& value) {
     auto ud = persist_user_data_;
     xSemaphoreGive(mutex_);
 
-    // Persist callback ПОЗА mutex — щоб не блокувати інші set()
+    // Persist callback ПОЗА mutex — незалежно від track_change
     if (changed && cb) {
         cb(key, value, ud);
     }
@@ -107,20 +125,20 @@ void SharedState::clear() {
 
 // ── Зручні обгортки ──
 
-bool SharedState::set(const char* key, int32_t value) {
-    return set(StateKey(key), StateValue(value));
+bool SharedState::set(const char* key, int32_t value, bool track_change) {
+    return set(StateKey(key), StateValue(value), track_change);
 }
 
-bool SharedState::set(const char* key, float value) {
-    return set(StateKey(key), StateValue(value));
+bool SharedState::set(const char* key, float value, bool track_change) {
+    return set(StateKey(key), StateValue(value), track_change);
 }
 
-bool SharedState::set(const char* key, bool value) {
-    return set(StateKey(key), StateValue(value));
+bool SharedState::set(const char* key, bool value, bool track_change) {
+    return set(StateKey(key), StateValue(value), track_change);
 }
 
-bool SharedState::set(const char* key, const char* value) {
-    return set(StateKey(key), StateValue(StringValue(value)));
+bool SharedState::set(const char* key, const char* value, bool track_change) {
+    return set(StateKey(key), StateValue(StringValue(value)), track_change);
 }
 
 etl::optional<StateValue> SharedState::get(const char* key) const {
@@ -134,6 +152,51 @@ uint32_t SharedState::version() const {
     uint32_t v = version_;
     xSemaphoreGive(mutex_);
     return v;
+}
+
+// ── Delta tracking ──
+
+bool SharedState::has_changes() const {
+    if (xSemaphoreTake(mutex_, pdMS_TO_TICKS(100)) != pdTRUE) return false;
+    bool result = !changed_keys_.empty() || force_full_;
+    xSemaphoreGive(mutex_);
+    return result;
+}
+
+bool SharedState::needs_full_broadcast() const {
+    if (xSemaphoreTake(mutex_, pdMS_TO_TICKS(100)) != pdTRUE) return false;
+    bool result = force_full_;
+    xSemaphoreGive(mutex_);
+    return result;
+}
+
+bool SharedState::for_each_changed_and_clear(IterCallback cb, void* user_data) {
+    if (xSemaphoreTake(mutex_, pdMS_TO_TICKS(100)) != pdTRUE) return false;
+
+    bool had_changes = false;
+
+    if (force_full_) {
+        // Переповнення changed_keys_ — серіалізуємо ВСІ ключі
+        for (auto& pair : map_) {
+            cb(pair.first, pair.second, user_data);
+        }
+        had_changes = true;
+    } else {
+        // Серіалізуємо тільки змінені ключі
+        for (const auto& key : changed_keys_) {
+            auto it = map_.find(key);
+            if (it != map_.end()) {
+                cb(it->first, it->second, user_data);
+                had_changes = true;
+            }
+        }
+    }
+
+    changed_keys_.clear();
+    force_full_ = false;
+
+    xSemaphoreGive(mutex_);
+    return had_changes;
 }
 
 // ── Persist callback ──

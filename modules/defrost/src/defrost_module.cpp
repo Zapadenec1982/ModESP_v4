@@ -491,12 +491,13 @@ void DefrostModule::finish_defrost() {
 // ═══════════════════════════════════════════════════════════════
 
 void DefrostModule::publish_state() {
-    state_set("defrost.phase_timer", static_cast<int32_t>(phase_timer_ms_ / 1000));
+    // track_change=false: таймери не тригерять WS delta broadcast
+    state_set("defrost.phase_timer", static_cast<int32_t>(phase_timer_ms_ / 1000), false);
     // Зворотній відлік: скільки залишилось до наступної розморозки
     int32_t remaining = (interval_ms_ > interval_timer_ms_)
         ? static_cast<int32_t>((interval_ms_ - interval_timer_ms_) / 1000)
         : 0;
-    state_set("defrost.interval_timer", remaining);
+    state_set("defrost.interval_timer", remaining, false);
 }
 
 // ═══════════════════════════════════════════════════════════════

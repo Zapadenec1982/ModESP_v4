@@ -496,8 +496,9 @@ void ThermostatModule::update_cond_fan(uint32_t dt_ms) {
 // ═══════════════════════════════════════════════════════════════
 
 void ThermostatModule::publish_outputs() {
-    state_set("thermostat.comp_on_time", static_cast<int32_t>(comp_on_time_ms_ / 1000));
-    state_set("thermostat.comp_off_time", static_cast<int32_t>(comp_off_time_ms_ / 1000));
+    // track_change=false: таймери не тригерять WS delta broadcast
+    state_set("thermostat.comp_on_time", static_cast<int32_t>(comp_on_time_ms_ / 1000), false);
+    state_set("thermostat.comp_off_time", static_cast<int32_t>(comp_off_time_ms_ / 1000), false);
 }
 
 // ═══════════════════════════════════════════════════════════════

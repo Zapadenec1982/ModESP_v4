@@ -67,13 +67,14 @@ protected:
     void publish(const etl::imessage& msg);
 
     // Записати значення в SharedState
-    bool state_set(const StateKey& key, const StateValue& value);
-    
+    /// @param track_change false = тихий set (не тригерить WS broadcast)
+    bool state_set(const StateKey& key, const StateValue& value, bool track_change = true);
+
     // Зручні обгортки для state_set
-    bool state_set(const char* key, int32_t value);
-    bool state_set(const char* key, float value);
-    bool state_set(const char* key, bool value);
-    bool state_set(const char* key, const char* value);
+    bool state_set(const char* key, int32_t value, bool track_change = true);
+    bool state_set(const char* key, float value, bool track_change = true);
+    bool state_set(const char* key, bool value, bool track_change = true);
+    bool state_set(const char* key, const char* value, bool track_change = true);
 
     // Прочитати значення з SharedState
     etl::optional<StateValue> state_get(const StateKey& key) const;

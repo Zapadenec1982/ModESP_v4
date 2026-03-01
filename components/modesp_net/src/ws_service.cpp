@@ -181,6 +181,11 @@ esp_err_t WsService::ws_handler(httpd_req_t* req) {
         // reason (clean CLOSE, TCP RST, timeout, server shutdown).
         httpd_sess_set_ctx(req->handle, fd, self, on_session_close);
 
+        // Відправити повний state новому клієнту одразу при підключенні.
+        // Delta broadcasts не містять ключів, що не змінились з моменту
+        // останнього broadcast — новий клієнт пропустив би весь стан.
+        self->send_full_state_to(fd);
+
         return ESP_OK;
     }
 
@@ -277,7 +282,27 @@ esp_err_t WsService::ws_handler(httpd_req_t* req) {
 void WsService::broadcast_state() {
     if (!server_ || !state_) return;
 
-    char buf[4096];  // AUDIT-021: ~87 ключів × ~35 bytes/key, запас до ~115
+    // Delta broadcast: серіалізуємо тільки змінені ключі
+    // for_each_changed_and_clear() атомарно ітерує + очищує changed list
+    char buf[4096];
+    WsSerCtx ctx = {buf, sizeof(buf), 0, true};
+    ctx.pos += snprintf(buf, sizeof(buf), "{");
+
+    bool had_changes = state_->for_each_changed_and_clear(ws_serialize_entry, &ctx);
+
+    if (!had_changes) return;  // Нічого не змінилось — skip
+
+    ctx.pos += snprintf(buf + ctx.pos, ctx.remaining(), "}");
+
+    ESP_LOGD(TAG, "Delta broadcast: %d bytes", (int)ctx.pos);
+    send_to_all(buf, ctx.pos);
+}
+
+void WsService::send_full_state_to(int fd) {
+    if (!server_ || !state_) return;
+
+    // Серіалізуємо повний state для нового клієнта
+    char buf[4096];
     WsSerCtx ctx = {buf, sizeof(buf), 0, true};
     ctx.pos += snprintf(buf, sizeof(buf), "{");
 
@@ -285,7 +310,31 @@ void WsService::broadcast_state() {
 
     ctx.pos += snprintf(buf + ctx.pos, ctx.remaining(), "}");
 
-    send_to_all(buf, ctx.pos);
+    // Відправка напряму одному клієнту через async queue
+    if (esp_get_free_heap_size() < 40000) {
+        ESP_LOGW(TAG, "Heap < 40KB, skip initial state to fd=%d", fd);
+        return;
+    }
+
+    auto* send_ctx = static_cast<AsyncSendCtx*>(
+        malloc(sizeof(AsyncSendCtx) + ctx.pos));
+    if (!send_ctx) {
+        ESP_LOGW(TAG, "No memory for initial state to fd=%d", fd);
+        return;
+    }
+    send_ctx->server = server_;
+    send_ctx->self   = this;
+    send_ctx->fd     = fd;
+    send_ctx->type   = HTTPD_WS_TYPE_TEXT;
+    send_ctx->len    = ctx.pos;
+    memcpy(send_ctx->data, buf, ctx.pos);
+
+    if (httpd_queue_work(server_, async_send_cb, send_ctx) != ESP_OK) {
+        ESP_LOGW(TAG, "Queue full for initial state fd=%d", fd);
+        free(send_ctx);
+    } else {
+        ESP_LOGI(TAG, "Full state sent to new client fd=%d (%d bytes)", fd, (int)ctx.pos);
+    }
 }
 
 // ── Thread-safe send via httpd_queue_work ────────────────────
@@ -496,14 +545,12 @@ bool WsService::on_init() {
 void WsService::on_update(uint32_t dt_ms) {
     if (!server_ || !state_) return;
 
-    // Check for state changes periodically
+    // Delta broadcast: перевіряємо changed_keys_ замість version counter
     broadcast_timer_ += dt_ms;
     if (broadcast_timer_ >= BROADCAST_INTERVAL_MS) {
         broadcast_timer_ = 0;
-        uint32_t current_version = state_->version();
-        if (current_version != last_state_version_) {
+        if (state_->has_changes()) {
             broadcast_state();
-            last_state_version_ = current_version;
         }
     }
 

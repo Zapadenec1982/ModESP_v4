@@ -75,9 +75,10 @@ void SystemMonitor::on_update(uint32_t dt_ms) {
 
     uint32_t largest_block = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
 
-    state_set("system.heap_free", static_cast<int32_t>(free_heap));
-    state_set("system.heap_min", static_cast<int32_t>(min_free_heap_));
-    state_set("system.heap_largest", static_cast<int32_t>(largest_block));
+    // track_change=false: діагностичні ключі не тригерять WS delta
+    state_set("system.heap_free", static_cast<int32_t>(free_heap), false);
+    state_set("system.heap_min", static_cast<int32_t>(min_free_heap_), false);
+    state_set("system.heap_largest", static_cast<int32_t>(largest_block), false);
 
     if (free_heap < heap_critical_threshold && !heap_critical_sent_) {
         heap_critical_sent_ = true;
@@ -104,11 +105,11 @@ void SystemMonitor::on_update(uint32_t dt_ms) {
 
         char time_str[9];   // "HH:MM:SS"
         strftime(time_str, sizeof(time_str), "%H:%M:%S", &timeinfo);
-        state_set("system.time", time_str);
+        state_set("system.time", time_str, false);
 
         char date_str[11];  // "DD.MM.YYYY"
         strftime(date_str, sizeof(date_str), "%d.%m.%Y", &timeinfo);
-        state_set("system.date", date_str);
+        state_set("system.date", date_str, false);
     }
 }
 

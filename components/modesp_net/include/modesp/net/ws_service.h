@@ -1,12 +1,12 @@
 /**
  * @file ws_service.h
- * @brief WebSocket service for real-time state broadcast
+ * @brief WebSocket service for real-time state delta broadcast
  *
  * Registers a /ws endpoint on the HTTP server.
- * Periodically checks SharedState version counter and broadcasts
- * the full state JSON to all connected clients when it changes.
+ * Periodically broadcasts only CHANGED state keys (delta) to all clients.
+ * New clients receive full state immediately on connect.
  *
- * Max 2 simultaneous WS clients.
+ * Max 3 simultaneous WS clients.
  */
 
 #pragma once
@@ -42,8 +42,7 @@ private:
     StaticSemaphore_t clients_mutex_buf_;
     SemaphoreHandle_t clients_mutex_ = nullptr;
 
-    // Delta detection
-    uint32_t last_state_version_ = 0;
+    // Delta broadcast timing
     uint32_t broadcast_timer_ = 0;
     static constexpr uint32_t BROADCAST_INTERVAL_MS = 3000;
 
@@ -54,7 +53,8 @@ private:
     static constexpr uint32_t HEARTBEAT_INTERVAL_MS = 20000;
 
     void register_ws_handler();
-    void broadcast_state();
+    void broadcast_state();          // Delta — тільки змінені ключі
+    void send_full_state_to(int fd); // Повний state для нового клієнта
     void send_to_all(const char* data, size_t len);
     void send_ping_to_all();
     void add_client(int fd);

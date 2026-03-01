@@ -16,6 +16,7 @@
 
 #include "modesp/types.h"
 #include "etl/unordered_map.h"
+#include "etl/vector.h"
 #include "etl/optional.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
@@ -25,6 +26,10 @@ namespace modesp {
 #ifndef MODESP_MAX_STATE_ENTRIES
 #define MODESP_MAX_STATE_ENTRIES 128
 #endif
+
+/// Максимум змінених ключів між WS broadcast-ами.
+/// При переповненні — fallback на повну серіалізацію.
+static constexpr size_t MAX_CHANGED_KEYS = 32;
 
 class SharedState {
 public:
@@ -36,7 +41,9 @@ public:
     SharedState& operator=(const SharedState&) = delete;
 
     // ── Основний API ──
-    bool set(const StateKey& key, const StateValue& value);
+    /// @param track_change true = додати до changed_keys_ для WS broadcast.
+    ///   false = тихий set (таймери, лічильники — не тригерять WS delta).
+    bool set(const StateKey& key, const StateValue& value, bool track_change = true);
     etl::optional<StateValue> get(const StateKey& key) const;
     bool has(const StateKey& key) const;
     bool remove(const StateKey& key);
@@ -44,10 +51,10 @@ public:
     void clear();
 
     // ── Зручні обгортки ──
-    bool set(const char* key, int32_t value);
-    bool set(const char* key, float value);
-    bool set(const char* key, bool value);
-    bool set(const char* key, const char* value);
+    bool set(const char* key, int32_t value, bool track_change = true);
+    bool set(const char* key, float value, bool track_change = true);
+    bool set(const char* key, bool value, bool track_change = true);
+    bool set(const char* key, const char* value, bool track_change = true);
 
     etl::optional<StateValue> get(const char* key) const;
 
@@ -56,17 +63,28 @@ public:
 
     // Callback викликається під mutex — не робити довгих операцій!
     using IterCallback = void(*)(const StateKey& key, const StateValue& value, void* user_data);
+
+    /// Ітерація по ВСІХ ключах (для GET /api/state, initial WS)
     void for_each(IterCallback cb, void* user_data) const;
 
-    // Version counter — incremented on every successful set().
-    // Used by WsService to detect state changes without full comparison.
+    /// Ітерація лише по змінених ключах + атомарне очищення.
+    /// Повертає true якщо були зміни.
+    bool for_each_changed_and_clear(IterCallback cb, void* user_data);
+
+    /// true якщо є зміни для WS broadcast
+    bool has_changes() const;
+
+    /// true якщо changed_keys_ переповнився — потрібен full broadcast
+    bool needs_full_broadcast() const;
+
+    // Version counter — incremented on every tracked set().
     uint32_t version() const;
 
     // BUG-018: лічильник відмов set() для діагностики
     uint32_t set_failures() const { return set_failures_; }
 
     // ── Persist callback ──
-    // Викликається ПІСЛЯ set() якщо значення змінилось.
+    // Викликається ПІСЛЯ set() якщо значення змінилось (незалежно від track_change).
     // PersistService реєструє callback для збереження в NVS.
     using PersistCallback = void(*)(const StateKey& key, const StateValue& value, void* user_data);
     void set_persist_callback(PersistCallback cb, void* user_data = nullptr);
@@ -78,6 +96,10 @@ private:
     uint32_t set_failures_ = 0;  // BUG-018
     PersistCallback persist_cb_ = nullptr;
     void* persist_user_data_ = nullptr;
+
+    // ── Delta tracking для WS broadcasts ──
+    etl::vector<StateKey, MAX_CHANGED_KEYS> changed_keys_;
+    bool force_full_ = false;  // true якщо changed_keys_ переповнився
 };
 
 } // namespace modesp

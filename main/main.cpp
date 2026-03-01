@@ -312,12 +312,12 @@ extern "C" void app_main(void)
         sec_counter += dt_ms;
         if (sec_counter >= 1000) {
             sec_counter = 0;
+            // track_change=false: діагностичні ключі не тригерять WS delta
             app.state().set("system.uptime",
-                            static_cast<int32_t>(app.uptime_sec()));
-            // Найбільший вільний блок — показує фрагментацію heap
+                            static_cast<int32_t>(app.uptime_sec()), false);
             size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
             app.state().set("system.heap_largest",
-                            static_cast<int32_t>(largest));
+                            static_cast<int32_t>(largest), false);
         }
 
         // 4. HW watchdog reset
