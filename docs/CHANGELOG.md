@@ -4,6 +4,18 @@
 
 ## 2026-03-01
 
+- **Sprint 1 Session 1a:** Design Tokens — створено `webui/src/styles/tokens.css` (єдине джерело
+  правди для дизайну: spacing 4px base, typography 9-64px, border-radius, semantic status colors
+  Industrial HMI, alarm/defrost/chart palette, touch targets 44px WCAG, layout sizes, shadows,
+  transitions). Import в main.js, MIGRATION.md guide.
+- **Sprint 1 Session 1b:** Base Components Refactor:
+  Card.svelte — variant prop (default/status/alarm), sessionStorage collapse state, CSS tokens.
+  Toast.svelte — bottom-center (mobile-friendly), close button (×), slide-up animation, z-index 10000.
+  toast.js — max 3 тости, error 5→8s, warn 4→5s, exported dismissToast().
+  Layout.svelte — connection overlay через 5с WS disconnect (spinner + retry button + toast on reconnect).
+  WidgetRenderer.svelte — min-height 44px (touch-min), var(--sp-3) gap.
+  i18n: +3 ключі (conn.lost, conn.retry, conn.restored).
+  Bundle: 47.1KB JS gz + 8.1KB CSS gz (55.2KB total).
 - Рефакторинг документації: приведення до реального стану коду.
   Виправлено: defrost.req.heater → defrost_relay в data flow діаграмі (01_architecture),
   параметри min_off/on_time і startup_delay — хвилини замість секунд (05_cooling_defrost),

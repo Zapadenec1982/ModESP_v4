@@ -45,14 +45,18 @@
 
 #### Sprint 1: Design System + Memory Fix (сесії 1-4)
 
-- [ ] **Сесія 1a:** Design Tokens + CSS Architecture
-  - Створити `webui/src/styles/tokens.css`
-  - Рефакторинг CSS vars в App.svelte
-  - Промпт: `prompts/sprint1_session1a_design_tokens.md`
+- [x] **Сесія 1a:** Design Tokens + CSS Architecture ✓
+  - `webui/src/styles/tokens.css` — spacing, typography, radius, semantic colors, shadows, transitions
+  - Import в main.js, MIGRATION.md guide
+  - Bundle: 46.4KB JS gz + 7.7KB CSS gz
 
-- [ ] **Сесія 1b:** Base Components Refactor
-  - Card variants, Toast bottom-center, Layout reconnect overlay, WidgetRenderer gap
-  - Промпт: `prompts/sprint1_session1b_base_components.md`
+- [x] **Сесія 1b:** Base Components Refactor ✓
+  - Card: variant prop (default/status/alarm), sessionStorage collapse, tokens
+  - Toast: bottom-center, close button, max 3, error 8s/warn 5s
+  - Layout: connection overlay через 5с disconnect, spinner + retry, toast on reconnect
+  - WidgetRenderer: min-height 44px, var(--sp-3) gap
+  - i18n: +3 ключі (conn.lost, conn.retry, conn.restored)
+  - Bundle: 47.1KB JS gz + 8.1KB CSS gz
 
 - [ ] **Сесія 1.1a:** Delta-Only WS Broadcasts
   - SharedState change tracking bitset, for_each_changed(), delta serialization
