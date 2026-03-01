@@ -42,11 +42,14 @@ board.json + bindings.json ─┘
 - Читає сенсори → публікує `equipment.air_temp`, `equipment.sensor1_ok`, etc.
 - Читає requests від бізнес-модулів: `thermostat.req.compressor`, `defrost.req.*`, `protection.lockout`
 - Арбітраж: Protection LOCKOUT > Defrost active > Thermostat
-- Інтерлоки: тен↔компресор ніколи одночасно, тен↔клапан ГГ ніколи одночасно
+- Інтерлоки: defrost_relay↔компресор ніколи одночасно
+- **defrost_relay** — unified relay for both electric heater and hot gas valve (merged from heater+hg_valve)
 - **Compressor anti-short-cycle (output-level):** COMP_MIN_OFF_MS=180s, COMP_MIN_ON_MS=120s
   Захищає компресор незалежно від джерела запиту (thermostat/defrost)
 - Публікує **фактичний** стан реле через `get_state()` (не бажаний `out_`)
-- Relay `min_switch_ms` = 0 для всіх реле крім compressor (180s) — heater/fan/valve перемикаються миттєво
+- Relay `min_switch_ms` = 0 для всіх реле крім compressor (180s) — defrost_relay/fan перемикаються миттєво
+- **EMA filter:** Exponential Moving Average для температур, alpha = 1/(filter_coeff+1), roundf() до 0.01°C для зменшення SharedState version bumps
+- **Temperature rounding:** roundf(T * 100) / 100 — зменшує кількість WS broadcasts
 - **Night input:** опціональний дискретний вхід для нічного режиму → `equipment.night_input`
 - Бізнес-модулі (Thermostat, Defrost, Protection) працюють ТІЛЬКИ через SharedState
 - `data/bindings.json` — всі drivers прив'язані до module "equipment"
@@ -85,9 +88,9 @@ board.json + bindings.json ─┘
 - **Завершення:** по T_evap >= dSt (основна), по таймеру безпеки dEt, consecutive timeout counter
 - **Оптимізація:** skip defrost якщо T_evap > dSt (випарник чистий)
 - **FAD:** Fan After Defrost — компресор+конд.вент ON, вент.вип OFF, завершення по FAT або таймеру FAd
-- **13 persist параметрів** + 2 runtime persist (interval_timer, defrost_count)
+- **14 persist параметрів** + 2 runtime persist (interval_timer, defrost_count)
 - **NVS persistence:** interval_timer і defrost_count зберігаються через PersistService
-- Requests: `defrost.req.compressor`, `defrost.req.heater`, `defrost.req.evap_fan`, `defrost.req.cond_fan`, `defrost.req.hg_valve`
+- Requests: `defrost.req.compressor`, `defrost.req.defrost_relay`, `defrost.req.evap_fan`, `defrost.req.cond_fan`
 - EM арбітрує: defrost.active=true → defrost.req.* має пріоритет над thermostat.req.*
 - Порядок update: Equipment(0) → Protection(1) → **Thermostat(2) + Defrost(2)**
 
@@ -100,7 +103,7 @@ board.json + bindings.json ─┘
 - **disabled + disabled_reason:** widgets для неактивних features показуються як disabled в UI
 - **features_config.h:** constexpr масив + `is_feature_active(module, feature)` inline lookup
 - **has_feature():** метод BaseModule для runtime guards в C++ модулях
-- **Drivers:** ds18b20 (sensor, MATCH_ROM multi-sensor, SEARCH_ROM scan), relay (actuator), digital_input (sensor, GPIO input), ntc (sensor, ADC thermistor)
+- **Drivers:** ds18b20 (sensor, MATCH_ROM multi-sensor, SEARCH_ROM scan), relay (actuator), digital_input (sensor, GPIO input), ntc (sensor, ADC thermistor), pcf8574_relay (I2C actuator), pcf8574_input (I2C sensor)
 - **Validation:** V14 (controls_settings exist), V15 (requires_roles exist), V16 (requires_feature exist), V17 (options int), V18 (options→select), V19 (visible_when format)
 
 ### Runtime UI Visibility (Phase 13a)
@@ -113,7 +116,7 @@ board.json + bindings.json ─┘
   - resolve_constraints() тепер зберігає ВСІ options + додає `requires_state` та `disabled_hint`
   - FEATURE_TO_STATE mapping: feature name → `equipment.has_*` state key
   - SelectWidget перевіряє `$state[opt.requires_state]` реактивно
-- **equipment.has_* state keys:** `has_heater`, `has_hg_valve`, `has_cond_fan`, `has_door_contact`, `has_evap_temp`, `has_cond_temp`
+- **equipment.has_* state keys:** `has_defrost_relay`, `has_cond_fan`, `has_door_contact`, `has_evap_temp`, `has_cond_temp`, `has_night_input`, `has_ntc_driver`, `has_ds18b20_driver`
 - **Runtime ланцюг:** Bindings page → Save → Restart → equipment.has_* = true → option enabled / card visible
 
 ### DataLogger (Phase 14 + 14b)
@@ -137,12 +140,20 @@ board.json + bindings.json ─┘
 - **CSV export:** client-side download (dynamic channels + events), zero ESP32 навантаження
 - **10 state keys** (7 persist: enabled, retention_hours, sample_interval, log_evap, log_cond,
   log_setpoint, log_humidity; 3 readonly: records_count, events_count, flash_used)
-- **264 pytest тестів**
+- **264 pytest тестів + 90 host C++ doctest**
+- **Host C++ tests:** tests/host/ (doctest, thermostat/defrost/protection)
+
+### KC868-A6 Board Support (Phase 12a)
+- **I2C bus + PCF8574 expander** в HAL (i2c_buses, i2c_expanders у board.json)
+- **pcf8574_relay driver** — relay через I2C PCF8574 (8-bit port expander)
+- **pcf8574_input driver** — digital input через I2C PCF8574
+- **board_kc868a6.json** — 6 реле (PCF8574 @0x24), 6 входів (PCF8574 @0x22)
+- **100% сумісний** з dev board (GPIO) — той же firmware, різний board.json
 
 ### Файли які МОЖНА редагувати
 - `modules/*/manifest.json` — опис модулів (UI, state, mqtt, display, features, constraints)
 - `drivers/*/manifest.json` — опис драйверів (category, hardware_type, settings)
-- `data/board.json` — PCB pin assignment (gpio_outputs, onewire_buses, gpio_inputs, adc_channels)
+- `data/board.json` — PCB pin assignment (gpio_outputs, onewire_buses, gpio_inputs, adc_channels, i2c_buses, i2c_expanders, expander_outputs, expander_inputs)
 - `data/bindings.json` — Runtime: role → driver → GPIO mapping
 - `tools/generate_ui.py` — генератор (~1200 рядків, генерує 5 артефактів)
 - `components/*/src/*.cpp` — C++ реалізація
@@ -192,7 +203,7 @@ board.json + bindings.json ─┘
 - State key з полем `options: [{value, label}, ...]` → widget "select" в UI
 - `constraints` секція: `enum_filter` → requires_feature → FEATURE_TO_STATE → requires_state на option
 - Всі options завжди присутні в ui.json; недоступні показуються як disabled з hint
-- Приклад: defrost.type "Гарячий газ" має `requires_state: "equipment.has_hg_valve"` — disabled поки не підключений
+- Приклад: defrost.type "Гарячий газ" має `requires_state: "equipment.has_defrost_relay"` — disabled поки не підключений
 
 ## Структура проекту
 
@@ -204,10 +215,11 @@ ModESP_v4/
 │   ├── modesp_services/       # ErrorService, WatchdogService, Logger, Config, NVS, PersistService
 │   ├── modesp_hal/            # HAL, DriverManager, driver interfaces
 │   ├── modesp_net/            # WiFiService, HttpService, WsService
+│   ├── modesp_mqtt/           # MqttService (ESP-MQTT client, auto-reconnect)
 │   ├── modesp_json/           # JSON helpers
 │   └── jsmn/                  # Lightweight JSON parser (header-only)
 ├── drivers/
-│   └── digital_input/
+│   ├── digital_input/
 │   │   ├── manifest.json      # ⭐ Driver manifest (sensor, gpio_input, 1 setting)
 │   │   └── src/...            # GPIO input with 50ms debounce
 │   ├── ds18b20/
@@ -216,9 +228,15 @@ ModESP_v4/
 │   ├── ntc/
 │   │   ├── manifest.json      # ⭐ Driver manifest (sensor, adc_channel, 5 settings)
 │   │   └── src/...            # NTC thermistor via ADC (B-parameter equation)
-│   └── relay/
-│       ├── manifest.json      # ⭐ Driver manifest (actuator, gpio_output, 2 settings)
-│       └── src/...            # GPIO relay with min on/off time protection
+│   ├── relay/
+│   │   ├── manifest.json      # ⭐ Driver manifest (actuator, gpio_output, 2 settings)
+│   │   └── src/...            # GPIO relay with min on/off time protection
+│   ├── pcf8574_relay/
+│   │   ├── manifest.json      # ⭐ Driver manifest (actuator, expander_output)
+│   │   └── src/...            # I2C PCF8574 relay (8-bit port expander)
+│   └── pcf8574_input/
+│       ├── manifest.json      # ⭐ Driver manifest (sensor, expander_input)
+│       └── src/...            # I2C PCF8574 digital input
 ├── modules/
 │   ├── equipment/
 │   │   ├── manifest.json      # ⭐ Equipment Manager (HAL owner, arbitration)
@@ -230,7 +248,7 @@ ModESP_v4/
 │   │   ├── manifest.json      # ⭐ Single Source of Truth для UI/state/mqtt
 │   │   └── src/thermostat_module.cpp
 │   ├── defrost/
-│   │   ├── manifest.json      # ⭐ 7-phase defrost cycle (3 types, 13 params)
+│   │   ├── manifest.json      # ⭐ 7-phase defrost cycle (3 types, 14 params)
 │   │   └── src/defrost_module.cpp
 │   └── datalogger/
 │       ├── manifest.json      # ⭐ 6-channel dynamic logging + events
@@ -238,9 +256,13 @@ ModESP_v4/
 ├── tools/
 │   ├── generate_ui.py         # Manifest → UI + C++ headers generator (~1200 lines)
 │   └── tests/                 # 264 pytest tests (test_features, test_modules, test_validator)
+├── tests/
+│   └── host/                  # Host C++ unit tests (doctest, 90 test cases)
 ├── data/
-│   ├── board.json             # PCB pin assignment (gpio_outputs, onewire_buses, gpio_inputs, adc_channels)
+│   ├── board.json             # PCB pin assignment (gpio_outputs, onewire_buses, gpio_inputs, adc_channels, i2c_*)
+│   ├── board_kc868a6.json     # KC868-A6 board (6 relays PCF8574 @0x24, 6 inputs PCF8574 @0x22)
 │   ├── bindings.json          # Runtime: role → driver → GPIO mapping (manifest_version: 1)
+│   ├── bindings_kc868a6.json  # KC868-A6 bindings (pcf8574_relay + pcf8574_input)
 │   ├── ui.json                # 🔄 Generated
 │   └── www/                   # Deployed WebUI (index.html, bundle.js.gz, bundle.css.gz)
 ├── webui/                     # Svelte 4 WebUI source
@@ -272,6 +294,8 @@ ModESP_v4/
 - NVS namespace: "persist", ключі: djb2 hash від імені state key ("s" + 7 hex chars)
 - **Міграція при boot:** автоматично конвертує старі позиційні ключі "p0".."p32" → hash-based
 - Підтримує float, int32_t, bool типи (з auto-conversion між float↔int32_t)
+- **NVS batch API:** batch_open/batch_close для зменшення heap фрагментації (один handle для множинних read/write)
+- **Flush optimization:** один nvs_open → всі dirty keys → один commit → nvs_close
 - set_state(SharedState*) — ін'єкція залежності з main.cpp
 
 ### ModuleManager — lifecycle
@@ -304,14 +328,22 @@ ModESP_v4/
 
 ### WebSocket
 - Broadcast state JSON при зміні version counter
-- Heartbeat PING кожні 30s
+- Broadcast interval: 3000ms (BROADCAST_INTERVAL_MS)
+- Heartbeat PING кожні 20s (HEARTBEAT_INTERVAL_MS = 20000)
 - Manual control frames (PING/PONG/CLOSE)
-- Max 4 concurrent clients
+- Max 3 concurrent clients (MAX_WS_CLIENTS = 3)
 
 ### WiFi
 - STA mode: підключення до існуючого роутера (credentials з NVS)
 - AP fallback: ModESP-XXXX (якщо STA не вдалося)
 - IP: залежить від режиму (STA = DHCP, AP = 192.168.4.1)
+
+### Heap Optimization
+- **WS heap guard:** 40KB мінімум перед malloc для WS broadcast (skip якщо менше)
+- **NVS batch API:** один handle для flush_to_nvs() замість 30+ nvs_open/close
+- **Float rounding:** 0.01°C precision зменшує SharedState version bumps
+- **Broadcast interval:** 3000ms (зменшує malloc/free частоту для WS)
+- **system.heap_largest:** моніторинг найбільшого вільного блоку (фрагментація)
 
 ---
 
@@ -338,7 +370,7 @@ feat(module): короткий опис
 Приклади:
 - `feat(defrost): runtime validation — fallback to natural without hg_valve`
 - `fix(wifi): country code UA (channels 1-13), scan time 500ms`
-- `refactor(equipment): publish has_heater, has_hg_valve to SharedState`
+- `refactor(equipment): publish has_defrost_relay to SharedState`
 - `docs: CLAUDE_TASK_13a — settings validation 3 levels`
 
 Якщо зміни великі — кілька атомарних комітів замість одного великого.
@@ -378,9 +410,14 @@ feat(module): короткий опис
 | `docs/09_datalogger.md` | DataLogger + ChartWidget | При зміні DataLogger |
 | `docs/10_manifest_standard.md` | Стандарт маніфестів | При зміні формату manifest |
 | `docs/CHANGELOG.md` | Повний changelog проекту | Після кожної сесії |
+| `tests/host/` | Host C++ unit tests (doctest) | При зміні бізнес-логіки |
 | `next_prompt.md` | Промпт для наступної сесії | В кінці поточної сесії |
 
 ## Changelog
+- 2026-03-01 — Phase 12a DONE: KC868-A6 board support (I2C PCF8574 expander, pcf8574_relay + pcf8574_input drivers).
+  defrost_relay merger (heater+hg_valve→defrost_relay). NVS batch API. WS heap guard 40KB.
+  Float rounding 0.01°C. WS broadcast 3000ms. Heap diagnostics (system.heap_largest).
+  6 drivers, 53 STATE_META, 52 MQTT sub, 90 host C++ tests.
 - 2026-02-24 — Phase 14b DONE: 6-channel dynamic DataLogger + ChartWidget. TempRecord 12→16 bytes (ch[6] array),
   ChannelDef compile-time table (air/evap/cond/setpoint/humidity/reserved), sync/sample/serialize loops.
   Manifest: +log_setpoint, +log_humidity, "Канали логування" card. ChartWidget: fully dynamic channels
@@ -429,4 +466,4 @@ feat(module): короткий опис
   AUDIT-014..017: manifest range fixes. AUDIT-038..040: security (CORS, traversal, old files removed).
 - 2026-02-20 — AUDIT Phase 10: 10 critical fixes (relay min_switch_ms, JSON escaping, WebUI icons/tiles/alarm).
 
-> Повний changelog (2026-02-16 — 2026-02-24): [docs/CHANGELOG.md](docs/CHANGELOG.md)
+> Повний changelog (2026-02-16 — 2026-03-01): [docs/CHANGELOG.md](docs/CHANGELOG.md)

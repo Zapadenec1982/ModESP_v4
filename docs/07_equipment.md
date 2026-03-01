@@ -11,7 +11,7 @@ IActuatorDriver). Бізнес-модулі (Thermostat, Defrost, Protection) с
 - **Priority:** CRITICAL (0) — ініціалізується першим, оновлюється першим
 - **Bind:** `bind_drivers(DriverManager&)` — знаходить drivers за role name з bindings.json
 - **Обов'язкові drivers:** `air_temp` (sensor), `compressor` (actuator)
-- **Опціональні drivers:** evap_temp, condenser_temp, heater, evap_fan, cond_fan, hg_valve,
+- **Опціональні drivers:** evap_temp, condenser_temp, defrost_relay, evap_fan, cond_fan,
   door_contact, night_input
 
 ### Цикл on_update (кожна ітерація main loop)
@@ -31,6 +31,9 @@ IActuatorDriver). Бізнес-модулі (Thermostat, Defrost, Protection) с
 
 - **EMA (Exponential Moving Average)** фільтр з коефіцієнтом `equipment.filter_coeff` (0-10)
   - alpha = 1 / (coeff + 1); coeff=0 означає фільтр вимкнено (alpha=1.0)
+  - Конфігурується через `equipment.filter_coeff` (persist, MQTT subscribe)
+- **Float rounding:** `roundf(T * 100.0f) / 100.0f` — округлення до 0.01°C
+  - Зменшує кількість SharedState version bumps (WsService не відправляє дані без зміни)
 - **Оптимістична ініціалізація:** sensor1_ok = sensor2_ok = true при старті
   - DS18B20 потребує ~750ms на першу конверсію, перші read() фейляться
   - Запобігає хибному ERR1/ERR2 від Protection до першого успішного зчитування
@@ -55,10 +58,9 @@ IActuatorDriver). Бізнес-модулі (Thermostat, Defrost, Protection) с
 | `thermostat.req.cond_fan` | Thermostat | Запит на вент. конденсатора |
 | `defrost.active` | Defrost | Defrost активний (пріоритетний режим) |
 | `defrost.req.compressor` | Defrost | Запит на компресор (FAD фаза) |
-| `defrost.req.heater` | Defrost | Запит на тен відтайки |
+| `defrost.req.defrost_relay` | Defrost | Запит на реле відтайки |
 | `defrost.req.evap_fan` | Defrost | Запит на вент. випарника |
 | `defrost.req.cond_fan` | Defrost | Запит на вент. конденсатора |
-| `defrost.req.hg_valve` | Defrost | Запит на клапан гарячого газу |
 | `protection.lockout` | Protection | Аварійна зупинка (зарезервовано) |
 
 ### Compressor anti-short-cycle (output-level)
@@ -75,13 +77,16 @@ IActuatorDriver). Бізнес-модулі (Thermostat, Defrost, Protection) с
 - Запит OFF блокується (тримає ON), якщо компресор був ON менше 2 хвилин
 - Доповнює (не замінює) таймери thermostat (ті працюють для state machine логіки)
 - Таймер `comp_since_ms_` скидається при зміні фактичного стану реле
+- Виконується ДО інтерлоків, щоб інтерлоки мали фінальне слово
 
 ### Інтерлоки (hardcoded, неможливо обійти)
 
 Виконуються останніми в apply_arbitration() — мають найвищий пріоритет після lockout:
 
-1. **Тен + компресор НІКОЛИ одночасно** — якщо обидва ON, компресор вимикається
-2. **Тен + клапан ГГ НІКОЛИ одночасно** — якщо обидва ON, клапан ГГ вимикається
+1. **Електрична відтайка (defrost_relay) + компресор НІКОЛИ одночасно** — якщо обидва ON
+   і `defrost.type == 1` (електричний тен), компресор вимикається.
+   Для `defrost.type == 2` (гарячий газ) обидва ON — це нормально,
+   бо компресор потрібен для роботи циклу ГГ.
 
 ### Safe Mode
 
@@ -92,17 +97,31 @@ IActuatorDriver). Бізнес-модулі (Thermostat, Defrost, Protection) с
 
 ### equipment.has_* state keys
 
-При ініціалізації EM публікує наявність опціонального обладнання. Ці keys використовуються
-для runtime UI visibility (visible_when) та per-option disabled (requires_state) у WebUI.
+При ініціалізації EM публікує наявність опціонального обладнання та тип драйверів.
+Ці keys використовуються для runtime UI visibility (visible_when) та per-option disabled
+(requires_state) у WebUI.
+
+**Наявність обладнання (за підключеними drivers):**
 
 | State key | Тип | Опис | Визначається |
 |-----------|-----|------|--------------|
-| `equipment.has_heater` | bool | Тен відтайки доступний | `heater_ != nullptr` |
-| `equipment.has_hg_valve` | bool | Клапан гарячого газу доступний | `hg_valve_ != nullptr` |
+| `equipment.has_defrost_relay` | bool | Реле відтайки доступне | `defrost_relay_ != nullptr` |
 | `equipment.has_cond_fan` | bool | Вент. конденсатора доступний | `cond_fan_ != nullptr` |
 | `equipment.has_door_contact` | bool | Контакт дверей доступний | `door_sensor_ != nullptr` |
 | `equipment.has_evap_temp` | bool | Датчик випарника доступний | `sensor_evap_ != nullptr` |
 | `equipment.has_cond_temp` | bool | Датчик конденсатора доступний | `sensor_cond_ != nullptr` |
+| `equipment.has_night_input` | bool | Вхід нічного режиму доступний | `night_sensor_ != nullptr` |
+
+**Тип драйверів (для visibility карток налаштувань в UI):**
+
+| State key | Тип | Опис | Визначається |
+|-----------|-----|------|--------------|
+| `equipment.has_ntc_driver` | bool | Використовується NTC драйвер | `ISensorDriver::type() == "ntc"` для будь-якого сенсора |
+| `equipment.has_ds18b20_driver` | bool | Використовується DS18B20 драйвер | `ISensorDriver::type() == "ds18b20"` для будь-якого сенсора |
+
+Визначення типу драйвера: on_init() ітерує sensor_air_, sensor_evap_, sensor_cond_
+та перевіряє `type()` кожного — якщо хоча б один повертає "ntc" або "ds18b20",
+відповідний has_*_driver встановлюється в true.
 
 Runtime ланцюг: Bindings page -> Save -> Restart -> equipment.has_* = true -> option enabled / card visible.
 
@@ -110,47 +129,59 @@ Runtime ланцюг: Bindings page -> Save -> Restart -> equipment.has_* = true
 
 | Role | Type | Driver | Optional | Опис |
 |------|------|--------|----------|------|
-| `air_temp` | sensor | ds18b20 | **Ні** | Температура камери |
-| `compressor` | actuator | relay | **Ні** | Компресор |
-| `evap_temp` | sensor | ds18b20 | Так | Температура випарника |
-| `condenser_temp` | sensor | ds18b20 | Так | Температура конденсатора |
-| `heater` | actuator | relay | Так | Тен відтайки |
-| `evap_fan` | actuator | relay | Так | Вентилятор випарника |
-| `cond_fan` | actuator | relay | Так | Вентилятор конденсатора |
-| `hg_valve` | actuator | relay | Так | Клапан гарячого газу |
-| `door_contact` | sensor | digital_input | Так | Контакт дверей |
-| `night_input` | sensor | digital_input | Так | Вхід нічного режиму |
+| `air_temp` | sensor | ds18b20, ntc | **Ні** | Температура камери |
+| `compressor` | actuator | relay, pcf8574_relay | **Ні** | Компресор |
+| `evap_temp` | sensor | ds18b20, ntc | Так | Температура випарника |
+| `condenser_temp` | sensor | ds18b20, ntc | Так | Температура конденсатора |
+| `defrost_relay` | actuator | relay, pcf8574_relay | Так | Реле відтайки (тен або клапан ГГ) |
+| `evap_fan` | actuator | relay, pcf8574_relay | Так | Вентилятор випарника |
+| `cond_fan` | actuator | relay, pcf8574_relay | Так | Вентилятор конденсатора |
+| `door_contact` | sensor | digital_input, pcf8574_input | Так | Контакт дверей |
+| `night_input` | sensor | digital_input, pcf8574_input | Так | Вхід нічного режиму |
 
 ### State keys (повна таблиця)
 
-| Key | Type | Access | Unit | Persist | Опис |
-|-----|------|--------|------|---------|------|
-| `equipment.air_temp` | float | read | C | - | Температура камери |
-| `equipment.evap_temp` | float | read | C | - | Температура випарника |
-| `equipment.cond_temp` | float | read | C | - | Температура конденсатора |
-| `equipment.sensor1_ok` | bool | read | - | - | Датчик камери справний |
-| `equipment.sensor2_ok` | bool | read | - | - | Датчик випарника справний |
-| `equipment.compressor` | bool | read | - | - | Фактичний стан компресора |
-| `equipment.heater` | bool | read | - | - | Фактичний стан тена |
-| `equipment.evap_fan` | bool | read | - | - | Фактичний стан вент. випарника |
-| `equipment.cond_fan` | bool | read | - | - | Фактичний стан вент. конденсатора |
-| `equipment.hg_valve` | bool | read | - | - | Фактичний стан клапана ГГ |
-| `equipment.door_open` | bool | read | - | - | Стан дверей |
-| `equipment.night_input` | bool | read | - | - | Дискретний вхід нічного режиму |
-| `equipment.has_heater` | bool | read | - | - | Тен доступний (runtime) |
-| `equipment.has_hg_valve` | bool | read | - | - | Клапан ГГ доступний (runtime) |
-| `equipment.has_cond_fan` | bool | read | - | - | Вент. конденсатора доступний |
-| `equipment.has_door_contact` | bool | read | - | - | Контакт дверей доступний |
-| `equipment.has_evap_temp` | bool | read | - | - | Датчик випарника доступний |
-| `equipment.has_cond_temp` | bool | read | - | - | Датчик конденсатора доступний |
-| `equipment.filter_coeff` | int | readwrite | - | Так | Цифровий фільтр (0-10, default 4) |
+**Read-only (значення сенсорів та стан актуаторів):**
+
+| Key | Type | Unit | Опис |
+|-----|------|------|------|
+| `equipment.air_temp` | float | °C | Температура камери |
+| `equipment.evap_temp` | float | °C | Температура випарника |
+| `equipment.cond_temp` | float | °C | Температура конденсатора |
+| `equipment.sensor1_ok` | bool | - | Датчик камери справний |
+| `equipment.sensor2_ok` | bool | - | Датчик випарника справний |
+| `equipment.compressor` | bool | - | Фактичний стан компресора |
+| `equipment.defrost_relay` | bool | - | Фактичний стан реле відтайки |
+| `equipment.evap_fan` | bool | - | Фактичний стан вент. випарника |
+| `equipment.cond_fan` | bool | - | Фактичний стан вент. конденсатора |
+| `equipment.door_open` | bool | - | Стан дверей |
+| `equipment.night_input` | bool | - | Дискретний вхід нічного режиму |
+| `equipment.has_defrost_relay` | bool | - | Реле відтайки доступне (runtime) |
+| `equipment.has_cond_fan` | bool | - | Вент. конденсатора доступний |
+| `equipment.has_door_contact` | bool | - | Контакт дверей доступний |
+| `equipment.has_evap_temp` | bool | - | Датчик випарника доступний |
+| `equipment.has_cond_temp` | bool | - | Датчик конденсатора доступний |
+| `equipment.has_night_input` | bool | - | Вхід нічного режиму доступний |
+| `equipment.has_ntc_driver` | bool | - | Використовується NTC драйвер |
+| `equipment.has_ds18b20_driver` | bool | - | Використовується DS18B20 драйвер |
+
+**Readwrite (налаштування, persist в NVS):**
+
+| Key | Type | Unit | Min | Max | Step | Default | Опис |
+|-----|------|------|-----|-----|------|---------|------|
+| `equipment.filter_coeff` | int | - | 0 | 10 | 1 | 4 | Цифровий фільтр EMA (0=вимкнено) |
+| `equipment.ntc_beta` | int | - | 2000 | 5000 | 1 | 3950 | B-коефіцієнт NTC |
+| `equipment.ntc_r_series` | int | Ом | 1000 | 100000 | 100 | 10000 | Послідовний резистор NTC |
+| `equipment.ntc_r_nominal` | int | Ом | 1000 | 100000 | 100 | 10000 | Номінальний опір NTC (25°C) |
+| `equipment.ds18b20_offset` | float | °C | -5.0 | 5.0 | 0.1 | 0.0 | Корекція показань DS18B20 |
 
 ### MQTT
 
 **Publish:** equipment.air_temp, equipment.evap_temp, equipment.cond_temp,
-equipment.compressor, equipment.heater, equipment.sensor1_ok
+equipment.compressor, equipment.defrost_relay, equipment.sensor1_ok
 
-**Subscribe:** немає (EM не приймає команд ззовні)
+**Subscribe:** equipment.ntc_beta, equipment.ntc_r_series, equipment.ntc_r_nominal,
+equipment.ds18b20_offset, equipment.filter_coeff
 
 ---
 
@@ -253,8 +284,8 @@ High Temp alarm блокується у два етапи:
 
 | Key | Type | Unit | Min | Max | Step | Default | Опис |
 |-----|------|------|-----|-----|------|---------|------|
-| `protection.high_limit` | float | C | -50.0 | 99.0 | 0.5 | 12.0 | Верхня межа температури |
-| `protection.low_limit` | float | C | -99.0 | 50.0 | 0.5 | -35.0 | Нижня межа температури |
+| `protection.high_limit` | float | °C | -50.0 | 99.0 | 0.5 | 12.0 | Верхня межа температури |
+| `protection.low_limit` | float | °C | -99.0 | 50.0 | 0.5 | -35.0 | Нижня межа температури |
 | `protection.high_alarm_delay` | int | хв | 0 | 120 | 1 | 30 | Затримка аварії високої T |
 | `protection.low_alarm_delay` | int | хв | 0 | 120 | 1 | 30 | Затримка аварії низької T |
 | `protection.door_delay` | int | хв | 0 | 60 | 1 | 5 | Затримка аварії дверей |
@@ -295,7 +326,7 @@ protection.post_defrost_delay, protection.reset_alarms
 Equipment (priority 0)  → читає сенсори, арбітраж, публікує стан
 Protection (priority 1) → моніторить аварії, публікує alarm state
 Thermostat (priority 2) → регулювання, публікує req.compressor/fan
-Defrost (priority 2)    → цикл відтайки, публікує req.heater/valve
+Defrost (priority 2)    → цикл відтайки, публікує req.defrost_relay
 ```
 
 Equipment завжди оновлюється першим, бо Protection та Thermostat залежать від
@@ -304,4 +335,5 @@ Equipment завжди оновлюється першим, бо Protection та
 
 ## Changelog
 
+- 2026-03-01 — Рефакторинг: defrost_relay merger (heater+hg_valve->defrost_relay), додано NTC/DS18B20 settings, has_* keys оновлено, EMA filter + rounding, pcf8574_relay/pcf8574_input drivers
 - 2026-02-25 — Створено: Equipment Manager + Protection документація

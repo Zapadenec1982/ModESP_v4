@@ -2,6 +2,24 @@
 
 > Повний changelog проекту. Останні зміни також дублюються в CLAUDE.md.
 
+## 2026-03-01
+
+- Phase 12a DONE: KC868-A6 board support. I2C bus + PCF8574 expander підтримка в HAL.
+  pcf8574_relay driver (actuator через I2C), pcf8574_input driver (sensor через I2C).
+  board_kc868a6.json (6 реле PCF8574 @0x24, 6 входів PCF8574 @0x22).
+  100% backward compatible з dev board.
+- defrost_relay merger: heater + hg_valve → єдиний defrost_relay role.
+  EquipmentModule: defrost_relay_ замість heater_/hg_valve_. Один інтерлок замість двох.
+  Defrost: req.defrost_relay замість req.heater/req.hg_valve.
+  Equipment manifest: defrost_relay role з driver ["relay", "pcf8574_relay"].
+- Heap optimization: NVS batch API (batch_open/batch_close — один handle для flush_to_nvs),
+  WS broadcast interval 1000→3000ms, float rounding (roundf 0.01°C),
+  thermostat publish debounce (effective_setpoint, display_temp),
+  heap guard 40KB (skip WS send), system.heap_largest diagnostics.
+- Host C++ unit tests: tests/host/ з doctest (90 test cases для thermostat/defrost/protection).
+- Documentation refactoring: all docs audited and updated to match actual code state.
+  53 STATE_META, 37 MQTT pub, 52 MQTT sub, 6 drivers, 264 pytest + 90 doctest.
+
 ## 2026-02-24
 
 - Phase 14b DONE: 6-channel dynamic DataLogger + ChartWidget. TempRecord 12→16 bytes (ch[6] array),

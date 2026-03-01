@@ -29,9 +29,12 @@ webui/
 │   ├── components/              # Загальнi компоненти
 │   │   ├── Layout.svelte        # Sidebar (desktop) + bottom tabs (mobile)
 │   │   ├── Card.svelte          # Collapsible card wrapper
+│   │   ├── Clock.svelte         # Годинник на Dashboard (поточний час)
 │   │   ├── Icon.svelte          # SVG icon renderer
+│   │   ├── MiniChart.svelte     # Sparkline температури в Dashboard tiles
+│   │   ├── Toast.svelte         # Toast повiдомлення (save/error feedback)
 │   │   └── WidgetRenderer.svelte # Dispatch widget по типу
-│   │   └── widgets/             # 20 widget компонентiв
+│   │   └── widgets/             # 21 widget компонентiв
 │   └── pages/                   # 3 page компоненти
 │       ├── Dashboard.svelte     # Tile-based overview
 │       ├── DynamicPage.svelte   # Рендер будь-якої ui.json page
@@ -89,7 +92,7 @@ webui/
 
 `WidgetRenderer.svelte` отримує `widget` config та `value`, дiспатчить на компонент по `widget.widget` типу.
 
-### 20 widget типiв
+### 21 widget типiв
 
 | Widget | Тип | Опис |
 |--------|-----|------|
@@ -170,7 +173,7 @@ webui/
 
 Select widget options можуть мати `requires_state`:
 ```json
-{"value": 2, "label": "Гарячий газ", "requires_state": "equipment.has_hg_valve"}
+{"value": 2, "label": "Гарячий газ", "requires_state": "equipment.has_defrost_relay"}
 ```
 Якщо `$state[requires_state]` === `false` -- option показується як disabled з hint.
 
@@ -240,4 +243,5 @@ cd webui && npm run deploy
 
 ## Changelog
 
+- 2026-03-01 -- Оновлено requires_state приклад (defrost_relay), додано компоненти Toast/MiniChart/Clock
 - 2026-02-25 -- Створено

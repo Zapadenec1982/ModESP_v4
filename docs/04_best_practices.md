@@ -16,7 +16,7 @@
 
 ЗАБОРОНЕНО в hot path:
   ❌ std::string, std::vector, std::map
-  ❌ nlohmann::json
+  ❌ json parsing (будь-яке: jsmn тільки при init)
   ❌ new / malloc
   ❌ String (Arduino)
 ```
@@ -24,17 +24,17 @@
 ### Правило: Heap дозволений тільки при ініціалізації
 
 ```cpp
-// ОК: один раз при старті
+// ОК: один раз при старті (jsmn or config_service)
 bool on_init() override {
-    auto config = nlohmann::json::parse(file_contents);  // heap — OK
-    setpoint_ = config["setpoint"].get<float>();
+    // ConfigService parses board.json + bindings.json using jsmn at boot
+    setpoint_ = read_float("thermostat.setpoint");  // from SharedState (restored by PersistService)
     return true;
 }
 
 // НЕ ОК: кожен цикл
 void on_update(uint32_t dt_ms) override {
-    auto j = nlohmann::json({{"temp", current_temp_}});  // ❌ heap щоразу
-    // ...
+    // ❌ будь-який json parsing в hot path — забороняється
+    // ❌ std::string або new в on_update
 }
 ```
 
@@ -106,12 +106,12 @@ bool validate_reading(float value, float prev_value,
 ```cpp
 // ❌ ПОГАНО — неявна залежність на глобальний singleton
 void ThermostatModule::on_update(uint32_t dt_ms) {
-    auto temp = App::instance().state().get("sensors.temp1");
+    auto temp = App::instance().state().get("equipment.air_temp");
 }
 
 // ✅ ДОБРЕ — використовує BaseModule API
 void ThermostatModule::on_update(uint32_t dt_ms) {
-    auto temp = state_get_float("sensors.temp1");
+    auto temp = read_float("equipment.air_temp");
 }
 ```
 
@@ -122,8 +122,9 @@ void ThermostatModule::on_update(uint32_t dt_ms) {
 
 ```cpp
 // ✅ В main.cpp — живуть весь час роботи прошивки
-static DS18B20Driver temp_sensor(GPIO_NUM_4);
-static ThermostatModule thermostat;
+static modesp::HAL hal;
+static modesp::DriverManager driver_manager;
+static EquipmentModule equipment;
 
 // ❌ Ніколи:
 auto* thermostat = new ThermostatModule();
@@ -172,3 +173,28 @@ namespace modesp {
 
 SystemMonitor публікує це в SharedState при старті.
 Видно через WebSocket та логи.
+
+## 6. Equipment Layer
+
+### Правило: Бізнес-модулі НЕ мають прямого доступу до HAL
+
+Тільки EquipmentModule має посилання на драйвери. Всі інші модулі
+працюють через SharedState requests/state:
+
+```
+Thermostat → state_set("thermostat.req.compressor", true)
+Defrost    → state_set("defrost.req.defrost_relay", true)
+Protection → reads equipment.air_temp → publishes alarm state
+
+Equipment Manager → reads requests → arbitration → relay.set()
+```
+
+Ніколи не створювати драйвери в бізнес-модулях.
+Ніколи не звертатись до HAL напряму з Thermostat/Defrost/Protection.
+Єдиний модуль з доступом до HAL — EquipmentModule (priority CRITICAL).
+
+---
+
+## Changelog
+
+- 2026-03-01 — Оновлено приклади (jsmn замість nlohmann, Equipment Layer pattern, read_float API)

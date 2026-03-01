@@ -6,6 +6,7 @@
 ![C++17](https://img.shields.io/badge/C%2B%2B-17-orange)
 ![License](https://img.shields.io/badge/License-GPL--3.0-green)
 ![Platform](https://img.shields.io/badge/Platform-ESP32--WROOM--32-red)
+![Platform](https://img.shields.io/badge/Platform-KC868--A6-red)
 
 ---
 
@@ -45,12 +46,12 @@ ModESP v4 is an open-source firmware framework that turns a cheap ESP32 module i
 ```
   Thermostat          Defrost           Protection
       │                  │                  │
-      │ req.compressor   │ req.heater       │ lockout
+      │ req.compressor   │ req.defrost_relay │ lockout
       ▼                  ▼                  ▼
   ┌──────────────────────────────────────────────┐
   │           Equipment Manager                   │
   │  Arbitration: Protection > Defrost > Thermo   │
-  │  Interlocks: heater↔compressor, valve→comp    │
+  │  Interlocks: defrost_relay↔compressor         │
   └──────────────────────────────────────────────┘
       │           │           │           │
     Relay1      Relay2      Relay3      Relay4
@@ -78,6 +79,8 @@ ModESP_v4/
 │   ├── digital_input/             # GPIO digital input (door contact etc.)
 │   ├── ds18b20/                   # Dallas DS18B20 temperature sensor (OneWire)
 │   ├── ntc/                       # NTC thermistor via ADC (B-parameter equation)
+│   ├── pcf8574_input/             # I2C PCF8574 digital input (KC868-A6)
+│   ├── pcf8574_relay/             # I2C PCF8574 relay output (KC868-A6)
 │   └── relay/                     # GPIO relay with min on/off time protection
 ├── modules/
 │   ├── equipment/                 # HAL owner, arbitration, interlocks
@@ -92,7 +95,7 @@ ModESP_v4/
 │   ├── src/                       # App.svelte, stores, components (24 widgets), pages
 │   └── scripts/deploy.js          # Gzip + copy to data/www/
 ├── data/
-│   ├── board.json                 # PCB pin assignment (4 relays, 1 OW, 1 DI, 2 ADC)
+│   ├── board.json                 # PCB pin assignment (gpio_outputs, onewire_buses, gpio_inputs, adc_channels, i2c_buses, i2c_expanders, expander_outputs, expander_inputs)
 │   ├── bindings.json              # Runtime: role → driver → GPIO mapping
 │   ├── ui.json                    # 🔄 Generated
 │   └── www/                       # Deployed WebUI (index.html, bundle.js.gz, bundle.css.gz)
@@ -111,7 +114,7 @@ ModESP_v4/
 - [ESP-IDF v5.5](https://docs.espressif.com/projects/esp-idf/en/v5.5/esp32/get-started/)
 - Python 3.8+ (for generator and tests)
 - Node.js 18+ (for WebUI build)
-- ESP32-WROOM-32 board
+- ESP32-WROOM-32 board (DevKit GPIO-direct) or KC868-A6 (I2C PCF8574 expander)
 
 ### Build & Flash
 
@@ -137,7 +140,8 @@ npm run deploy   # → data/www/
 ### Run Tests
 
 ```bash
-python -m pytest tools/tests/ -v   # 264 tests
+python -m pytest tools/tests/ -v          # 264 pytest tests
+cd tests/host && cmake -B build && cmake --build build && ctest --test-dir build  # 90 C++ host tests
 ```
 
 ---
@@ -160,7 +164,7 @@ python -m pytest tools/tests/ -v   # 264 tests
 | `/api/log` | GET | DataLogger: streaming chunked JSON (?hours=24) |
 | `/api/log/summary` | GET | DataLogger: record counts and flash usage |
 | `/api/restart` | POST | Restart ESP32 |
-| `/ws` | WS | Real-time state broadcast |
+| `/ws` | WS | Real-time state broadcast (max 3 clients, 3s interval, 20s heartbeat) |
 
 ---
 
@@ -169,14 +173,16 @@ python -m pytest tools/tests/ -v   # 264 tests
 **Phase 14b (DataLogger 6-channel) complete.** Milestone M3 "Production Ready" achieved. The following is fully operational:
 
 - 5 business modules: Equipment Manager, Thermostat v2, Defrost (7-phase), Protection (5 alarms), DataLogger (6-ch)
-- 4 drivers: DS18B20 (OneWire, MATCH_ROM), Relay (GPIO), Digital Input (GPIO), NTC (ADC thermistor)
+- 6 drivers: DS18B20 (OneWire), Relay (GPIO), Digital Input (GPIO), NTC (ADC), PCF8574 Relay (I2C), PCF8574 Input (I2C)
+- 2 boards: ESP32-DevKit (GPIO direct), KC868-A6 (I2C PCF8574 expander)
 - 6-channel temperature logging with event history, SVG chart, CSV export
 - Night Setback (4 modes), post-defrost alarm suppression, display during defrost
 - Progressive feature disclosure with runtime UI visibility (visible_when, requires_state)
 - Svelte WebUI with 24 widget types, light/dark theme, i18n UA/EN (44KB gzipped)
 - MQTT with TLS, OTA with rollback, auto-persist settings to NVS
 - WiFi STA + AP fallback
-- 97 state keys, 264 pytest tests green
+- 53 STATE_META entries, 37 MQTT pub, 52 MQTT sub
+- 264 pytest tests + 90 C++ host tests green
 - Free heap after boot: **176 KB** / 240 KB
 
 ---
@@ -193,7 +199,7 @@ python -m pytest tools/tests/ -v   # 264 tests
 | Filesystem | LittleFS |
 | WebUI | Svelte 4, Rollup, Lucide icons, i18n UA/EN |
 | Code generation | Python 3 (manifest → 5 artifacts, ~1644 lines) |
-| Testing | pytest (264 tests) |
+| Testing | pytest (264 tests) + doctest (90 C++ host tests) |
 
 ---
 

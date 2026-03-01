@@ -58,9 +58,9 @@ FastBot2 — новіша версія. Алгоритми цікаві, але 
 | Бібліотека | Що взяти | Для якої фази |
 |-----------|---------|---------------|
 | **GyverPID** | PID auto-tune, anti-windup, adaptive | Phase 11c (PID регулювання) |
-| **GyverNTC** | Формула Стейнхарта-Харта, B-коефіцієнти | Phase 11c (NTC через ADC) |
+| **GyverNTC** | Формула Стейнхарта-Харта, B-коефіцієнти | ~~Phase 11c~~ (РЕАЛІЗОВАНО — NTC driver, Phase 11b) |
 | **GyverOLED** | SSD1306 I2C display patterns | Phase 8 (LCD/OLED) |
-| **GyverDS18** | SEARCH_ROM алгоритм | Phase 11b (multi-sensor) |
+| **GyverDS18** | SEARCH_ROM алгоритм | ~~Phase 11b~~ (РЕАЛІЗОВАНО — SEARCH_ROM, Phase 11b) |
 | **FastBot2** | Telegram Bot API мінімалістичний підхід | Telegram notifications |
 
 ---
@@ -121,17 +121,11 @@ ModESP вже сумісний через MQTT — нічого додатков
 
 ---
 
-## 📊 DataLogger з графіками
+## ~~📊 DataLogger з графіками~~ — РЕАЛІЗОВАНО (Phase 14+14b)
 
-**Ідея:** Зберігати історію температур для відображення трендів.
-
-**Варіанти:**
-- ESP32: circular buffer в RAM (обмежений, ~1-4KB = кілька годин)
-- ESP32-S3 + PSRAM: circular buffer 350KB = 24 години
-- LittleFS: запис на flash (повільніше, обмежений ресурс flash)
-- Linux: PostgreSQL/InfluxDB (необмежено)
-
-**Для WebUI:** Phase 7b-c (графіки температури на Dashboard)
+**Статус:** Повністю реалізовано. 6-channel dynamic DataLogger з LittleFS,
+streaming chunked JSON, ChartWidget (SVG Catmull-Rom), CSV export, event logging.
+Деталі: docs/09_datalogger.md
 
 ---
 
@@ -146,4 +140,5 @@ ModESP вже сумісний через MQTT — нічого додатков
 ---
 
 ## Changelog
+- 2026-03-01 — Оновлено: DataLogger та GyverDS18/NTC помічені як реалізовані
 - 2026-02-21 — Створено. Зібрано ідеї з обговорень.

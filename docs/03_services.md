@@ -9,7 +9,7 @@
 |--------|-----------|---------|-----|
 | ErrorService | CRITICAL | Помилки, Safe Mode | ~2 KB |
 | WatchdogService | CRITICAL | Heartbeat модулів | ~0.5 KB |
-| ConfigService | HIGH | Завантаження/збереження конфіг | ~1 KB |
+| ConfigService | CRITICAL | Завантаження/збереження конфіг | ~1 KB |
 | PersistService | CRITICAL | Автозбереження стану в NVS | ~0.5 KB |
 | LoggerService | LOW | Ring buffer логів | ~5 KB |
 | SystemMonitor | LOW | RAM, uptime, boot reason | ~0.2 KB |
@@ -44,21 +44,18 @@ FATAL    → Safe Mode (вимкнути актуатори, чекати втр
 ```cpp
 class ErrorService : public BaseModule {
 public:
-    ErrorService() : BaseModule("error", ModulePriority::CRITICAL) {}
+    ErrorService();  // BaseModule("error", CRITICAL)
 
     // Модулі повідомляють про помилки
     void report(const char* source, int32_t code,
                 ErrorSeverity severity, const char* description);
 
-    // Налаштування реакції на рівень помилки
-    void set_policy(ErrorSeverity severity, ErrorAction action);
-
     // Стан
     size_t error_count() const;
     bool is_safe_mode() const;
 
-    // Останні 16 помилок (для діагностики через WebSocket)
-    const etl::vector<ErrorRecord, 16>& history() const;
+    // Останні 16 помилок (circular buffer для діагностики)
+    const etl::circular_buffer<ErrorRecord, 16>& history() const;
 };
 ```
 
@@ -71,6 +68,8 @@ WatchdogService перевіряє чи не протерміновано.
 ```cpp
 class WatchdogService : public BaseModule {
 public:
+    WatchdogService(ErrorService& error_service, ModuleManager& manager);
+
     // Таймаути по пріоритету модуля
     struct Timeouts {
         uint32_t critical_ms = 5000;   // 5 сек
@@ -102,7 +101,8 @@ Runtime:
   POST /api/bindings → оновити bindings.json → restart
 ```
 
-Парсить секції: `gpio_outputs`, `onewire_buses`, `gpio_inputs`, `adc_channels`.
+Парсить секції: `gpio_outputs`, `onewire_buses`, `gpio_inputs`, `adc_channels`,
+`i2c_buses`, `i2c_expanders`, `expander_outputs`, `expander_inputs` (підтримка KC868-A6 та інших I2C плат).
 Кожен Binding включає: `role`, `driver`, `module`, `output`/`bus`/`input`/`channel`, `address` (опційно).
 
 ## 4. PersistService — Автозбереження стану
@@ -183,6 +183,7 @@ public:
 
     void on_update(uint32_t dt_ms) override {
         // Оновлює: system.free_heap, system.min_free_heap,
+        // system.heap_largest (найбільший вільний блок — моніторинг фрагментації),
         // system.uptime, system.cpu_temp
         // Перевіряє пороги heap → звертається до ErrorService
     }
@@ -192,3 +193,25 @@ public:
 **Boot reason** — критично для діагностики в полі.
 Якщо ESP32 перезавантажився через watchdog — це ознака бага.
 Якщо через brownout — проблема з живленням.
+
+## 7. NVS Helper — утиліти для роботи з NVS
+
+`nvs_helper.h` (`namespace nvs_helper`) — обгортки над `nvs_flash` API.
+
+**Основні функції:**
+- `init()` — ініціалізація NVS flash
+- `read_str`, `write_str`, `read_i32`, `write_i32`, `read_bool`, `write_bool`, `read_float` — прості read/write операції
+
+**Batch API** (для зменшення heap фрагментації):
+- `batch_open(ns, readonly)` — відкриває NVS handle один раз
+- `batch_read_float`, `batch_read_i32`, `batch_read_bool` — читання через відкритий handle
+- `batch_write_float`, `batch_write_i32`, `batch_write_bool`, `batch_erase_key` — запис через handle
+- `batch_close(handle)` — закриває handle + commit
+
+Використовується в PersistService: один `batch_open` замість 30+ окремих `nvs_open/close` при boot та flush.
+
+---
+
+## Changelog
+
+- 2026-03-01 — Оновлено пріоритети, додано NVS batch API, heap_largest, KC868-A6 parsing
