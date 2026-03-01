@@ -1,5 +1,6 @@
 # === Build ===
 /build/
+tests/host/build/
 *.elf
 *.map
 
