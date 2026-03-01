@@ -100,7 +100,11 @@
   },
 
   "mqtt": {
-    "publish": [],
+    "publish": [
+      "datalogger.records_count",
+      "datalogger.events_count",
+      "datalogger.flash_used"
+    ],
     "subscribe": [
       "datalogger.enabled",
       "datalogger.retention_hours",
