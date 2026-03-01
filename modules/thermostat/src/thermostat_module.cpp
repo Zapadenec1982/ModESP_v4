@@ -342,12 +342,8 @@ void ThermostatModule::on_update(uint32_t dt_ms) {
     update_evap_fan();
     update_cond_fan(dt_ms);
 
-    // 9. Публікація лічильників (throttle 30s — зменшення MQTT спаму)
-    timer_publish_ms_ += dt_ms;
-    if (timer_publish_ms_ >= 30000) {
-        timer_publish_ms_ = 0;
-        publish_outputs();
-    }
+    // 9. Публікація лічильників
+    publish_outputs();
 }
 
 // ═══════════════════════════════════════════════════════════════

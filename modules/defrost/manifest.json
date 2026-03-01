@@ -453,8 +453,6 @@
       "defrost.active",
       "defrost.phase",
       "defrost.state",
-      "defrost.phase_timer",
-      "defrost.interval_timer",
       "defrost.defrost_count",
       "defrost.last_termination",
       "defrost.consecutive_timeouts"

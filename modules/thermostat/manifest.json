@@ -659,8 +659,6 @@
     "publish": [
       "thermostat.temperature",
       "thermostat.state",
-      "thermostat.comp_on_time",
-      "thermostat.comp_off_time",
       "thermostat.night_active",
       "thermostat.effective_setpoint",
       "thermostat.display_temp"

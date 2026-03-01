@@ -133,9 +133,6 @@ private:
     bool  was_defrost_active_  = false;    // для детекції start/end transition
     bool  protection_lockout_  = false;
 
-    // Throttle публікації таймерів (зменшення MQTT спаму)
-    uint32_t timer_publish_ms_ = 0;
-
     // Кеш попередніх значень для уникнення зайвих version bumps
     float last_effective_sp_   = -999.0f;
     float last_display_temp_   = -999.0f;
