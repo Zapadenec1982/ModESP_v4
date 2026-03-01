@@ -58,9 +58,14 @@
   - i18n: +3 ключі (conn.lost, conn.retry, conn.restored)
   - Bundle: 47.1KB JS gz + 8.1KB CSS gz
 
-- [ ] **Сесія 1.1a:** Delta-Only WS Broadcasts
-  - SharedState change tracking bitset, for_each_changed(), delta serialization
-  - Промпт: `prompts/sprint1_session1_1a_delta_broadcasts.md`
+- [x] **Сесія 1.1a:** Delta-Only WS Broadcasts ✓
+  - SharedState changed_keys_ вектор + track_change параметр
+  - WsService: for_each_changed_and_clear() delta, send_full_state_to(fd)
+  - BaseModule: state_set(track_change=false) для таймерів/діагностики
+  - Fix DataLogger: прибрано NTP guard що блокував on_update()
+  - Fix DS18B20: MATCH_ROM only, прибрано auto-scan/auto-assign
+  - Fix Bindings: unbind/rebind UI, save без required roles (з confirm)
+  - Bundle: 48.0KB JS gz + 8.1KB CSS gz
 
 - [ ] **Сесія 1.1b:** Broadcast Tuning + Cleanup
   - Знизити heap guard, зменшити interval до 1500ms, прибрати BUG-025 workaround
@@ -176,9 +181,9 @@
 ### Memory Workarounds (костилі → proper fix у Sprint 1)
 | Костиль | Файл | Proper fix |
 |---------|------|-----------|
-| WS heap guard 40KB | ws_service.cpp:361 | Delta broadcasts (Sprint 1.1a) |
+| WS heap guard 40KB | ws_service.cpp:361 | ✅ Delta broadcasts зменшують розмір. Знизити guard (Sprint 1.1b) |
 | Broadcast 3000ms | ws_service.h:48 | Delta → зменшити до 1500ms (Sprint 1.1b) |
-| MQTT timer exclusion (BUG-025) | manifests | track_change=false в SharedState (Sprint 1.1a) |
+| MQTT timer exclusion (BUG-025) | manifests | ✅ track_change=false в SharedState (Sprint 1.1a DONE) |
 | Float rounding 0.01°C | equipment_module.cpp:186 | OK — proper optimization, залишити |
 
 ### Open AUDIT Items (MVP + Production)
@@ -204,7 +209,7 @@
 | Features | Static rebuild: bindings → FeatureResolver → features_config.h при boot |
 | UI | Manifest → generate_ui.py → ui.json → Svelte WebUI runtime |
 | **Design System** | Industrial HMI: tokens.css, semantic colors, 44px touch, mobile-first |
-| **WS Broadcast** | Delta-only (planned Sprint 1): changed keys bitmap, ~200B vs 3.5KB |
+| **WS Broadcast** | ✅ Delta-only (Sprint 1.1a): changed_keys_ вектор, ~200B vs 3.5KB, track_change=false для таймерів |
 
 ---
 
@@ -247,6 +252,7 @@
 
 ## Changelog
 
+- 2026-03-02 — Session 1.1a DONE: Delta WS broadcasts, DataLogger NTP fix, DS18B20 MATCH_ROM only, Bindings unbind/rebind UI.
 - 2026-03-01 — Повний план MVP→Production (14+20 сесій). WebUI UX redesign як #1 пріоритет. Створено prompts/ директорію з промптами для кожної сесії.
 - 2026-03-01 — Phase 12a DONE: KC868-A6 board support. Heap optimization.
 - 2026-02-24 — Phase 14b + 7b-c DONE: 6-channel DataLogger, WebUI Polish.

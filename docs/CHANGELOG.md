@@ -2,6 +2,21 @@
 
 > Повний changelog проекту. Останні зміни також дублюються в CLAUDE.md.
 
+## 2026-03-02
+
+- **Sprint 1 Session 1.1a:** Delta WS Broadcasts + Critical Bugfixes:
+  - SharedState: changed_keys_ вектор + track_change параметр для всіх set() overloads
+  - WsService: for_each_changed_and_clear() delta broadcast (~200B замість ~3.5KB)
+  - send_full_state_to(fd) для нових клієнтів
+  - BaseModule: state_set(track_change=false) для таймерів/діагностики
+  - Modules: thermostat/defrost/system_monitor timers не тригерять WS broadcast
+  - Fix DataLogger: прибрано `if (now < 1700000000) return` guard що блокував ВСЮ on_update() без NTP
+  - Fix DS18B20: прибрано auto-scan/SKIP_ROM, enforced MATCH_ROM only (критично для безпеки)
+  - Fix Bindings WebUI: OneWireDiscovery показує ВСІ датчики + unbind кнопка
+  - Fix Bindings save: canSave не блокується по missingRequired, confirm діалог замість блокування
+  - i18n: +5 ключів (bind.confirm_missing, bind.confirm_alarm, bind.unbind, bind.no_free_roles, bind.found_total)
+  - Bundle: 48.0KB JS gz + 8.1KB CSS gz
+
 ## 2026-03-01
 
 - **Sprint 1 Session 1a:** Design Tokens — створено `webui/src/styles/tokens.css` (єдине джерело
