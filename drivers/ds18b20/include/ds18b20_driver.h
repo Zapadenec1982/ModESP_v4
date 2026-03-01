@@ -68,7 +68,7 @@ private:
     bool     start_conversion();
     bool     read_scratchpad(uint8_t* buf, size_t len);
     bool     read_temperature(float& temp_out);
-    void     send_rom_command();    // MATCH_ROM або SKIP_ROM залежно від has_address_
+    void     send_rom_command();    // Завжди MATCH_ROM — адреса обов'язкова
     bool     parse_address(const char* addr_str);  // "28:FF:..." → rom_address_[]
 
     // ── Static OneWire helpers (для scan — без instance) ──
@@ -108,10 +108,6 @@ private:
 
     // Китайські клони DS18B20 (A5 A5 в reserved bytes) мають невірний CRC
     bool     clone_detected_      = false;
-
-    // Auto-scan при init: визначає кількість датчиків на шині
-    bool     bus_scanned_         = false;
-    uint8_t  bus_device_count_    = 0;
 
     // Validation limits
     static constexpr float MIN_VALID_TEMP  = -55.0f;

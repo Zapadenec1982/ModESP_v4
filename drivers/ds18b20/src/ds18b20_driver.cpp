@@ -24,7 +24,6 @@ static const char* TAG = "DS18B20";
 // ═══════════════════════════════════════════════════════════════
 // DS18B20 ROM commands
 // ═══════════════════════════════════════════════════════════════
-static constexpr uint8_t CMD_SKIP_ROM      = 0xCC;
 static constexpr uint8_t CMD_MATCH_ROM     = 0x55;
 static constexpr uint8_t CMD_CONVERT_T     = 0x44;
 static constexpr uint8_t CMD_READ_SCRATCH  = 0xBE;
@@ -45,8 +44,10 @@ void DS18B20Driver::configure(const char* role, gpio_num_t gpio,
             has_address_ = true;
             ESP_LOGI(TAG, "[%s] MATCH_ROM address: %s", role, address);
         } else {
-            ESP_LOGW(TAG, "[%s] Invalid ROM address: %s — using SKIP_ROM", role, address);
+            ESP_LOGE(TAG, "[%s] Invalid ROM address: %s", role, address);
         }
+    } else {
+        ESP_LOGE(TAG, "[%s] No ROM address — sensor MUST have address in bindings!", role);
     }
 }
 
@@ -74,43 +75,21 @@ bool DS18B20Driver::init() {
     }
     gpio_set_level(gpio_, 1);  // Idle HIGH
 
-    // Auto-scan: якщо адреса не задана в bindings, визначаємо кількість датчиків
+    // Без адреси — помилка ініціалізації. Жодного auto-assign!
     if (!has_address_) {
-        // Стабілізація шини перед скануванням
-        vTaskDelay(pdMS_TO_TICKS(10));
-
-        RomAddress devices[MAX_DEVICES_PER_BUS];
-        size_t count = scan_bus(gpio_, devices, MAX_DEVICES_PER_BUS);
-        bus_device_count_ = (uint8_t)count;
-        bus_scanned_ = true;
-
-        if (count == 1) {
-            // Єдиний на шині — безпечно, автоматично MATCH_ROM
-            memcpy(rom_address_, devices[0].bytes, 8);
-            has_address_ = true;
-            char addr_str[24];
-            format_address(rom_address_, addr_str, sizeof(addr_str));
-            ESP_LOGI(TAG, "[%s] Single sensor auto-assigned: %s", role_.c_str(), addr_str);
-        } else if (count > 1) {
-            // Кілька на шині без адрес — небезпечно, не читаємо
-            ESP_LOGE(TAG, "[%s] %d sensors on GPIO %d — MATCH_ROM address required!",
-                     role_.c_str(), (int)count, gpio_);
-            ESP_LOGE(TAG, "[%s] Assign addresses via WebUI -> Bindings -> OneWire Discovery",
-                     role_.c_str());
-        } else {
-            ESP_LOGW(TAG, "[%s] No sensor on GPIO %d — will retry in runtime", role_.c_str(), gpio_);
-        }
-    } else {
-        // Адреса задана — перевіряємо наявність датчика
-        if (!onewire_reset()) {
-            ESP_LOGW(TAG, "[%s] No response on GPIO %d — will retry in runtime",
-                     role_.c_str(), gpio_);
-        }
+        ESP_LOGE(TAG, "[%s] No ROM address configured — init FAILED", role_.c_str());
+        ESP_LOGE(TAG, "[%s] Assign address via WebUI → Bindings → OneWire Discovery", role_.c_str());
+        return false;
     }
 
-    ESP_LOGI(TAG, "[%s] Initialized (GPIO=%d, interval=%lu ms, %s)",
-             role_.c_str(), gpio_, read_interval_ms_,
-             has_address_ ? "MATCH_ROM" : "NO_ADDRESS");
+    // Адреса задана — перевіряємо наявність датчика на шині
+    if (!onewire_reset()) {
+        ESP_LOGW(TAG, "[%s] No response on GPIO %d — will retry in runtime",
+                 role_.c_str(), gpio_);
+    }
+
+    ESP_LOGI(TAG, "[%s] Initialized (GPIO=%d, interval=%lu ms, MATCH_ROM)",
+             role_.c_str(), gpio_, read_interval_ms_);
     return true;
 }
 
@@ -253,14 +232,10 @@ uint8_t DS18B20Driver::onewire_read_byte() {
 // ═══════════════════════════════════════════════════════════════
 
 void DS18B20Driver::send_rom_command() {
-    // MATCH_ROM адресує конкретний датчик, SKIP_ROM — єдиний на шині
-    if (has_address_) {
-        onewire_write_byte(CMD_MATCH_ROM);
-        for (uint8_t i = 0; i < 8; i++) {
-            onewire_write_byte(rom_address_[i]);
-        }
-    } else {
-        onewire_write_byte(CMD_SKIP_ROM);
+    // Завжди MATCH_ROM — адреса обов'язкова
+    onewire_write_byte(CMD_MATCH_ROM);
+    for (uint8_t i = 0; i < 8; i++) {
+        onewire_write_byte(rom_address_[i]);
     }
 }
 
