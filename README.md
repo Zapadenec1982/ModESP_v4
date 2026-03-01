@@ -163,6 +163,9 @@ cd tests/host && cmake -B build && cmake --build build && ctest --test-dir build
 | `/api/onewire/scan` | GET | Scan OneWire bus (SEARCH_ROM) |
 | `/api/log` | GET | DataLogger: streaming chunked JSON (?hours=24) |
 | `/api/log/summary` | GET | DataLogger: record counts and flash usage |
+| `/api/wifi/ap` | GET/POST | WiFi AP mode settings |
+| `/api/time` | GET/POST | Current time / NTP configuration |
+| `/api/factory-reset` | POST | Factory reset (clear NVS + restart) |
 | `/api/restart` | POST | Restart ESP32 |
 | `/ws` | WS | Real-time state broadcast (max 3 clients, 3s interval, 20s heartbeat) |
 

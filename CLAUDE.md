@@ -58,7 +58,7 @@ board.json + bindings.json ─┘
 
 - **Асиметричний диференціал:** ON при T >= effective_SP + differential, OFF при T <= effective_SP
 - **State machine:** STARTUP → IDLE ↔ COOLING, SAFETY_RUN (при відмові датчика)
-- **Захист компресора:** min_on_time (cOt), min_off_time (cFt), startup_delay
+- **Захист компресора:** min_on_time (хв), min_off_time (хв), startup_delay (хв)
 - **Safety Run:** циклічна робота (safety_run_on / safety_run_off) при sensor1_ok=false
 - **Вентилятор випарника:** 3 режими (постійно / з компресором / за T_evap з гістерезисом)
 - **Вентилятор конденсатора:** синхронно з компресором + затримка OFF (cond_fan_delay)
@@ -83,11 +83,11 @@ board.json + bindings.json ─┘
 ### Defrost (Phase 9.4)
 
 - **7-фазна state machine:** IDLE → [STABILIZE → VALVE_OPEN →] ACTIVE → [EQUALIZE →] DRIP → FAD → IDLE
-- **3 типи відтайки (dFT):** 0=природна (зупинка), 1=тен, 2=гарячий газ (7 фаз)
-- **4 ініціації:** таймер (dit з dct=1 реальний/dct=2 компресор), demand (T_evap<dSS), комбінований, ручний
-- **Завершення:** по T_evap >= dSt (основна), по таймеру безпеки dEt, consecutive timeout counter
-- **Оптимізація:** skip defrost якщо T_evap > dSt (випарник чистий)
-- **FAD:** Fan After Defrost — компресор+конд.вент ON, вент.вип OFF, завершення по FAT або таймеру FAd
+- **3 типи відтайки:** 0=природна (зупинка), 1=тен, 2=гарячий газ (7 фаз)
+- **4 ініціації:** таймер (interval з counter_mode=1 реальний/2 компресор), demand (T_evap < demand_temp), комбінований, ручний
+- **Завершення:** по T_evap >= end_temp (основна), по таймеру безпеки max_duration, consecutive timeout counter
+- **Оптимізація:** skip defrost якщо T_evap > end_temp (випарник чистий)
+- **FAD:** Fan After Defrost — компресор+конд.вент ON, вент.вип OFF, завершення по fad_temp або таймеру fad_duration
 - **14 persist параметрів** + 2 runtime persist (interval_timer, defrost_count)
 - **NVS persistence:** interval_timer і defrost_count зберігаються через PersistService
 - Requests: `defrost.req.compressor`, `defrost.req.defrost_relay`, `defrost.req.evap_fan`, `defrost.req.cond_fan`
@@ -155,7 +155,7 @@ board.json + bindings.json ─┘
 - `drivers/*/manifest.json` — опис драйверів (category, hardware_type, settings)
 - `data/board.json` — PCB pin assignment (gpio_outputs, onewire_buses, gpio_inputs, adc_channels, i2c_buses, i2c_expanders, expander_outputs, expander_inputs)
 - `data/bindings.json` — Runtime: role → driver → GPIO mapping
-- `tools/generate_ui.py` — генератор (~1200 рядків, генерує 5 артефактів)
+- `tools/generate_ui.py` — генератор (~1644 рядків, генерує 5 артефактів)
 - `components/*/src/*.cpp` — C++ реалізація
 - `main/main.cpp` — boot sequence та main loop
 
@@ -242,7 +242,7 @@ ModESP_v4/
 │   │   ├── manifest.json      # ⭐ Equipment Manager (HAL owner, arbitration)
 │   │   └── src/equipment_module.cpp
 │   ├── protection/
-│   │   ├── manifest.json      # ⭐ Alarm monitoring (5 monitors, dAd delay)
+│   │   ├── manifest.json      # ⭐ Alarm monitoring (5 monitors, delayed alarms)
 │   │   └── src/protection_module.cpp
 │   ├── thermostat/
 │   │   ├── manifest.json      # ⭐ Single Source of Truth для UI/state/mqtt
@@ -259,10 +259,9 @@ ModESP_v4/
 ├── tests/
 │   └── host/                  # Host C++ unit tests (doctest, 90 test cases)
 ├── data/
-│   ├── board.json             # PCB pin assignment (gpio_outputs, onewire_buses, gpio_inputs, adc_channels, i2c_*)
-│   ├── board_kc868a6.json     # KC868-A6 board (6 relays PCF8574 @0x24, 6 inputs PCF8574 @0x22)
-│   ├── bindings.json          # Runtime: role → driver → GPIO mapping (manifest_version: 1)
-│   ├── bindings_kc868a6.json  # KC868-A6 bindings (pcf8574_relay + pcf8574_input)
+│   ├── board.json             # Активна плата (зараз KC868-A6: I2C PCF8574 expanders)
+│   ├── board_kc868a6.json     # KC868-A6 reference (копія board.json)
+│   ├── bindings.json          # Активні bindings (зараз KC868-A6: pcf8574_relay + pcf8574_input)
 │   ├── ui.json                # 🔄 Generated
 │   └── www/                   # Deployed WebUI (index.html, bundle.js.gz, bundle.css.gz)
 ├── webui/                     # Svelte 4 WebUI source
@@ -322,6 +321,9 @@ ModESP_v4/
 | /api/onewire/scan | GET | Scan OneWire bus (SEARCH_ROM), return devices with T |
 | /api/log | GET | DataLogger: streaming chunked JSON (?hours=24) |
 | /api/log/summary | GET | DataLogger: {hours, temp_count, event_count, flash_kb} |
+| /api/wifi/ap | GET/POST | WiFi AP mode settings (SSID, password, channel) |
+| /api/time | GET/POST | Поточний час / NTP налаштування (timezone, NTP server) |
+| /api/factory-reset | POST | Factory reset (очистка NVS + restart) |
 | /api/restart | POST | ESP restart |
 | /ws | WS | Real-time state broadcast |
 | /* | GET | Static files (LittleFS) |
@@ -414,6 +416,8 @@ feat(module): короткий опис
 | `next_prompt.md` | Промпт для наступної сесії | В кінці поточної сесії |
 
 ## Changelog
+- 2026-03-01 — Рефакторинг документації: приведення до реального стану коду. Виправлено stale refs,
+  параметри хв/с, старі абревіатури, мертві посилання, додано відсутні HTTP endpoints.
 - 2026-03-01 — Phase 12a DONE: KC868-A6 board support (I2C PCF8574 expander, pcf8574_relay + pcf8574_input drivers).
   defrost_relay merger (heater+hg_valve→defrost_relay). NVS batch API. WS heap guard 40KB.
   Float rounding 0.01°C. WS broadcast 3000ms. Heap diagnostics (system.heap_largest).

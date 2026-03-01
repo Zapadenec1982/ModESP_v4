@@ -51,12 +51,12 @@ sidebar/bottom tabs, dark theme, 17KB gzipped. Deploy: webui/ → data/www/.
 та інтерлоком (defrost_relay↔компресор). Compressor anti-short-cycle на output level.
 
 **Thermostat v2** — асиметричний диференціал, state machine (STARTUP→IDLE→COOLING→SAFETY_RUN),
-вент. випарника (3 режими), вент. конденсатора (затримка COd), Safety Run, 11 persist params.
+вент. випарника (3 режими), вент. конденсатора (затримка cond_fan_delay), Safety Run, 11 persist params.
 
 **Defrost** — 7-фазна FSM, 3 типи (зупинка/тен/гарячий газ), 4 ініціації
 (таймер/demand/комбінований/ручний), 13 persist params + 2 runtime persist.
 
-**Protection** — 5 alarm monitors (HAL, LAL, ERR1, ERR2, Door), delayed alarms (dAd),
+**Protection** — 5 alarm monitors (HAL, LAL, ERR1, ERR2, Door), delayed alarms,
 defrost blocking, auto-clear + manual reset, 5 persist params.
 
 ### Phase 9.5 — Audit + Bugfixes (завершено 2026-02-20)
@@ -272,6 +272,7 @@ I2C bus + PCF8574 expander підтримка в HAL:
 ---
 
 ## Changelog
+- v24.0 (2026-03-01) — Рефакторинг документації: замінено Danfoss абревіатури на людські назви, виправлено одиниці параметрів, додано відсутні HTTP endpoints
 - v23.0 (2026-03-01) — Phase 12a DONE: KC868-A6, defrost_relay merger, heap optimization. 6 drivers, 53 STATE_META, 52 MQTT sub.
 - v22.0 (2026-02-24) — Phase 14b DONE: 6-channel DataLogger, TempRecord 16 bytes, ChannelDef table, JSON v3. 97 state keys, 264 tests.
 - v21.0 (2026-02-24) — Phase 7b-c DONE: Light/dark theme, i18n UA/EN, Svelte transitions. Bundle 44KB gz.

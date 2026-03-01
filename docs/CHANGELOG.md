@@ -4,6 +4,12 @@
 
 ## 2026-03-01
 
+- Рефакторинг документації: приведення до реального стану коду.
+  Виправлено: defrost.req.heater → defrost_relay в data flow діаграмі (01_architecture),
+  параметри min_off/on_time і startup_delay — хвилини замість секунд (05_cooling_defrost),
+  старі абревіатури Danfoss (COd→cond_fan_delay, dAd→delayed alarms, dFT/dit/dct/dSS/dSt/dEt→людські назви),
+  додано відсутні HTTP endpoints (/api/wifi/ap, /api/time, /api/factory-reset) в CLAUDE.md і README,
+  уточнено board.json (зараз KC868-A6), генератор ~1644 рядків.
 - Phase 12a DONE: KC868-A6 board support. I2C bus + PCF8574 expander підтримка в HAL.
   pcf8574_relay driver (actuator через I2C), pcf8574_input driver (sensor через I2C).
   board_kc868a6.json (6 реле PCF8574 @0x24, 6 входів PCF8574 @0x22).
