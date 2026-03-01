@@ -67,6 +67,10 @@ export default {
   'bind.add': 'Add',
   'page.not_found': 'Page not found',
 
+  'conn.lost': 'Connection lost. Reconnecting...',
+  'conn.retry': 'Reconnect',
+  'conn.restored': 'Connected',
+
   'alert.saved': 'Saved!',
   'alert.saved_restart': 'Saved! Restart to apply.',
   'alert.saved_mqtt': 'Saved! MQTT reconnecting...',

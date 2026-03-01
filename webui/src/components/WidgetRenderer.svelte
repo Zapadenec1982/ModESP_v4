@@ -57,7 +57,11 @@
 
 <style>
   .widget-wrapper {
-    margin-bottom: 12px;
+    margin-bottom: var(--sp-3);
+    min-height: var(--touch-min);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
   }
   .widget-wrapper:last-child {
     margin-bottom: 0;

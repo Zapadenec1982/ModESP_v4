@@ -73,6 +73,11 @@ export default {
   'bind.add': 'Додати',
   'page.not_found': 'Сторінку не знайдено',
 
+  // Connection
+  'conn.lost': 'З\'єднання втрачено. Перепідключення...',
+  'conn.retry': 'Перепідключити',
+  'conn.restored': 'З\'єднано',
+
   // Alerts
   'alert.saved': 'Збережено!',
   'alert.saved_restart': 'Збережено! Перезавантажте.',

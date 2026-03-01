@@ -4,18 +4,38 @@
 
   export let title = '';
   export let collapsible = false;
+  /** @type {'default' | 'status' | 'alarm'} */
+  export let variant = 'default';
 
-  // На десктопі (≥768px) collapsible картки стартують розгорнутими,
-  // на мобільних — згорнутими
+  // sessionStorage ключ для збереження collapsed стану
+  const storageKey = title ? `card-collapsed-${title}` : null;
+
+  // Ініціалізація: sessionStorage > mobile default
   const isMobile = typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches;
-  let collapsed = collapsible && isMobile;
+
+  function getInitialCollapsed() {
+    if (!collapsible) return false;
+    if (storageKey) {
+      try {
+        const saved = sessionStorage.getItem(storageKey);
+        if (saved !== null) return saved === '1';
+      } catch (e) {}
+    }
+    return isMobile;
+  }
+
+  let collapsed = getInitialCollapsed();
 
   function toggle() {
-    if (collapsible) collapsed = !collapsed;
+    if (!collapsible) return;
+    collapsed = !collapsed;
+    if (storageKey) {
+      try { sessionStorage.setItem(storageKey, collapsed ? '1' : '0'); } catch (e) {}
+    }
   }
 </script>
 
-<div class="card">
+<div class="card" class:card-status={variant === 'status'} class:card-alarm={variant === 'alarm'}>
   {#if title}
     <div
       class="card-title"
@@ -43,28 +63,44 @@
 <style>
   .card {
     background: var(--card);
-    border-radius: 12px;
+    border-radius: var(--radius-2xl);
     border: 1px solid var(--border);
-    margin-bottom: 16px;
+    margin-bottom: var(--sp-4);
     overflow: hidden;
-    transition: box-shadow 0.3s;
+    transition: box-shadow var(--transition-slow);
   }
 
   :global(:root[data-theme="light"]) .card {
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--shadow-xs);
+  }
+
+  /* Variant: status — subtle accent bg */
+  .card-status {
+    border-color: var(--accent, var(--border));
+  }
+
+  /* Variant: alarm — red border + subtle red bg */
+  .card-alarm {
+    border-color: var(--alarm-border);
+    background: var(--alarm-bg);
   }
 
   .card-title {
-    font-size: 11px;
-    font-weight: 700;
+    font-size: var(--text-sm);
+    font-weight: var(--fw-bold);
     color: var(--fg-muted);
     text-transform: uppercase;
     letter-spacing: 1px;
-    padding: 14px 18px;
+    padding: var(--sp-3) var(--sp-4);
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: var(--sp-1-5);
+  }
+
+  .card-alarm .card-title {
+    color: var(--alarm-text);
+    border-bottom-color: rgba(239, 68, 68, 0.2);
   }
 
   .card-title.collapsible {
@@ -76,9 +112,13 @@
     color: var(--fg);
   }
 
+  .card-alarm .card-title.collapsible:hover {
+    color: var(--alarm-dark);
+  }
+
   .arrow {
     display: inline-flex;
-    transition: transform 0.2s;
+    transition: transform var(--transition-normal);
   }
 
   .arrow.open {
@@ -86,6 +126,6 @@
   }
 
   .card-body {
-    padding: 14px 18px;
+    padding: var(--sp-3) var(--sp-4);
   }
 </style>

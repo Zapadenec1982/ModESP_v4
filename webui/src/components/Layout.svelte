@@ -1,8 +1,12 @@
 <script>
+  import { onDestroy } from 'svelte';
+  import { fade } from 'svelte/transition';
   import { pages, deviceName } from '../stores/ui.js';
   import { wsConnected, state } from '../stores/state.js';
   import { theme, toggleTheme } from '../stores/theme.js';
   import { t, language, toggleLanguage } from '../stores/i18n.js';
+  import { apiGet } from '../lib/api.js';
+  import { toastSuccess } from '../stores/toast.js';
   import Icon from './Icon.svelte';
   import Clock from './Clock.svelte';
 
@@ -18,6 +22,36 @@
 
   $: currentTitle = $pages.find(p => p.id === currentPage)?.title || '';
   $: sortedPages = [...$pages].sort((a, b) => (a.order || 0) - (b.order || 0));
+
+  // Connection overlay — показувати через 5с після disconnect (уникнути flicker)
+  let showOverlay = false;
+  let overlayTimer = null;
+  let wasDisconnected = false;
+
+  const unsub = wsConnected.subscribe(connected => {
+    if (!connected) {
+      if (!overlayTimer) {
+        wasDisconnected = true;
+        overlayTimer = setTimeout(() => { showOverlay = true; }, 5000);
+      }
+    } else {
+      if (overlayTimer) { clearTimeout(overlayTimer); overlayTimer = null; }
+      if (showOverlay || wasDisconnected) {
+        // Оновити state після reconnect
+        apiGet('/api/state').then(data => {
+          state.update(s => ({ ...s, ...data }));
+        }).catch(() => {});
+        if (showOverlay) toastSuccess($t['conn.restored']);
+      }
+      showOverlay = false;
+      wasDisconnected = false;
+    }
+  });
+
+  onDestroy(() => {
+    unsub();
+    if (overlayTimer) clearTimeout(overlayTimer);
+  });
 </script>
 
 <div class="layout">
@@ -73,6 +107,19 @@
     <main class="content">
       <slot />
     </main>
+
+    <!-- Connection overlay (після 5с disconnect) -->
+    {#if showOverlay}
+      <div class="conn-overlay" transition:fade={{ duration: 200 }}>
+        <div class="conn-dialog">
+          <div class="conn-spinner"></div>
+          <div class="conn-text">{$t['conn.lost']}</div>
+          <button class="conn-retry" on:click={() => location.reload()}>
+            {$t['conn.retry']}
+          </button>
+        </div>
+      </div>
+    {/if}
   </div>
 
   <!-- Bottom tabs (mobile) -->
@@ -202,20 +249,78 @@
 
   /* === Alarm banner (AUDIT-009) === */
   .alarm-banner {
-    background: #991b1b;
+    background: var(--alarm-dark);
     color: #fff;
     text-align: center;
-    padding: 8px 16px;
-    font-size: 13px;
-    font-weight: 700;
+    padding: var(--sp-2) var(--sp-4);
+    font-size: var(--text-base);
+    font-weight: var(--fw-bold);
     letter-spacing: 1px;
     cursor: pointer;
     animation: alarm-flash 1.5s infinite;
   }
 
   @keyframes alarm-flash {
-    0%, 100% { background: #991b1b; }
-    50% { background: #dc2626; }
+    0%, 100% { background: var(--alarm-dark); }
+    50% { background: var(--alarm-text); }
+  }
+
+  /* === Connection overlay === */
+  .conn-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9000;
+  }
+
+  .conn-dialog {
+    background: var(--card);
+    border-radius: var(--radius-2xl);
+    padding: var(--sp-8) var(--sp-6);
+    text-align: center;
+    box-shadow: var(--shadow-lg);
+    max-width: 320px;
+    width: 90%;
+  }
+
+  .conn-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: var(--radius-full);
+    animation: conn-spin 0.8s linear infinite;
+    margin: 0 auto var(--sp-4);
+  }
+
+  @keyframes conn-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .conn-text {
+    font-size: var(--text-md);
+    color: var(--fg-muted);
+    margin-bottom: var(--sp-4);
+  }
+
+  .conn-retry {
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-lg);
+    padding: var(--sp-2-5) var(--sp-6);
+    font-size: var(--text-md);
+    font-weight: var(--fw-semibold);
+    cursor: pointer;
+    min-height: var(--touch-min);
+    transition: opacity var(--transition-fast);
+  }
+
+  .conn-retry:hover {
+    opacity: 0.9;
   }
 
   /* === Main area === */
