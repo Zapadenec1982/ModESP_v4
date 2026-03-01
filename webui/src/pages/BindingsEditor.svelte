@@ -94,16 +94,18 @@
   }
 
   function addRole(roleDef) {
-    const hw = availableHw(roleDef);
+    let hw = availableHw(roleDef);
+    // OW сенсори додаються ТІЛЬКИ через OneWire Discovery (потрібна ROM адреса)
+    if (roleDef.requires_address) {
+      hw = hw.filter(h => h.hw_type !== 'onewire_bus');
+    }
     if (hw.length === 0) return;
-    // Якщо тільки один варіант — призначити одразу, інакше дати обрати
     const autoAssign = hw.length === 1;
     bindings = [...bindings, {
       hardware: autoAssign ? hw[0].id : '',
       driver: autoAssign ? driverForHw(roleDef, hw[0].id) : '',
       role: roleDef.role,
       module: 'equipment',
-      ...(roleDef.requires_address ? { address: '' } : {}),
     }];
   }
 
@@ -125,7 +127,11 @@
   $: requiredRoles = roles.filter(r => !r.optional);
   $: missingRequired = requiredRoles.filter(r => !assignedRoles.has(r.role));
   $: hasEmptyHw = bindings.some(b => !b.hardware);
-  $: canSave = !hasEmptyHw && !saving;
+  $: hasEmptyAddr = bindings.some(b => {
+    const rd = roles.find(r => r.role === b.role);
+    return rd && rd.requires_address && !b.address;
+  });
+  $: canSave = !hasEmptyHw && !hasEmptyAddr && !saving;
 
   $: assignedSensors = roles.filter(r => r.type === 'sensor' && assignedRoles.has(r.role));
   $: assignedActuators = roles.filter(r => r.type === 'actuator' && assignedRoles.has(r.role));
@@ -144,7 +150,13 @@
   );
   $: unassignedOptional = roles
     .filter(r => r.optional && !assignedRoles.has(r.role))
-    .filter(r => availableHw(r).length > 0);
+    .filter(r => {
+      if (r.requires_address) {
+        // OW сенсори додаються через OneWire Discovery, тут тільки non-OW (ADC/NTC)
+        return availableHw(r).some(h => h.hw_type !== 'onewire_bus');
+      }
+      return availableHw(r).length > 0;
+    });
 
   // ── Save / Restart ──
   async function save() {

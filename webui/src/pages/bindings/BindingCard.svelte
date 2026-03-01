@@ -30,7 +30,7 @@
     {/each}
   </select>
   {#if roleDef.requires_address}
-    <input class="addr-input"
+    <input class="addr-input" class:addr-empty={!binding.address}
            type="text"
            placeholder="28:FF:AA:BB:CC:DD:EE:01"
            value={binding.address || ''}
@@ -91,4 +91,5 @@
   }
   .addr-input:focus { outline: none; border-color: var(--accent); }
   .addr-input::placeholder { color: var(--fg-muted); opacity: 0.6; }
+  .addr-empty { border-color: var(--warning); }
 </style>
