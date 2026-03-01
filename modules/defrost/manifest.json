@@ -457,9 +457,7 @@
       "defrost.interval_timer",
       "defrost.defrost_count",
       "defrost.last_termination",
-      "defrost.consecutive_timeouts",
-      "defrost.req.compressor",
-      "defrost.req.defrost_relay"
+      "defrost.consecutive_timeouts"
     ],
     "subscribe": [
       "defrost.type",

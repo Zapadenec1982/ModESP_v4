@@ -658,9 +658,6 @@
   "mqtt": {
     "publish": [
       "thermostat.temperature",
-      "thermostat.req.compressor",
-      "thermostat.req.evap_fan",
-      "thermostat.req.cond_fan",
       "thermostat.state",
       "thermostat.comp_on_time",
       "thermostat.comp_off_time",
