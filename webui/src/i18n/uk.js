@@ -129,6 +129,10 @@ export default {
   'bind.no_free_roles': 'Немає вільних ролей',
   'bind.confirm_missing': 'Відсутні обов\'язкові ролі',
   'bind.confirm_alarm': 'Система запуститься в аварійному режимі. Продовжити?',
+  'bind.pick': 'Обрати',
+  'bind.in_use': 'зайнято',
+  'bind.selected': 'обрано',
+  'bind.no_devices': 'Пристроїв не знайдено',
 
   // Equipment / driver settings
   'eq.filter': 'Цифровий фільтр',

@@ -1,5 +1,4 @@
 <script>
-  import { createEventDispatcher } from 'svelte';
   import { apiGet } from '../../lib/api.js';
   import { state } from '../../stores/state.js';
   import { t } from '../../stores/i18n.js';
@@ -8,11 +7,6 @@
 
   export let owBuses = [];
   export let assignedAddresses = new Set();
-  export let freeAddrRoles = [];
-  // Маппінг адреса → роль для показу поточної прив'язки
-  export let addressToRole = {};
-
-  const dispatch = createEventDispatcher();
 
   let scanning = false;
   let scanResults = [];
@@ -30,36 +24,12 @@
     scanResults = [];
     try {
       const data = await apiGet(`/api/onewire/scan?bus=${selectedBus}`);
-      scanResults = (data.devices || []).map(d => ({...d, selectedRole: ''}));
+      scanResults = data.devices || [];
     } catch (e) {
       error = e.message;
     } finally {
       scanning = false;
     }
-  }
-
-  function assignDevice(device) {
-    if (!device.selectedRole) return;
-    dispatch('assign', {
-      bus: selectedBus,
-      address: device.address,
-      role: device.selectedRole,
-    });
-    scanResults = scanResults.map(d =>
-      d.address === device.address
-        ? {...d, status: 'assigned', role: device.selectedRole}
-        : d
-    );
-  }
-
-  function unbindDevice(device) {
-    dispatch('unbind', { address: device.address });
-    // Оновити локальний стан — датчик тепер "новий"
-    scanResults = scanResults.map(d =>
-      d.address === device.address
-        ? {...d, status: 'new', role: null}
-        : d
-    );
   }
 </script>
 
@@ -79,7 +49,7 @@
     <div class="divider"></div>
   {/if}
 
-  <!-- OneWire scan -->
+  <!-- Діагностичний scan -->
   <div class="scan-controls">
     {#if owBuses.length > 1}
       <select class="hw-select" bind:value={selectedBus}>
@@ -101,12 +71,11 @@
 
   {#if scanResults.length > 0}
     <div class="scan-summary">
-      {$t['bind.found_total'] || `Знайдено ${scanResults.length} датчик(ів)`}
+      {$t['bind.found_total'] || 'Знайдено на шині:'} {scanResults.length}
     </div>
     <div class="scan-results">
       {#each scanResults as device}
         {@const isAssigned = assignedAddresses.has(device.address)}
-        {@const currentRole = addressToRole[device.address]}
         <div class="device-row" class:device-assigned={isAssigned}>
           <div class="device-info">
             <span class="device-addr">{device.address}</span>
@@ -114,30 +83,9 @@
               <span class="device-temp">{device.temperature.toFixed(1)} °C</span>
             {/if}
           </div>
-          <div class="device-action">
-            {#if isAssigned && currentRole}
-              <span class="device-role assigned">{currentRole}</span>
-              <button class="unbind-btn"
-                      on:click={() => unbindDevice(device)}
-                      title={$t['bind.unbind'] || 'Відкріпити'}>
-                &#x2715;
-              </button>
-            {:else if freeAddrRoles.length > 0}
-              <select class="role-select" bind:value={device.selectedRole}>
-                <option value="">{$t['bind.role']}</option>
-                {#each freeAddrRoles as r}
-                  <option value={r.role}>{r.label}</option>
-                {/each}
-              </select>
-              <button class="assign-btn"
-                      disabled={!device.selectedRole}
-                      on:click={() => assignDevice(device)}>
-                {$t['bind.add']}
-              </button>
-            {:else}
-              <span class="device-role new">{$t['bind.no_free_roles'] || 'Немає вільних ролей'}</span>
-            {/if}
-          </div>
+          {#if isAssigned}
+            <span class="device-badge">{$t['bind.in_use'] || 'зайнято'}</span>
+          {/if}
         </div>
       {/each}
     </div>
@@ -233,57 +181,14 @@
     color: var(--accent);
     font-variant-numeric: tabular-nums;
   }
-  .device-action {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-    flex-shrink: 0;
-  }
   .device-assigned {
     border-color: var(--accent);
     background: var(--accent-bg);
   }
-  .device-role {
-    font-size: 13px;
-    font-weight: 500;
-  }
-  .device-role.assigned {
-    color: var(--accent);
-  }
-  .device-role.new {
-    color: var(--fg-muted);
-    font-style: italic;
-  }
-  .unbind-btn {
-    background: none;
-    border: none;
-    color: var(--fg-muted);
-    cursor: pointer;
-    font-size: 16px;
-    padding: 2px 6px;
-    border-radius: 4px;
-  }
-  .unbind-btn:hover { color: var(--error); background: rgba(239, 68, 68, 0.1); }
-  .role-select {
-    padding: 4px 8px;
-    font-size: 13px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--fg);
-    max-width: 120px;
-  }
-  .assign-btn {
-    padding: 4px 12px;
-    border-radius: 4px;
-    border: 1px solid var(--accent);
-    background: var(--accent);
-    color: white;
-    cursor: pointer;
+  .device-badge {
     font-size: 12px;
+    color: var(--fg-muted);
   }
-  .assign-btn:hover { opacity: 0.9; }
-  .assign-btn:disabled { opacity: 0.4; cursor: not-allowed; }
   .scan-hint {
     font-size: 13px;
     color: var(--fg-muted);

@@ -114,6 +114,10 @@ export default {
   'bind.no_free_roles': 'No free roles',
   'bind.confirm_missing': 'Missing required roles',
   'bind.confirm_alarm': 'System will start in alarm mode. Continue?',
+  'bind.pick': 'Pick',
+  'bind.in_use': 'in use',
+  'bind.selected': 'selected',
+  'bind.no_devices': 'No devices found',
 
   'eq.filter': 'Digital filter',
   'eq.offset': 'Offset °C',

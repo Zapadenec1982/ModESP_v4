@@ -74,8 +74,19 @@
 
   function setHardware(role, hwId) {
     const roleDef = roles.find(r => r.role === role);
+    const oldBinding = bindings.find(b => b.role === role);
+    const oldHw = oldBinding ? hwInventory.find(h => h.id === oldBinding.hardware) : null;
+    const newHw = hwInventory.find(h => h.id === hwId);
+    // Очищати адресу при зміні типу hardware (OW↔ADC) або зміні шини
+    const clearAddr = (oldHw?.hw_type === 'onewire_bus' && newHw?.hw_type !== 'onewire_bus')
+                   || (oldHw?.id !== hwId && newHw?.hw_type === 'onewire_bus');
     bindings = bindings.map(b =>
-      b.role === role ? { ...b, hardware: hwId, driver: roleDef ? driverForHw(roleDef, hwId) : b.driver } : b
+      b.role === role ? {
+        ...b,
+        hardware: hwId,
+        driver: roleDef ? driverForHw(roleDef, hwId) : b.driver,
+        ...(clearAddr ? { address: '' } : {})
+      } : b
     );
   }
 
@@ -89,16 +100,8 @@
     bindings = bindings.filter(b => b.role !== role);
   }
 
-  function removeByAddress(address) {
-    bindings = bindings.filter(b => b.address !== address);
-  }
-
   function addRole(roleDef) {
-    let hw = availableHw(roleDef);
-    // OW сенсори додаються ТІЛЬКИ через OneWire Discovery (потрібна ROM адреса)
-    if (roleDef.requires_address) {
-      hw = hw.filter(h => h.hw_type !== 'onewire_bus');
-    }
+    const hw = availableHw(roleDef);
     if (hw.length === 0) return;
     const autoAssign = hw.length === 1;
     bindings = [...bindings, {
@@ -109,18 +112,6 @@
     }];
   }
 
-  function handleAssign(e) {
-    const { bus, address, role } = e.detail;
-    const roleDef = roles.find(r => r.role === role);
-    bindings = [...bindings, {
-      hardware: bus,
-      driver: roleDef ? driverForHw(roleDef, bus) : 'ds18b20',
-      role: role,
-      module: 'equipment',
-      address: address,
-    }];
-  }
-
   // ── Derived state ──
   $: assignedRoles = new Set(bindings.map(b => b.role));
   $: assignedAddresses = new Set(bindings.filter(b => b.address).map(b => b.address));
@@ -128,8 +119,8 @@
   $: missingRequired = requiredRoles.filter(r => !assignedRoles.has(r.role));
   $: hasEmptyHw = bindings.some(b => !b.hardware);
   $: hasEmptyAddr = bindings.some(b => {
-    const rd = roles.find(r => r.role === b.role);
-    return rd && rd.requires_address && !b.address;
+    const hw = hwInventory.find(h => h.id === b.hardware);
+    return hw && hw.hw_type === 'onewire_bus' && !b.address;
   });
   $: canSave = !hasEmptyHw && !hasEmptyAddr && !saving;
 
@@ -138,25 +129,9 @@
 
   $: owBuses = hwInventory.filter(h => h.hw_type === 'onewire_bus');
   $: hasNtc = !!$state['equipment.has_ntc_driver'];
-  $: freeAddrRoles = roles.filter(r => r.requires_address && !assignedRoles.has(r.role));
-  // Маппінг адреса → label ролі для OneWireDiscovery
-  $: addressToRole = Object.fromEntries(
-    bindings
-      .filter(b => b.address)
-      .map(b => {
-        const rd = roles.find(r => r.role === b.role);
-        return [b.address, rd ? rd.label : b.role];
-      })
-  );
   $: unassignedOptional = roles
     .filter(r => r.optional && !assignedRoles.has(r.role))
-    .filter(r => {
-      if (r.requires_address) {
-        // OW сенсори додаються через OneWire Discovery, тут тільки non-OW (ADC/NTC)
-        return availableHw(r).some(h => h.hw_type !== 'onewire_bus');
-      }
-      return availableHw(r).length > 0;
-    });
+    .filter(r => availableHw(r).length > 0);
 
   // ── Save / Restart ──
   async function save() {
@@ -224,6 +199,7 @@
             <BindingCard {roleDef} {binding}
               hwList={compatibleHw(roleDef)}
               usedIds={usedHwIds(roleDef.role)}
+              {assignedAddresses}
               on:changeHw={e => setHardware(e.detail.role, e.detail.hw)}
               on:changeAddr={e => setAddress(e.detail.role, e.detail.addr)}
               on:remove={e => removeRole(e.detail)} />
@@ -248,11 +224,9 @@
       </Card>
     {/if}
 
-    <!-- OneWire Discovery + DS18B20 settings -->
+    <!-- DS18B20 settings + diagnostic scan -->
     {#if owBuses.length > 0}
-      <OneWireDiscovery {owBuses} {assignedAddresses} {freeAddrRoles} {addressToRole}
-        on:assign={handleAssign}
-        on:unbind={e => removeByAddress(e.detail.address)} />
+      <OneWireDiscovery {owBuses} {assignedAddresses} />
     {/if}
 
     <!-- NTC settings -->

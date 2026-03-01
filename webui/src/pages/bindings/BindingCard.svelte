@@ -1,13 +1,19 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import { t } from '../../stores/i18n.js';
+  import OneWirePicker from './OneWirePicker.svelte';
 
   export let roleDef;
   export let binding;
   export let hwList = [];
   export let usedIds = new Set();
+  export let assignedAddresses = new Set();
 
   const dispatch = createEventDispatcher();
+
+  // Визначаємо чи обране hardware потребує ROM адресу (OneWire bus)
+  $: selectedHw = hwList.find(h => h.id === binding.hardware);
+  $: needsAddress = selectedHw && selectedHw.hw_type === 'onewire_bus';
 </script>
 
 <div class="binding-row">
@@ -29,12 +35,13 @@
       </option>
     {/each}
   </select>
-  {#if roleDef.requires_address}
-    <input class="addr-input" class:addr-empty={!binding.address}
-           type="text"
-           placeholder="28:FF:AA:BB:CC:DD:EE:01"
-           value={binding.address || ''}
-           on:input={e => dispatch('changeAddr', { role: roleDef.role, addr: e.target.value })} />
+  {#if needsAddress}
+    <OneWirePicker
+      busId={binding.hardware}
+      address={binding.address || ''}
+      {assignedAddresses}
+      on:pick={e => dispatch('changeAddr', { role: roleDef.role, addr: e.detail.address })}
+    />
   {/if}
 </div>
 
@@ -78,18 +85,4 @@
   }
   .hw-select:focus { outline: none; border-color: var(--accent); }
   .hw-empty { border-color: var(--warning); color: var(--warning); }
-  .addr-input {
-    width: 100%;
-    margin-top: 8px;
-    padding: 8px 12px;
-    font-size: 13px;
-    font-family: monospace;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--fg);
-  }
-  .addr-input:focus { outline: none; border-color: var(--accent); }
-  .addr-input::placeholder { color: var(--fg-muted); opacity: 0.6; }
-  .addr-empty { border-color: var(--warning); }
 </style>
