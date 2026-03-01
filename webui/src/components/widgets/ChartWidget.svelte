@@ -3,8 +3,8 @@
   import { apiGet } from '../../lib/api.js';
   import { state } from '../../stores/state.js';
   import { t } from '../../stores/i18n.js';
-  import { downsample } from '../../lib/downsample.js';
-  import { catmullRomPath, buildSmoothSegments, tempRange as calcTempRange, computeTimeLabels, computeTempLabels } from '../../lib/chart.js';
+  import { downsample, movingAverage } from '../../lib/downsample.js';
+  import { buildSegments, tempRange as calcTempRange, computeTimeLabels, computeTempLabels } from '../../lib/chart.js';
 
   export let config;
   export let value;
@@ -140,9 +140,10 @@
   // Які канали мають дані
   $: channelsWithData = channels.filter(ch => channelHasData(temp, ch.idx));
 
-  // Downsample по першому каналу (зазвичай air)
+  // Downsample + moving average (згладжує 0.1°C квантизацію)
   $: primaryIdx = channels.length > 0 ? channels[0].idx : 1;
   $: sampled = downsample(temp, MAX_POINTS, primaryIdx);
+  $: smoothed = movingAverage(sampled, 5);
 
   // Coordinate helpers
   function tsRange(pts) {
@@ -177,10 +178,10 @@
     return zones;
   }
 
-  // Smooth paths для кожного видимого каналу
+  // Polyline paths для кожного видимого каналу (moving average вже згладжений)
   $: channelLines = visibleChannels.map(ch => ({
     ...ch,
-    segments: buildSmoothSegments(sampled, ch.idx, PAD,
+    segments: buildSegments(smoothed, ch.idx, PAD,
       ts => xScale(ts, tMin, tMax), v => yScale(v, vMin, vMax))
   }));
 

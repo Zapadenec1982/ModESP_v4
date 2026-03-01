@@ -2,40 +2,29 @@
  * Shared chart math utilities — used by ChartWidget and MiniChart.
  */
 
-/** Catmull-Rom → SVG cubic Bezier path */
-export function catmullRomPath(points) {
+/** SVG polyline path (пряме з'єднання точок, без overshoots) */
+export function polylinePath(points) {
   if (points.length < 2) return '';
-  if (points.length === 2) {
-    return `M${points[0].x},${points[0].y} L${points[1].x},${points[1].y}`;
-  }
   let d = `M${points[0].x},${points[0].y}`;
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = points[Math.max(0, i - 1)];
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const p3 = points[Math.min(points.length - 1, i + 2)];
-    const cp1x = (p1.x + (p2.x - p0.x) / 6).toFixed(1);
-    const cp1y = (p1.y + (p2.y - p0.y) / 6).toFixed(1);
-    const cp2x = (p2.x - (p3.x - p1.x) / 6).toFixed(1);
-    const cp2y = (p2.y - (p3.y - p1.y) / 6).toFixed(1);
-    d += ` C${cp1x},${cp1y} ${cp2x},${cp2y} ${p2.x},${p2.y}`;
+  for (let i = 1; i < points.length; i++) {
+    d += ` L${points[i].x},${points[i].y}`;
   }
   return d;
 }
 
-/** Build smooth SVG path segments for one channel (handles null gaps) */
-export function buildSmoothSegments(pts, chIdx, pad, xFn, yFn) {
+/** Build SVG path segments for one channel (handles null gaps) */
+export function buildSegments(pts, chIdx, pad, xFn, yFn) {
   const segments = [];
   let seg = [];
   for (const p of pts) {
     const raw = p[chIdx];
     if (raw == null) {
-      if (seg.length > 0) { segments.push(catmullRomPath(seg)); seg = []; }
+      if (seg.length > 0) { segments.push(polylinePath(seg)); seg = []; }
       continue;
     }
     seg.push({ x: +(pad.left + xFn(p[0])).toFixed(1), y: +(pad.top + yFn(raw / 10)).toFixed(1) });
   }
-  if (seg.length > 0) segments.push(catmullRomPath(seg));
+  if (seg.length > 0) segments.push(polylinePath(seg));
   return segments;
 }
 

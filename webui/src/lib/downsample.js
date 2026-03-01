@@ -1,5 +1,30 @@
 /**
- * Average bucket downsampling — плавна крива для згладжування (Catmull-Rom).
+ * Moving average — згладжує квантовані дані (0.1°C сходинки) перед рендером.
+ * Кожен канал згладжується незалежно, null пропускаються.
+ * @param {Array} points - [[timestamp, v1, v2, ...], ...]
+ * @param {number} window - розмір вікна (непарне число, default 5)
+ * @returns {Array} smoothed points (timestamps unchanged)
+ */
+export function movingAverage(points, window = 5) {
+  if (points.length <= window) return points;
+  const half = Math.floor(window / 2);
+  const cols = points[0]?.length || 0;
+  return points.map((p, i) => {
+    const result = [p[0]];
+    for (let col = 1; col < cols; col++) {
+      if (p[col] == null) { result.push(null); continue; }
+      let sum = 0, count = 0;
+      for (let j = Math.max(0, i - half); j < Math.min(points.length, i + half + 1); j++) {
+        if (points[j][col] != null) { sum += points[j][col]; count++; }
+      }
+      result.push(count > 0 ? Math.round(sum / count) : null);
+    }
+    return result;
+  });
+}
+
+/**
+ * Average bucket downsampling — плавна крива для згладжування.
  * Кожен бакет → одна точка з середнім значенням усіх каналів.
  * @param {Array} points - [[timestamp, v1, v2, ...], ...]
  * @param {number} maxPoints - максимум точок у результаті

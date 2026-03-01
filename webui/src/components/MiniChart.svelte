@@ -3,7 +3,7 @@
   import { state } from '../stores/state.js';
   import { apiGet } from '../lib/api.js';
   import { downsampleAvg } from '../lib/downsample.js';
-  import { buildSmoothSegments, tempRange, computeTimeLabels, computeTempLabels } from '../lib/chart.js';
+  import { buildSegments, tempRange, computeTimeLabels, computeTempLabels } from '../lib/chart.js';
 
   const W = 654, H = 200;
   const PAD = { top: 12, right: 12, bottom: 24, left: 44 };
@@ -55,7 +55,7 @@
   $: xFn = (ts) => tMax === tMin ? CW / 2 : ((ts - tMin) / (tMax - tMin)) * CW;
   $: yFn = (v) => vMax === vMin ? CH / 2 : CH - ((v - vMin) / (vMax - vMin)) * CH;
 
-  $: pathSegs = buildSmoothSegments(sampled, airIdx, PAD, xFn, yFn);
+  $: pathSegs = buildSegments(sampled, airIdx, PAD, xFn, yFn);
 
   $: setpoint = $state['thermostat.setpoint'];
   $: spY = typeof setpoint === 'number' ? PAD.top + yFn(setpoint) : null;
