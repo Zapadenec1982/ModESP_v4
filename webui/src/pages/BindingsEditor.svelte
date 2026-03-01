@@ -127,7 +127,6 @@
   $: assignedSensors = roles.filter(r => r.type === 'sensor' && assignedRoles.has(r.role));
   $: assignedActuators = roles.filter(r => r.type === 'actuator' && assignedRoles.has(r.role));
 
-  $: owBuses = hwInventory.filter(h => h.hw_type === 'onewire_bus');
   $: hasNtc = !!$state['equipment.has_ntc_driver'];
   $: unassignedOptional = roles
     .filter(r => r.optional && !assignedRoles.has(r.role))
@@ -224,10 +223,8 @@
       </Card>
     {/if}
 
-    <!-- DS18B20 settings + diagnostic scan -->
-    {#if owBuses.length > 0}
-      <OneWireDiscovery {owBuses} {assignedAddresses} />
-    {/if}
+    <!-- DS18B20 settings -->
+    <OneWireDiscovery />
 
     <!-- NTC settings -->
     {#if hasNtc}
