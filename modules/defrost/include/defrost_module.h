@@ -128,6 +128,9 @@ private:
     bool  sensor2_ok_     = false;
     bool  compressor_on_  = false;
 
+    // Throttle публікації таймерів (зменшення MQTT спаму)
+    uint32_t timer_publish_ms_ = 0;
+
     // Мінімальний час ACTIVE фази перед перевіркою end_temp (60с)
     // Стандартна практика промислових контролерів (Dixell/Danfoss)
     static constexpr uint32_t MIN_ACTIVE_CHECK_MS = 60000;

@@ -64,7 +64,7 @@ private:
     static constexpr uint32_t PUBLISH_INTERVAL_MS = 1000;
 
     // Кеш останніх опублікованих значень для delta-publish
-    static constexpr size_t MAX_PUBLISH_KEYS = 16;
+    static constexpr size_t MAX_PUBLISH_KEYS = 48;
     char last_payloads_[MAX_PUBLISH_KEYS][32] = {};
 
     // Internal

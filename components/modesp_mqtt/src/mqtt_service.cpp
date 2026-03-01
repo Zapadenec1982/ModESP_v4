@@ -296,7 +296,7 @@ void MqttService::mqtt_event_handler(void* args, esp_event_base_t base,
 
 int MqttService::format_value(const StateValue& val, char* buf, size_t buf_size) {
     if (etl::holds_alternative<float>(val)) {
-        return snprintf(buf, buf_size, "%.2f",
+        return snprintf(buf, buf_size, "%.1f",
                         static_cast<double>(etl::get<float>(val)));
     } else if (etl::holds_alternative<int32_t>(val)) {
         return snprintf(buf, buf_size, "%ld",

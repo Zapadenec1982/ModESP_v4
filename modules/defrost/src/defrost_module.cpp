@@ -273,7 +273,12 @@ void DefrostModule::on_update(uint32_t dt_ms) {
             break;
     }
 
-    publish_state();
+    // Публікація таймерів (throttle 30s — зменшення MQTT спаму)
+    timer_publish_ms_ += dt_ms;
+    if (timer_publish_ms_ >= 30000) {
+        timer_publish_ms_ = 0;
+        publish_state();
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════
