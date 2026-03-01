@@ -67,9 +67,9 @@
   - Fix Bindings: unbind/rebind UI, save без required roles (з confirm)
   - Bundle: 48.0KB JS gz + 8.1KB CSS gz
 
-- [ ] **Сесія 1.1b:** Broadcast Tuning + Cleanup
-  - Знизити heap guard, зменшити interval до 1500ms, прибрати BUG-025 workaround
-  - Промпт: `prompts/sprint1_session1_1b_broadcast_tuning.md`
+- [x] **Сесія 1.1b:** Broadcast Tuning + Cleanup ✓
+  - Heap guard: 40KB → 16KB/8KB, interval: 3000ms → 1500ms
+  - BUG-025: вже вирішений через track_change=false (Sprint 1.1a)
 
 #### Sprint 2: Dashboard Redesign + Settings UX (сесії 5-8)
 
@@ -178,13 +178,13 @@
 
 ## Відкриті проблеми
 
-### Memory Workarounds (костилі → proper fix у Sprint 1)
-| Костиль | Файл | Proper fix |
-|---------|------|-----------|
-| WS heap guard 40KB | ws_service.cpp:361 | ✅ Delta broadcasts зменшують розмір. Знизити guard (Sprint 1.1b) |
-| Broadcast 3000ms | ws_service.h:48 | Delta → зменшити до 1500ms (Sprint 1.1b) |
-| MQTT timer exclusion (BUG-025) | manifests | ✅ track_change=false в SharedState (Sprint 1.1a DONE) |
-| Float rounding 0.01°C | equipment_module.cpp:186 | OK — proper optimization, залишити |
+### Memory Workarounds — ВИРІШЕНО (Sprint 1.1a + 1.1b)
+| Було | Стало | Статус |
+|------|-------|--------|
+| WS heap guard 40KB | 16KB (full state) / 8KB (delta/ping) | ✅ Sprint 1.1b |
+| Broadcast 3000ms | 1500ms (delta ~200B) | ✅ Sprint 1.1b |
+| MQTT timer exclusion (BUG-025) | track_change=false в SharedState | ✅ Sprint 1.1a |
+| Float rounding 0.01°C | proper optimization, залишити | ✅ OK |
 
 ### Open AUDIT Items (MVP + Production)
 | ID | Опис | Sprint |

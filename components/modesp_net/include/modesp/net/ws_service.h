@@ -42,9 +42,9 @@ private:
     StaticSemaphore_t clients_mutex_buf_;
     SemaphoreHandle_t clients_mutex_ = nullptr;
 
-    // Delta broadcast timing
+    // Delta broadcast timing (delta payloads ~200B → можна частіше)
     uint32_t broadcast_timer_ = 0;
-    static constexpr uint32_t BROADCAST_INTERVAL_MS = 3000;
+    static constexpr uint32_t BROADCAST_INTERVAL_MS = 1500;
 
     // Heartbeat (ping) + cleanup
     // Must be well under httpd recv_wait_timeout (30s) so the PONG

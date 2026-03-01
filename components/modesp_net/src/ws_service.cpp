@@ -310,9 +310,9 @@ void WsService::send_full_state_to(int fd) {
 
     ctx.pos += snprintf(buf + ctx.pos, ctx.remaining(), "}");
 
-    // Відправка напряму одному клієнту через async queue
-    if (esp_get_free_heap_size() < 40000) {
-        ESP_LOGW(TAG, "Heap < 40KB, skip initial state to fd=%d", fd);
+    // Захист від OOM: повний state ~3.5KB + AsyncSendCtx overhead
+    if (esp_get_free_heap_size() < 16000) {
+        ESP_LOGW(TAG, "Heap < 16KB, skip initial state to fd=%d", fd);
         return;
     }
 
@@ -406,9 +406,9 @@ void WsService::send_to_all(const char* data, size_t len) {
     for (size_t i = 0; i < MAX_WS_CLIENTS; i++) {
         if (fds[i] == -1) continue;
 
-        // Захист від OOM — не алокуємо при низькому heap
-        if (esp_get_free_heap_size() < 40000) {
-            ESP_LOGW(TAG, "Heap < 40KB, skip WS send fd=%d", fds[i]);
+        // Захист від OOM: delta payload ~200B + AsyncSendCtx
+        if (esp_get_free_heap_size() < 8000) {
+            ESP_LOGW(TAG, "Heap < 8KB, skip WS send fd=%d", fds[i]);
             continue;
         }
 
@@ -455,8 +455,9 @@ void WsService::send_ping_to_all() {
     for (size_t i = 0; i < MAX_WS_CLIENTS; i++) {
         if (fds[i] == -1) continue;
 
-        if (esp_get_free_heap_size() < 40000) {
-            ESP_LOGW(TAG, "Heap < 40KB, skip WS ping fd=%d", fds[i]);
+        // Ping frame: AsyncSendCtx без payload (~48B)
+        if (esp_get_free_heap_size() < 8000) {
+            ESP_LOGW(TAG, "Heap < 8KB, skip WS ping fd=%d", fds[i]);
             continue;
         }
 

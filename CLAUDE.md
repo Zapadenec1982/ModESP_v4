@@ -329,11 +329,12 @@ ModESP_v4/
 | /* | GET | Static files (LittleFS) |
 
 ### WebSocket
-- Broadcast state JSON при зміні version counter
-- Broadcast interval: 3000ms (BROADCAST_INTERVAL_MS)
+- **Delta broadcasts:** тільки змінені ключі (~200B замість 3.5KB full state)
+- Broadcast interval: 1500ms (BROADCAST_INTERVAL_MS)
 - Heartbeat PING кожні 20s (HEARTBEAT_INTERVAL_MS = 20000)
 - Manual control frames (PING/PONG/CLOSE)
 - Max 3 concurrent clients (MAX_WS_CLIENTS = 3)
+- Новий клієнт отримує full state при підключенні (send_full_state_to)
 
 ### WiFi
 - STA mode: підключення до існуючого роутера (credentials з NVS)
@@ -341,10 +342,11 @@ ModESP_v4/
 - IP: залежить від режиму (STA = DHCP, AP = 192.168.4.1)
 
 ### Heap Optimization
-- **WS heap guard:** 40KB мінімум перед malloc для WS broadcast (skip якщо менше)
+- **WS heap guard:** 16KB (full state) / 8KB (delta/ping) мінімум перед malloc
 - **NVS batch API:** один handle для flush_to_nvs() замість 30+ nvs_open/close
 - **Float rounding:** 0.01°C precision зменшує SharedState version bumps
-- **Broadcast interval:** 3000ms (зменшує malloc/free частоту для WS)
+- **Delta broadcasts:** ~200B payload замість 3.5KB → менше heap pressure
+- **track_change=false:** таймери/діагностика не тригерять WS broadcasts
 - **system.heap_largest:** моніторинг найбільшого вільного блоку (фрагментація)
 
 ---
