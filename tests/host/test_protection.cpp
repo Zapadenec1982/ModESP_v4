@@ -920,7 +920,8 @@ TEST_CASE("Protection: manual reset clears compressor alarms [compressor]") {
     prot.on_update(600001u);  // 10 min + 1ms > 10 min limit
     REQUIRE(pr_get_bool(state, "protection.continuous_run_alarm") == true);
 
-    // Manual reset
+    // Вимикаємо компресор + Manual reset (без цього alarm re-trigger одразу)
+    state.set("equipment.compressor", false);
     state.set("protection.reset_alarms", true);
     prot.on_update(SETUP_MS);
 

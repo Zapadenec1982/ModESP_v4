@@ -69,15 +69,26 @@ board.json + bindings.json ─┘
 
 ### Protection (Phase 9.3 + 11a)
 
-- **5 незалежних моніторів аварій:** High Temp, Low Temp, Sensor1, Sensor2, Door
+- **10 незалежних моніторів аварій:** High Temp, Low Temp, Sensor1, Sensor2, Door + Short Cycle, Rapid Cycle, Continuous Run, Pulldown, Rate-of-Change
 - **Delayed alarms:** High temp (high_alarm_delay), Low temp (low_alarm_delay), Door (door_delay) — окремі затримки в хвилинах
 - **Instant alarms:** Sensor1, Sensor2 — без затримки
-- **Defrost blocking:** High Temp alarm блокується під час heating-фаз defrost (скидається pending)
-- **Post-defrost suppression:** High Temp alarm блокується на post_defrost_delay хвилин після відтайки
+- **Defrost blocking:** High Temp + Rate alarm блокується під час heating-фаз defrost (скидається pending)
+- **Post-defrost suppression:** High Temp + Rate alarm блокується на post_defrost_delay хвилин після відтайки
 - **Auto-clear:** аварія знімається автоматично при поверненні в норму (якщо manual_reset=false)
-- **Manual reset:** `protection.reset_alarms` = true → скидає всі аварії (WebUI/API)
-- **7 persist параметрів:** high_limit, low_limit, high_alarm_delay, low_alarm_delay, door_delay, manual_reset, post_defrost_delay
-- **protection.lockout = false** завжди (зарезервовано для Phase 10+)
+- **Manual reset:** `protection.reset_alarms` = true → скидає всі 10 аварій (WebUI/API)
+- **Компресорний захист (Phase 17):**
+  - CompressorTracker: ring buffer 30 starts, sliding 1h window, duty cycle, short cycle detection
+  - Short Cycling: 3 послідовних циклів < min_compressor_run → alarm
+  - Rapid Cycling: >max_starts_hour запусків за 1 годину → alarm
+  - Continuous Run: безперервна робота > max_continuous_run → alarm (auto-clear при OFF)
+  - Pulldown Failure: компресор ON > pulldown_timeout, T не впала > pulldown_min_drop (evap_temp fallback)
+  - Rate-of-Change: EWMA lambda=0.3, T росте > max_rise_rate протягом rate_duration → alarm
+  - Діагностика (кожні 5 сек): starts_1h, duty%, run_time, last_cycle_run/off, compressor_hours
+  - 2 features: compressor_protection (requires_roles: [compressor]), rate_protection (requires_roles: [compressor, air_temp])
+- **Alarm code priority:** err1 > rate_rise > high_temp > pulldown > short_cycle > rapid_cycle > low_temp > continuous_run > err2 > door > none
+- **14 persist параметрів:** high_limit, low_limit, high_alarm_delay, low_alarm_delay, door_delay, manual_reset, post_defrost_delay + min_compressor_run, max_starts_hour, max_continuous_run, pulldown_timeout, pulldown_min_drop, max_rise_rate, rate_duration
+- **compressor_hours:** float, persist — кумулятивні мотогодини (інкремент 5 сек)
+- **protection.lockout = false** завжди (зарезервовано)
 - Порядок update: Equipment(0) → **Protection(1)** → Thermostat(2)
 
 ### Defrost (Phase 9.4)
@@ -242,7 +253,7 @@ ModESP_v4/
 │   │   ├── manifest.json      # ⭐ Equipment Manager (HAL owner, arbitration)
 │   │   └── src/equipment_module.cpp
 │   ├── protection/
-│   │   ├── manifest.json      # ⭐ Alarm monitoring (5 monitors, delayed alarms)
+│   │   ├── manifest.json      # ⭐ Alarm monitoring (10 monitors, compressor safety)
 │   │   └── src/protection_module.cpp
 │   ├── thermostat/
 │   │   ├── manifest.json      # ⭐ Single Source of Truth для UI/state/mqtt
@@ -418,6 +429,11 @@ feat(module): короткий опис
 | `next_prompt.md` | Промпт для наступної сесії | В кінці поточної сесії |
 
 ## Changelog
+- 2026-03-02 — Phase 17 Phase 1: Compressor Safety in Protection Module. 5 new alarm monitors (short cycle,
+  rapid cycle, continuous run, pulldown failure, rate-of-change). CompressorTracker (ring buffer 30 starts,
+  sliding 1h window). RateTracker (EWMA lambda=0.3). Motor hours tracking. 2 features (compressor_protection,
+  rate_protection). 18 new state keys, 122 total. 61 STATE_META, 48 MQTT pub, 60 MQTT sub. 10 new test cases.
+  Alarm priority: 11 levels. Defrost interaction: rate blocked during heating+post-defrost.
 - 2026-03-01 — Рефакторинг документації: приведення до реального стану коду. Виправлено stale refs,
   параметри хв/с, старі абревіатури, мертві посилання, додано відсутні HTTP endpoints.
 - 2026-03-01 — Phase 12a DONE: KC868-A6 board support (I2C PCF8574 expander, pcf8574_relay + pcf8574_input drivers).

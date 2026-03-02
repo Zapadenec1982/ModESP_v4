@@ -4,6 +4,24 @@
 
 ## 2026-03-02
 
+- **TASK_17 Phase 1:** Compressor Safety in Protection Module:
+  - 5 нових моніторів аварій: Short Cycle, Rapid Cycle, Continuous Run, Pulldown Failure, Rate-of-Change
+  - CompressorTracker: ring buffer 30 starts, sliding 1h window, duty cycle, short_cycle_count
+  - RateTracker: EWMA lambda=0.3, instant rate °C/min, rising duration accumulator
+  - Motor hours: compressor_hours (float, persist, інкремент кожні 5 сек)
+  - Діагностика кожні 5 сек: starts_1h, duty%, run_time, last_cycle_run/off (track_change=false)
+  - 2 features: compressor_protection (requires_roles: [compressor]), rate_protection ([compressor, air_temp])
+  - Alarm code priority: 11 рівнів (err1 > rate_rise > high_temp > pulldown > short_cycle > rapid_cycle > low_temp > continuous_run > err2 > door > none)
+  - Defrost interaction: rate blocked під час heating-фаз + post_defrost_delay
+  - Pulldown: equipment.evap_temp fallback на air_temp
+  - 18 нових state keys (5 alarm bools + 5 diagnostics + 1 hours + 7 settings)
+  - manifest.json: 19 MQTT pub, 16 MQTT sub (protection module)
+  - thermostat/manifest.json: "Моніторинг компресора" card (7 settings) + diagnostics в "Стан системи"
+  - 10 нових test cases (host doctest), всього 51 C++ тестів
+  - Fix: int → int32_t в state_set для ESP32 Xtensa (ambiguous overload)
+  - Fix: shared_state_host.cpp + base_module_host.cpp — track_change параметр
+  - 122 state keys, 61 STATE_META, 48 MQTT pub, 60 MQTT sub, 254 pytest + 51 host C++
+
 - **Sprint 1 Session 1.1a:** Delta WS Broadcasts + Critical Bugfixes:
   - SharedState: changed_keys_ вектор + track_change параметр для всіх set() overloads
   - WsService: for_each_changed_and_clear() delta broadcast (~200B замість ~3.5KB)

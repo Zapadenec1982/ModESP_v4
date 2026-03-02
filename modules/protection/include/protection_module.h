@@ -124,6 +124,7 @@ private:
     CompressorTracker comp_;
     RateTracker       rate_;
     uint32_t          diag_timer_ = 0;
+    uint8_t           hours_persist_counter_ = 0;  // persist кожні 60 циклів (5 хв)
 
     // Логіка існуючих моніторів
     void update_high_temp(float temp, bool sensor_ok, bool defrost_active, uint32_t dt_ms);

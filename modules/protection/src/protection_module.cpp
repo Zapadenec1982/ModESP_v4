@@ -91,11 +91,11 @@ bool ProtectionModule::on_init() {
     state_set("protection.continuous_run_alarm", false);
     state_set("protection.pulldown_alarm", false);
     state_set("protection.rate_alarm", false);
-    state_set("protection.compressor_starts_1h", 0);
+    state_set("protection.compressor_starts_1h", (int32_t)0);
     state_set("protection.compressor_duty", 0.0f);
-    state_set("protection.compressor_run_time", 0);
-    state_set("protection.last_cycle_run", 0);
-    state_set("protection.last_cycle_off", 0);
+    state_set("protection.compressor_run_time", (int32_t)0);
+    state_set("protection.last_cycle_run", (int32_t)0);
+    state_set("protection.last_cycle_off", (int32_t)0);
     // compressor_hours вже в SharedState від PersistService
 
     ESP_LOGI(TAG, "Initialized (HAL=%.1f°C/%lumin, LAL=%.1f°C/%lumin)",
@@ -541,14 +541,14 @@ void ProtectionModule::update_rate_tracker(float temp, uint32_t dt_ms) {
 // ═══════════════════════════════════════════════════════════════
 
 void ProtectionModule::publish_compressor_diagnostics() {
-    int starts = count_starts_in_window(3600000);
+    int32_t starts = count_starts_in_window(3600000);
     float duty = (comp_.window_ms > 0)
                  ? (static_cast<float>(comp_.total_on_1h_ms) * 100.0f
                     / static_cast<float>(comp_.window_ms))
                  : 0.0f;
-    int run_sec  = static_cast<int>(comp_.current_run_ms / 1000);
-    int last_run = static_cast<int>(comp_.last_run_ms / 1000);
-    int last_off = static_cast<int>(comp_.last_off_ms / 1000);
+    int32_t run_sec  = static_cast<int32_t>(comp_.current_run_ms / 1000);
+    int32_t last_run = static_cast<int32_t>(comp_.last_run_ms / 1000);
+    int32_t last_off = static_cast<int32_t>(comp_.last_off_ms / 1000);
 
     // Мотогодини: інкремент за 5 секунд (якщо компресор ON)
     if (read_bool("equipment.compressor")) {
@@ -562,8 +562,15 @@ void ProtectionModule::publish_compressor_diagnostics() {
     state_set("protection.last_cycle_run", last_run, false);
     state_set("protection.last_cycle_off", last_off, false);
 
-    // compressor_hours — persist → NVS (track_change=true для persist callback)
-    state_set("protection.compressor_hours", compressor_hours_);
+    // compressor_hours — persist кожні 5 хвилин (60 × 5 сек = 300 сек)
+    // Щоб не зношувати NVS (100K write cycles) при оновленні кожні 5 сек
+    hours_persist_counter_++;
+    if (hours_persist_counter_ >= 60) {
+        hours_persist_counter_ = 0;
+        state_set("protection.compressor_hours", compressor_hours_);
+    } else {
+        state_set("protection.compressor_hours", compressor_hours_, false);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════
