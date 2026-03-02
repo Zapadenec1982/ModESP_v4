@@ -14,7 +14,9 @@
 
   let chartData = null;
   let refreshTimer;
-  let liveTimer;
+  let unsubLive;
+  let lastLiveTs = 0;
+  const LIVE_THROTTLE = 10; // оновлення графіка не частіше ніж кожні 10с
   let svgEl;
 
   // Tooltip
@@ -22,34 +24,34 @@
 
   async function loadChart() {
     try { chartData = await apiGet('/api/log?hours=24'); } catch {}
-    startLiveTimer();
   }
 
-  function startLiveTimer() {
-    if (liveTimer) clearInterval(liveTimer);
-    const iv = ($state['datalogger.sample_interval'] || 60) * 1000;
-    liveTimer = setInterval(appendPoint, iv);
-  }
-
-  function appendPoint() {
-    if (!chartData?.channels || !chartData?.temp) return;
-    const aIdx = chartData.channels.indexOf('air');
-    if (aIdx < 0) return;
-    const airVal = $state['equipment.air_temp'];
-    if (airVal == null || typeof airVal !== 'number') return;
-    const now = Math.floor(Date.now() / 1000);
-    const point = new Array(chartData.channels.length + 1).fill(null);
-    point[0] = now;
-    point[aIdx + 1] = Math.round(airVal * 10);
-    const cutoff = now - 24 * 3600;
-    while (chartData.temp.length > 0 && chartData.temp[0][0] < cutoff) chartData.temp.shift();
-    chartData.temp.push(point);
-    // Новий об'єкт щоб Svelte гарантовано оновив reactive chain
-    chartData = { ...chartData, temp: chartData.temp.slice() };
-  }
-
-  onMount(() => { loadChart(); refreshTimer = setInterval(loadChart, 300000); });
-  onDestroy(() => { if (refreshTimer) clearInterval(refreshTimer); if (liveTimer) clearInterval(liveTimer); });
+  onMount(() => {
+    loadChart();
+    refreshTimer = setInterval(loadChart, 300000);
+    // Реактивне оновлення: підписка на зміни state store
+    unsubLive = state.subscribe(s => {
+      if (!chartData?.channels || !chartData?.temp) return;
+      const now = Math.floor(Date.now() / 1000);
+      if (now - lastLiveTs < LIVE_THROTTLE) return;
+      const aIdx = chartData.channels.indexOf('air');
+      if (aIdx < 0) return;
+      const airVal = s['equipment.air_temp'];
+      if (airVal == null || typeof airVal !== 'number') return;
+      lastLiveTs = now;
+      const point = new Array(chartData.channels.length + 1).fill(null);
+      point[0] = now;
+      point[aIdx + 1] = Math.round(airVal * 10);
+      const cutoff = now - 24 * 3600;
+      while (chartData.temp.length > 0 && chartData.temp[0][0] < cutoff) chartData.temp.shift();
+      chartData.temp.push(point);
+      chartData = { ...chartData, temp: chartData.temp.slice() };
+    });
+  });
+  onDestroy(() => {
+    if (refreshTimer) clearInterval(refreshTimer);
+    if (unsubLive) unsubLive();
+  });
 
   $: airIdx = chartData?.channels ? chartData.channels.indexOf('air') + 1 : 1;
   $: pts = chartData?.temp || [];

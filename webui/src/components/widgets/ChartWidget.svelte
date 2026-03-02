@@ -16,7 +16,9 @@
   let tooltip = null;
   let svgEl;
   let refreshTimer;
-  let liveTimer;
+  let unsubLive;
+  let lastLiveTs = 0;
+  const LIVE_THROTTLE = 10; // оновлення графіка не частіше ніж кожні 10с
   let showEvents = false;
 
   // Channel name → state key (дзеркалює CHANNEL_DEFS з бекенду)
@@ -61,50 +63,40 @@
       data = null;
     }
     loading = false;
-    startLiveTimer();
-  }
-
-  // ── Real-time: додаємо нові точки з WebSocket state ──
-  function startLiveTimer() {
-    if (liveTimer) clearInterval(liveTimer);
-    const interval = ($state['datalogger.sample_interval'] || 60) * 1000;
-    liveTimer = setInterval(appendLivePoint, interval);
-  }
-
-  function appendLivePoint() {
-    if (!data || !data.channels || !data.temp) return;
-    const chs = data.channels;
-    const now = Math.floor(Date.now() / 1000);
-    const point = [now];
-    let hasAny = false;
-    for (const name of chs) {
-      const key = CH_STATE_KEYS[name];
-      const sv = key ? $state[key] : undefined;
-      if (sv != null && typeof sv === 'number') {
-        point.push(Math.round(sv * 10));
-        hasAny = true;
-      } else {
-        point.push(null);
-      }
-    }
-    if (!hasAny) return;
-    // Видалити точки що вийшли за вікно
-    const cutoff = now - hours * 3600;
-    while (data.temp.length > 0 && data.temp[0][0] < cutoff) {
-      data.temp.shift();
-    }
-    data.temp.push(point);
-    // Новий об'єкт щоб Svelte гарантовано оновив reactive chain
-    data = { ...data, temp: data.temp.slice() };
   }
 
   onMount(() => {
     loadData();
     refreshTimer = setInterval(loadData, 300000);
+    // Реактивне оновлення: підписка на зміни state store
+    unsubLive = state.subscribe(s => {
+      if (!data?.channels || !data?.temp) return;
+      const now = Math.floor(Date.now() / 1000);
+      if (now - lastLiveTs < LIVE_THROTTLE) return;
+      const chs = data.channels;
+      const point = [now];
+      let hasAny = false;
+      for (const name of chs) {
+        const key = CH_STATE_KEYS[name];
+        const sv = key ? s[key] : undefined;
+        if (sv != null && typeof sv === 'number') {
+          point.push(Math.round(sv * 10));
+          hasAny = true;
+        } else {
+          point.push(null);
+        }
+      }
+      if (!hasAny) return;
+      lastLiveTs = now;
+      const cutoff = now - hours * 3600;
+      while (data.temp.length > 0 && data.temp[0][0] < cutoff) data.temp.shift();
+      data.temp.push(point);
+      data = { ...data, temp: data.temp.slice() };
+    });
   });
   onDestroy(() => {
     if (refreshTimer) clearInterval(refreshTimer);
-    if (liveTimer) clearInterval(liveTimer);
+    if (unsubLive) unsubLive();
   });
 
   function setHours(h) { hours = h; loadData(); }
