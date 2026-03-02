@@ -169,6 +169,13 @@ void MqttService::on_update(uint32_t dt_ms) {
     if (state_ && state_->version() != last_version_) {
         publish_state();
     }
+
+    // Periodic alarm re-publish (кожні 5 хв, retain + QoS 1)
+    alarm_republish_timer_ms_ += dt_ms;
+    if (alarm_republish_timer_ms_ >= ALARM_REPUBLISH_INTERVAL_MS) {
+        alarm_republish_timer_ms_ = 0;
+        publish_alarms_retained();
+    }
 }
 
 void MqttService::on_stop() {
@@ -287,6 +294,10 @@ void MqttService::mqtt_event_handler(void* args, esp_event_base_t base,
                 esp_mqtt_client_subscribe(self->client_, sub_topic, 0);
             }
             ESP_LOGI(TAG, "Subscribed to %d command topics", (int)gen::MQTT_SUBSCRIBE_COUNT);
+
+            // Публікуємо alarm state одразу при підключенні (retain)
+            self->alarm_republish_timer_ms_ = 0;
+            self->publish_alarms_retained();
             break;
         }
 
@@ -311,6 +322,12 @@ void MqttService::mqtt_event_handler(void* args, esp_event_base_t base,
         default:
             break;
     }
+}
+
+// ── Alarm topic detection ───────────────────────────────────────
+
+static bool is_alarm_topic(const char* key) {
+    return strncmp(key, "protection.", 11) == 0;
 }
 
 // ── Publish state ───────────────────────────────────────────────
@@ -352,7 +369,10 @@ void MqttService::publish_state() {
         snprintf(topic, sizeof(topic), "%s/state/%s",
                  prefix_, gen::MQTT_PUBLISH[i]);
 
-        esp_mqtt_client_publish(client_, topic, payload, len, 0, 0);
+        // Alarm topics: QoS 1 + retain для надійної доставки
+        int qos = is_alarm_topic(gen::MQTT_PUBLISH[i]) ? 1 : 0;
+        int retain = qos;
+        esp_mqtt_client_publish(client_, topic, payload, len, qos, retain);
 
         // Зберігаємо опубліковане значення в кеш
         strncpy(last_payloads_[i], payload, sizeof(last_payloads_[i]) - 1);
@@ -360,6 +380,27 @@ void MqttService::publish_state() {
     }
 
     last_version_ = state_->version();
+}
+
+void MqttService::publish_alarms_retained() {
+    if (!connected_ || !client_ || !state_) return;
+
+    for (size_t i = 0; i < gen::MQTT_PUBLISH_COUNT; i++) {
+        if (!is_alarm_topic(gen::MQTT_PUBLISH[i])) continue;
+
+        auto val = state_->get(gen::MQTT_PUBLISH[i]);
+        if (!val.has_value()) continue;
+
+        char payload[32];
+        int len = format_value(val.value(), payload, sizeof(payload));
+        if (len <= 0) continue;
+
+        char topic[80];
+        snprintf(topic, sizeof(topic), "%s/state/%s",
+                 prefix_, gen::MQTT_PUBLISH[i]);
+        esp_mqtt_client_publish(client_, topic, payload, len, 1, 1);
+    }
+    ESP_LOGD(TAG, "Alarm topics re-published (retained)");
 }
 
 // ── Handle incoming commands ────────────────────────────────────

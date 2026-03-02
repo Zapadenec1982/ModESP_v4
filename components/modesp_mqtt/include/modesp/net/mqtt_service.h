@@ -69,6 +69,10 @@ private:
     static constexpr uint32_t MQTT_INITIAL_RECONNECT_MS = 5000;   // 5s
     static constexpr uint32_t MQTT_MAX_RECONNECT_MS = 300000;     // 5 min
 
+    // Periodic alarm re-publish (retain + QoS 1)
+    uint32_t alarm_republish_timer_ms_ = 0;
+    static constexpr uint32_t ALARM_REPUBLISH_INTERVAL_MS = 300000; // 5 min
+
     // Кеш останніх опублікованих значень для delta-publish
     static constexpr size_t MAX_PUBLISH_KEYS = 16;
     char last_payloads_[MAX_PUBLISH_KEYS][32] = {};
@@ -78,6 +82,7 @@ private:
     bool start_client();
     void stop_client();
     void publish_state();
+    void publish_alarms_retained();
     void handle_incoming(const char* topic, int topic_len,
                          const char* data, int data_len);
     void register_http_handlers();
