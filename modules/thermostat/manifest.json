@@ -153,6 +153,114 @@
       "type": "bool",
       "description": "Ручне скидання аварій",
       "optional": true
+    },
+    "protection.short_cycle_alarm": {
+      "source_module": "protection",
+      "type": "bool",
+      "description": "Короткі цикли компресора",
+      "optional": true
+    },
+    "protection.rapid_cycle_alarm": {
+      "source_module": "protection",
+      "type": "bool",
+      "description": "Часті запуски компресора",
+      "optional": true
+    },
+    "protection.continuous_run_alarm": {
+      "source_module": "protection",
+      "type": "bool",
+      "description": "Безперервна робота компресора",
+      "optional": true
+    },
+    "protection.pulldown_alarm": {
+      "source_module": "protection",
+      "type": "bool",
+      "description": "Відсутність зниження T",
+      "optional": true
+    },
+    "protection.rate_alarm": {
+      "source_module": "protection",
+      "type": "bool",
+      "description": "Зростання T при працюючому компресорі",
+      "optional": true
+    },
+    "protection.compressor_starts_1h": {
+      "source_module": "protection",
+      "type": "int",
+      "description": "Запусків за годину",
+      "optional": true
+    },
+    "protection.compressor_duty": {
+      "source_module": "protection",
+      "type": "float",
+      "description": "Duty cycle компресора %",
+      "optional": true
+    },
+    "protection.compressor_run_time": {
+      "source_module": "protection",
+      "type": "int",
+      "description": "Поточний час роботи (сек)",
+      "optional": true
+    },
+    "protection.last_cycle_run": {
+      "source_module": "protection",
+      "type": "int",
+      "description": "Останній цикл роботи (сек)",
+      "optional": true
+    },
+    "protection.last_cycle_off": {
+      "source_module": "protection",
+      "type": "int",
+      "description": "Останній цикл простою (сек)",
+      "optional": true
+    },
+    "protection.compressor_hours": {
+      "source_module": "protection",
+      "type": "float",
+      "description": "Наробіток компресора (год)",
+      "optional": true
+    },
+    "protection.min_compressor_run": {
+      "source_module": "protection",
+      "type": "int",
+      "description": "Мін. час роботи компресора",
+      "optional": true
+    },
+    "protection.max_starts_hour": {
+      "source_module": "protection",
+      "type": "int",
+      "description": "Макс. запусків за годину",
+      "optional": true
+    },
+    "protection.max_continuous_run": {
+      "source_module": "protection",
+      "type": "int",
+      "description": "Макс. безперервна робота",
+      "optional": true
+    },
+    "protection.pulldown_timeout": {
+      "source_module": "protection",
+      "type": "int",
+      "description": "Таймаут pulldown",
+      "optional": true
+    },
+    "protection.pulldown_min_drop": {
+      "source_module": "protection",
+      "type": "float",
+      "description": "Мін. зниження T за pulldown",
+      "optional": true
+    },
+    "protection.max_rise_rate": {
+      "source_module": "protection",
+      "type": "float",
+      "description": "Макс. швидкість росту T",
+      "optional": true
+    },
+    "protection.rate_duration": {
+      "source_module": "protection",
+      "type": "int",
+      "description": "Тривалість rate для аварії",
+      "optional": true
     }
   },
 
@@ -534,6 +642,23 @@
             "key": "protection.reset_alarms",
             "widget": "button",
             "label": "Скинути аварії"
+          },
+          {
+            "key": "protection.compressor_starts_1h",
+            "widget": "value",
+            "label": "Запусків/год"
+          },
+          {
+            "key": "protection.compressor_duty",
+            "widget": "value",
+            "label": "Duty cycle",
+            "format": "%.0f%%"
+          },
+          {
+            "key": "protection.compressor_hours",
+            "widget": "value",
+            "label": "Мотогодини",
+            "format": "%.1f"
           }
         ]
       },
@@ -570,6 +695,41 @@
           {
             "key": "protection.manual_reset",
             "widget": "toggle"
+          }
+        ]
+      },
+      {
+        "title": "Моніторинг компресора",
+        "group": "settings",
+        "collapsible": true,
+        "widgets": [
+          {
+            "key": "protection.min_compressor_run",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.max_starts_hour",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.max_continuous_run",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.pulldown_timeout",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.pulldown_min_drop",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.max_rise_rate",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.rate_duration",
+            "widget": "number_input"
           }
         ]
       },

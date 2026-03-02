@@ -1,19 +1,26 @@
 /**
  * @file protection_module.cpp
- * @brief Protection module — alarm monitoring and signaling (spec_v3 §2.7)
+ * @brief Protection module — alarm monitoring, compressor safety, rate diagnostics
  *
  * Monitors:
- *   1. High Temp (HAL) — delayed (high_alarm_delay), blocked during defrost
- *   2. Low Temp (LAL)  — delayed (low_alarm_delay), always active
+ *   1. High Temp (HAL) — delayed, blocked during defrost
+ *   2. Low Temp (LAL)  — delayed, always active
  *   3. Sensor1 (ERR1)  — instant, air sensor failure
  *   4. Sensor2 (ERR2)  — instant, evap sensor failure (info only)
- *   5. Door open       — delayed (door_delay), info only
+ *   5. Door open       — delayed, info only
+ *   6. Short Cycling   — 3 consecutive runs < min_compressor_run
+ *   7. Rapid Cycling   — starts > max_starts_hour in rolling 60-min window
+ *   8. Continuous Run   — compressor ON > max_continuous_run
+ *   9. Pulldown Failure — compressor ON > pulldown_timeout, temp not dropped
+ *  10. Rate-of-Change   — temp rises > max_rise_rate while compressor ON
  *
- * protection.lockout = false (reserved for Phase 10+)
+ * protection.lockout = false (reserved for future phase)
  */
 
 #include "protection_module.h"
 #include "esp_log.h"
+
+#include <cmath>   // fabsf, fmaxf
 
 static const char* TAG = "Protection";
 
@@ -43,6 +50,20 @@ void ProtectionModule::sync_settings() {
     // Хвилини → мілісекунди (затримка аварії високої T після відтайки)
     post_defrost_delay_ms_ = static_cast<uint32_t>(
         read_int("protection.post_defrost_delay", 30)) * 60000;
+
+    // Компресорний захист
+    min_compressor_run_ms_ = static_cast<uint32_t>(
+        read_int("protection.min_compressor_run", 120)) * 1000;
+    max_starts_hour_ = read_int("protection.max_starts_hour", 12);
+    max_continuous_run_ms_ = static_cast<uint32_t>(
+        read_int("protection.max_continuous_run", 360)) * 60000;
+    pulldown_timeout_ms_ = static_cast<uint32_t>(
+        read_int("protection.pulldown_timeout", 60)) * 60000;
+    pulldown_min_drop_ = read_float("protection.pulldown_min_drop", 2.0f);
+    max_rise_rate_ = read_float("protection.max_rise_rate", 0.5f);
+    rate_duration_ms_ = static_cast<uint32_t>(
+        read_int("protection.rate_duration", 5)) * 60000;
+    compressor_hours_ = read_float("protection.compressor_hours", 0.0f);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -53,7 +74,7 @@ bool ProtectionModule::on_init() {
     // PersistService вже відновив збережені значення з NVS → SharedState (Phase 1)
     sync_settings();
 
-    // Початковий стан
+    // Початковий стан — існуючі
     state_set("protection.lockout", false);
     state_set("protection.alarm_active", false);
     state_set("protection.alarm_code", "none");
@@ -64,10 +85,26 @@ bool ProtectionModule::on_init() {
     state_set("protection.door_alarm", false);
     state_set("protection.reset_alarms", false);
 
+    // Початковий стан — компресорний захист
+    state_set("protection.short_cycle_alarm", false);
+    state_set("protection.rapid_cycle_alarm", false);
+    state_set("protection.continuous_run_alarm", false);
+    state_set("protection.pulldown_alarm", false);
+    state_set("protection.rate_alarm", false);
+    state_set("protection.compressor_starts_1h", 0);
+    state_set("protection.compressor_duty", 0.0f);
+    state_set("protection.compressor_run_time", 0);
+    state_set("protection.last_cycle_run", 0);
+    state_set("protection.last_cycle_off", 0);
+    // compressor_hours вже в SharedState від PersistService
+
     ESP_LOGI(TAG, "Initialized (HAL=%.1f°C/%lumin, LAL=%.1f°C/%lumin)",
              high_limit_, high_alarm_delay_ms_ / 60000,
              low_limit_, low_alarm_delay_ms_ / 60000);
-    ESP_LOGI(TAG, "Features: door=%d", has_feature("door_protection"));
+    ESP_LOGI(TAG, "Features: door=%d, compressor=%d, rate=%d",
+             has_feature("door_protection"),
+             has_feature("compressor_protection"),
+             has_feature("rate_protection"));
     return true;
 }
 
@@ -100,7 +137,7 @@ void ProtectionModule::on_update(uint32_t dt_ms) {
         }
     }
 
-    // 3. Post-defrost suppression — блокуємо HAL alarm після відтайки
+    // 3. Post-defrost suppression — блокуємо HAL + Rate alarm після відтайки
     if (defrost && !was_defrost_active_) {
         // Початок відтайки
         post_defrost_suppression_ = false;
@@ -123,13 +160,13 @@ void ProtectionModule::on_update(uint32_t dt_ms) {
         }
     }
 
-    // Сумарний suppress для HAL alarm: heating-фази відтайки АБО post-defrost
+    // Сумарний suppress для HAL + Rate alarm: heating-фази відтайки АБО post-defrost
     bool suppress_high = defrost_heating || post_defrost_suppression_;
 
     // 3a. Перевіряємо команду скидання аварій
     check_reset_command();
 
-    // 4. Оновлюємо монітори
+    // 4. Оновлюємо існуючі монітори
     update_high_temp(air_temp, sensor1_ok, suppress_high, dt_ms);
     update_low_temp(air_temp, sensor1_ok, dt_ms);
     update_sensor_alarm(sensor1_, sensor1_ok, "SENSOR1 (ERR1)");
@@ -138,7 +175,36 @@ void ProtectionModule::on_update(uint32_t dt_ms) {
         update_door_alarm(door_open, dt_ms);
     }
 
-    // 5. Публікуємо стан аварій
+    // 5. Компресорний захист
+    if (has_feature("compressor_protection")) {
+        bool compressor_on = read_bool("equipment.compressor");
+        update_compressor_tracker(compressor_on, air_temp, defrost, dt_ms);
+
+        // Rate-of-change монітор
+        if (has_feature("rate_protection")) {
+            if (compressor_on && !suppress_high) {
+                update_rate_tracker(air_temp, dt_ms);
+            } else {
+                rate_.rising_duration_ms = 0;
+                rate_.ewma_rate = 0.0f;
+                if (!compressor_on) rate_.initialized = false;
+                // Auto-clear rate alarm коли компресор вимкнено або defrost
+                if (rate_rise_.active && !manual_reset_) {
+                    rate_rise_.active = false;
+                    ESP_LOGI(TAG, "Rate alarm cleared (compressor off/defrost)");
+                }
+            }
+        }
+
+        // Діагностика кожні 5 секунд
+        diag_timer_ += dt_ms;
+        if (diag_timer_ >= 5000) {
+            diag_timer_ = 0;
+            publish_compressor_diagnostics();
+        }
+    }
+
+    // 6. Публікуємо стан аварій
     publish_alarms();
 }
 
@@ -267,14 +333,252 @@ void ProtectionModule::update_door_alarm(bool door_open, uint32_t dt_ms) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Компресорний трекер — відстеження циклів, duty, starts
+// ═══════════════════════════════════════════════════════════════
+
+void ProtectionModule::update_compressor_tracker(bool compressor_on, float temp,
+                                                   bool defrost_active, uint32_t dt_ms) {
+    // --- Ковзне вікно 1 годину ---
+    comp_.window_ms += dt_ms;
+    if (comp_.window_ms > 3600000) {
+        // Обрізаємо total_on пропорційно до вікна
+        uint32_t overflow = comp_.window_ms - 3600000;
+        if (comp_.total_on_1h_ms > overflow) {
+            comp_.total_on_1h_ms -= overflow;
+        } else {
+            comp_.total_on_1h_ms = 0;
+        }
+        comp_.window_ms = 3600000;
+    }
+
+    // --- Переходи стану ---
+    if (compressor_on && !comp_.prev_state) {
+        // OFF → ON: новий запуск
+        comp_.current_run_ms = 0;
+        comp_.last_off_ms = comp_.current_off_ms;
+        comp_.temp_at_start = temp;
+
+        // Записуємо timestamp в ring buffer
+        comp_.start_timestamps[comp_.start_head] = comp_.window_ms;
+        comp_.start_head = (comp_.start_head + 1) % CompressorTracker::MAX_STARTS;
+        if (comp_.start_count < CompressorTracker::MAX_STARTS) {
+            comp_.start_count++;
+        }
+    }
+    else if (!compressor_on && comp_.prev_state) {
+        // ON → OFF: кінець циклу
+        comp_.last_run_ms = comp_.current_run_ms;
+        comp_.current_off_ms = 0;
+
+        // Перевірка короткого циклу
+        if (comp_.current_run_ms < min_compressor_run_ms_) {
+            comp_.short_cycle_count++;
+            ESP_LOGW(TAG, "Short cycle detected: %lu sec (min %lu), count=%u",
+                     comp_.current_run_ms / 1000, min_compressor_run_ms_ / 1000,
+                     comp_.short_cycle_count);
+        } else {
+            // Нормальний цикл — скидаємо лічильник
+            comp_.short_cycle_count = 0;
+        }
+    }
+    comp_.prev_state = compressor_on;
+
+    // --- Акумуляція часу ---
+    if (compressor_on) {
+        comp_.current_run_ms += dt_ms;
+        comp_.total_on_1h_ms += dt_ms;
+    } else {
+        comp_.current_off_ms += dt_ms;
+    }
+
+    // --- Аварії ---
+
+    // 6. Short Cycling: 3 послідовних коротких цикли
+    if (comp_.short_cycle_count >= 3) {
+        if (!short_cycle_.active) {
+            short_cycle_.active = true;
+            ESP_LOGW(TAG, "SHORT CYCLE ALARM: %u consecutive short cycles", comp_.short_cycle_count);
+        }
+    } else {
+        if (short_cycle_.active && !manual_reset_) {
+            short_cycle_.active = false;
+            ESP_LOGI(TAG, "Short cycle alarm cleared (auto)");
+        }
+    }
+
+    // 7. Rapid Cycling: забагато запусків за годину
+    int starts_1h = count_starts_in_window(3600000);
+    if (starts_1h > max_starts_hour_) {
+        if (!rapid_cycle_.active) {
+            rapid_cycle_.active = true;
+            ESP_LOGW(TAG, "RAPID CYCLE ALARM: %d starts/hr > %d", starts_1h, max_starts_hour_);
+        }
+    } else {
+        if (rapid_cycle_.active && !manual_reset_) {
+            rapid_cycle_.active = false;
+            ESP_LOGI(TAG, "Rapid cycle alarm cleared (auto)");
+        }
+    }
+
+    // 8. Continuous Run: безперервна робота занадто довго
+    if (compressor_on && comp_.current_run_ms > max_continuous_run_ms_) {
+        if (!continuous_run_.active) {
+            continuous_run_.active = true;
+            ESP_LOGW(TAG, "CONTINUOUS RUN ALARM: %lu min > %lu min",
+                     comp_.current_run_ms / 60000, max_continuous_run_ms_ / 60000);
+        }
+    } else if (!compressor_on) {
+        if (continuous_run_.active && !manual_reset_) {
+            continuous_run_.active = false;
+            ESP_LOGI(TAG, "Continuous run alarm cleared (auto)");
+        }
+    }
+
+    // 9. Pulldown Failure: компресор працює, а температура не падає
+    if (compressor_on && !defrost_active &&
+        comp_.current_run_ms > pulldown_timeout_ms_) {
+        // Визначаємо яку температуру використовувати
+        float current_temp = temp;  // air_temp за замовчуванням
+        // Якщо є датчик випарника — використовуємо його (швидший відгук)
+        auto evap_val = state_get("equipment.evap_temp");
+        if (evap_val.has_value()) {
+            const auto* fp = etl::get_if<float>(&evap_val.value());
+            if (fp) {
+                current_temp = *fp;
+            }
+        }
+
+        float temp_drop = comp_.temp_at_start - current_temp;
+        if (temp_drop < pulldown_min_drop_) {
+            if (!pulldown_.active) {
+                pulldown_.active = true;
+                ESP_LOGW(TAG, "PULLDOWN ALARM: running %lu min, drop=%.1f < %.1f",
+                         comp_.current_run_ms / 60000, temp_drop, pulldown_min_drop_);
+            }
+        } else {
+            // Температура впала достатньо
+            if (pulldown_.active && !manual_reset_) {
+                pulldown_.active = false;
+                ESP_LOGI(TAG, "Pulldown alarm cleared (temp dropped %.1f)", temp_drop);
+            }
+        }
+    } else if (!compressor_on) {
+        // Компресор вимкнений — скидаємо pulldown
+        if (pulldown_.active && !manual_reset_) {
+            pulldown_.active = false;
+            ESP_LOGI(TAG, "Pulldown alarm cleared (compressor off)");
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Підрахунок запусків у вікні
+// ═══════════════════════════════════════════════════════════════
+
+int ProtectionModule::count_starts_in_window(uint32_t window_ms) const {
+    if (comp_.start_count == 0) return 0;
+
+    uint32_t cutoff = 0;
+    if (comp_.window_ms > window_ms) {
+        cutoff = comp_.window_ms - window_ms;
+    }
+
+    int count = 0;
+    // Ітеруємо ring buffer від найстарішого до найновішого
+    uint8_t idx = (comp_.start_head + CompressorTracker::MAX_STARTS - comp_.start_count)
+                  % CompressorTracker::MAX_STARTS;
+    for (uint8_t i = 0; i < comp_.start_count; i++) {
+        if (comp_.start_timestamps[idx] >= cutoff) {
+            count++;
+        }
+        idx = (idx + 1) % CompressorTracker::MAX_STARTS;
+    }
+    return count;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Rate-of-Change трекер (EWMA, lambda=0.3)
+// ═══════════════════════════════════════════════════════════════
+
+void ProtectionModule::update_rate_tracker(float temp, uint32_t dt_ms) {
+    if (!rate_.initialized) {
+        rate_.prev_temp = temp;
+        rate_.initialized = true;
+        return;
+    }
+
+    float dt_min = static_cast<float>(dt_ms) / 60000.0f;
+    if (dt_min < 0.001f) return;  // захист від ділення на нуль
+
+    float instant_rate = (temp - rate_.prev_temp) / dt_min;
+    rate_.prev_temp = temp;
+
+    // EWMA згладжування
+    constexpr float LAMBDA = 0.3f;
+    rate_.ewma_rate = LAMBDA * instant_rate + (1.0f - LAMBDA) * rate_.ewma_rate;
+
+    if (rate_.ewma_rate > max_rise_rate_) {
+        rate_.rising_duration_ms += dt_ms;
+        if (rate_.rising_duration_ms >= rate_duration_ms_) {
+            if (!rate_rise_.active) {
+                rate_rise_.active = true;
+                ESP_LOGW(TAG, "RATE ALARM: %.2f C/min > %.2f for %lu min",
+                         rate_.ewma_rate, max_rise_rate_,
+                         rate_.rising_duration_ms / 60000);
+            }
+        }
+    } else {
+        rate_.rising_duration_ms = 0;
+        if (rate_rise_.active && !manual_reset_) {
+            rate_rise_.active = false;
+            ESP_LOGI(TAG, "Rate alarm cleared (auto)");
+        }
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Публікація діагностики компресора (кожні 5 сек)
+// ═══════════════════════════════════════════════════════════════
+
+void ProtectionModule::publish_compressor_diagnostics() {
+    int starts = count_starts_in_window(3600000);
+    float duty = (comp_.window_ms > 0)
+                 ? (static_cast<float>(comp_.total_on_1h_ms) * 100.0f
+                    / static_cast<float>(comp_.window_ms))
+                 : 0.0f;
+    int run_sec  = static_cast<int>(comp_.current_run_ms / 1000);
+    int last_run = static_cast<int>(comp_.last_run_ms / 1000);
+    int last_off = static_cast<int>(comp_.last_off_ms / 1000);
+
+    // Мотогодини: інкремент за 5 секунд (якщо компресор ON)
+    if (read_bool("equipment.compressor")) {
+        compressor_hours_ += 5.0f / 3600.0f;
+    }
+
+    // track_change=false — діагностика не тригерить WS broadcasts
+    state_set("protection.compressor_starts_1h", starts, false);
+    state_set("protection.compressor_duty", duty, false);
+    state_set("protection.compressor_run_time", run_sec, false);
+    state_set("protection.last_cycle_run", last_run, false);
+    state_set("protection.last_cycle_off", last_off, false);
+
+    // compressor_hours — persist → NVS (track_change=true для persist callback)
+    state_set("protection.compressor_hours", compressor_hours_);
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Команда скидання аварій (manual reset через WebUI/API)
 // ═══════════════════════════════════════════════════════════════
 
 void ProtectionModule::check_reset_command() {
     if (read_bool("protection.reset_alarms")) {
         // Скидаємо всі активні аварії
-        if (high_temp_.active || low_temp_.active || sensor1_.active ||
-            sensor2_.active || door_.active) {
+        bool any = high_temp_.active || low_temp_.active || sensor1_.active ||
+                   sensor2_.active || door_.active ||
+                   short_cycle_.active || rapid_cycle_.active ||
+                   continuous_run_.active || pulldown_.active || rate_rise_.active;
+
+        if (any) {
             high_temp_.active = false;
             high_temp_.pending = false;
             high_temp_.pending_ms = 0;
@@ -286,6 +590,16 @@ void ProtectionModule::check_reset_command() {
             door_.active = false;
             door_.pending = false;
             door_.pending_ms = 0;
+
+            // Нові аварії
+            short_cycle_.active = false;
+            rapid_cycle_.active = false;
+            continuous_run_.active = false;
+            pulldown_.active = false;
+            rate_rise_.active = false;
+            comp_.short_cycle_count = 0;
+            rate_.rising_duration_ms = 0;
+
             ESP_LOGI(TAG, "All alarms reset (manual)");
         }
         // Скидаємо trigger
@@ -301,25 +615,46 @@ void ProtectionModule::publish_alarms() {
     // lockout — зарезервовано (завжди false)
     state_set("protection.lockout", false);
 
-    // Окремі алерти
+    // Окремі алерти — існуючі
     state_set("protection.high_temp_alarm", high_temp_.active);
     state_set("protection.low_temp_alarm", low_temp_.active);
     state_set("protection.sensor1_alarm", sensor1_.active);
     state_set("protection.sensor2_alarm", sensor2_.active);
     state_set("protection.door_alarm", door_.active);
 
+    // Окремі алерти — нові
+    state_set("protection.short_cycle_alarm", short_cycle_.active);
+    state_set("protection.rapid_cycle_alarm", rapid_cycle_.active);
+    state_set("protection.continuous_run_alarm", continuous_run_.active);
+    state_set("protection.pulldown_alarm", pulldown_.active);
+    state_set("protection.rate_alarm", rate_rise_.active);
+
     // Зведений статус
     bool any_alarm = high_temp_.active || low_temp_.active ||
-                     sensor1_.active || sensor2_.active || door_.active;
+                     sensor1_.active || sensor2_.active || door_.active ||
+                     short_cycle_.active || rapid_cycle_.active ||
+                     continuous_run_.active || pulldown_.active || rate_rise_.active;
     state_set("protection.alarm_active", any_alarm);
 
     // Код найвищої за пріоритетом аварії
+    // err1 > rate_rise > high_temp > pulldown > short_cycle >
+    // rapid_cycle > low_temp > continuous_run > err2 > door > none
     if (sensor1_.active) {
         alarm_code_ = "err1";
+    } else if (rate_rise_.active) {
+        alarm_code_ = "rate_rise";
     } else if (high_temp_.active) {
         alarm_code_ = "high_temp";
+    } else if (pulldown_.active) {
+        alarm_code_ = "pulldown";
+    } else if (short_cycle_.active) {
+        alarm_code_ = "short_cycle";
+    } else if (rapid_cycle_.active) {
+        alarm_code_ = "rapid_cycle";
     } else if (low_temp_.active) {
         alarm_code_ = "low_temp";
+    } else if (continuous_run_.active) {
+        alarm_code_ = "continuous_run";
     } else if (sensor2_.active) {
         alarm_code_ = "err2";
     } else if (door_.active) {

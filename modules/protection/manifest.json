@@ -1,7 +1,7 @@
 {
   "manifest_version": 1,
   "module": "protection",
-  "description": "Alarm monitoring and protection — high/low temp, sensor failure, door (spec_v3 §2.7)",
+  "description": "Alarm monitoring, compressor safety, rate diagnostics",
 
   "inputs": {
     "equipment.air_temp": {
@@ -28,6 +28,18 @@
       "description": "Стан дверей камери",
       "optional": true
     },
+    "equipment.compressor": {
+      "source_module": "equipment",
+      "type": "bool",
+      "description": "Фактичний стан реле компресора",
+      "optional": false
+    },
+    "equipment.evap_temp": {
+      "source_module": "equipment",
+      "type": "float",
+      "description": "Температура випарника (для pulldown, швидший відгук)",
+      "optional": true
+    },
     "defrost.active": {
       "source_module": "defrost",
       "type": "bool",
@@ -51,6 +63,20 @@
       "description": "Моніторинг дверей камери",
       "requires_roles": ["door_contact"],
       "controls_settings": ["protection.door_delay"]
+    },
+    "compressor_protection": {
+      "description": "Захист компресора — короткі/часті цикли, безперервна робота, pulldown",
+      "requires_roles": ["compressor"],
+      "controls_settings": [
+        "protection.min_compressor_run", "protection.max_starts_hour",
+        "protection.max_continuous_run", "protection.pulldown_timeout",
+        "protection.pulldown_min_drop"
+      ]
+    },
+    "rate_protection": {
+      "description": "Моніторинг швидкості зміни температури",
+      "requires_roles": ["compressor", "air_temp"],
+      "controls_settings": ["protection.max_rise_rate", "protection.rate_duration"]
     }
   },
 
@@ -68,7 +94,7 @@
     "protection.alarm_code": {
       "type": "string",
       "access": "read",
-      "description": "Код найвищої аварії (high_temp, low_temp, err1, err2, door, none)"
+      "description": "Код найвищої аварії"
     },
     "protection.high_temp_alarm": {
       "type": "bool",
@@ -95,6 +121,67 @@
       "access": "read",
       "description": "Двері відкриті занадто довго"
     },
+    "protection.short_cycle_alarm": {
+      "type": "bool",
+      "access": "read",
+      "description": "Компресор працює занадто короткими циклами"
+    },
+    "protection.rapid_cycle_alarm": {
+      "type": "bool",
+      "access": "read",
+      "description": "Занадто багато запусків компресора за годину"
+    },
+    "protection.continuous_run_alarm": {
+      "type": "bool",
+      "access": "read",
+      "description": "Компресор працює безперервно занадто довго"
+    },
+    "protection.pulldown_alarm": {
+      "type": "bool",
+      "access": "read",
+      "description": "Температура не знижується при працюючому компресорі"
+    },
+    "protection.rate_alarm": {
+      "type": "bool",
+      "access": "read",
+      "description": "Температура зростає при працюючому компресорі"
+    },
+    "protection.compressor_starts_1h": {
+      "type": "int",
+      "access": "read",
+      "description": "Запусків компресора за останню годину"
+    },
+    "protection.compressor_duty": {
+      "type": "float",
+      "access": "read",
+      "description": "Duty cycle компресора (0-100%)"
+    },
+    "protection.compressor_run_time": {
+      "type": "int",
+      "access": "read",
+      "description": "Поточний час роботи компресора (сек, 0 якщо вимкнений)"
+    },
+    "protection.last_cycle_run": {
+      "type": "int",
+      "access": "read",
+      "description": "Тривалість останнього циклу роботи (сек)"
+    },
+    "protection.last_cycle_off": {
+      "type": "int",
+      "access": "read",
+      "description": "Тривалість останнього циклу простою (сек)"
+    },
+    "protection.compressor_hours": {
+      "type": "float",
+      "access": "readwrite",
+      "min": 0.0,
+      "max": 999999.0,
+      "step": 0.1,
+      "default": 0.0,
+      "persist": true,
+      "description": "Загальний наробіток компресора (години)"
+    },
+
     "protection.high_limit": {
       "type": "float",
       "unit": "\u00b0C",
@@ -172,6 +259,84 @@
       "type": "bool",
       "access": "readwrite",
       "description": "Команда скидання аварій (write-only trigger)"
+    },
+
+    "protection.min_compressor_run": {
+      "type": "int",
+      "unit": "сек",
+      "access": "readwrite",
+      "min": 30,
+      "max": 600,
+      "step": 10,
+      "default": 120,
+      "persist": true,
+      "description": "Мін. час роботи компресора (короткий цикл)"
+    },
+    "protection.max_starts_hour": {
+      "type": "int",
+      "unit": "разів",
+      "access": "readwrite",
+      "min": 4,
+      "max": 30,
+      "step": 1,
+      "default": 12,
+      "persist": true,
+      "description": "Макс. запусків компресора за годину"
+    },
+    "protection.max_continuous_run": {
+      "type": "int",
+      "unit": "хв",
+      "access": "readwrite",
+      "min": 60,
+      "max": 720,
+      "step": 30,
+      "default": 360,
+      "persist": true,
+      "description": "Макс. безперервна робота компресора"
+    },
+    "protection.pulldown_timeout": {
+      "type": "int",
+      "unit": "хв",
+      "access": "readwrite",
+      "min": 15,
+      "max": 240,
+      "step": 5,
+      "default": 60,
+      "persist": true,
+      "description": "Таймаут pulldown (відсутність зниження T)"
+    },
+    "protection.pulldown_min_drop": {
+      "type": "float",
+      "unit": "\u00b0C",
+      "access": "readwrite",
+      "min": 0.5,
+      "max": 10.0,
+      "step": 0.5,
+      "default": 2.0,
+      "persist": true,
+      "description": "Мін. зниження T за pulldown_timeout"
+    },
+    "protection.max_rise_rate": {
+      "type": "float",
+      "unit": "\u00b0C/хв",
+      "access": "readwrite",
+      "min": 0.1,
+      "max": 2.0,
+      "step": 0.1,
+      "default": 0.5,
+      "persist": true,
+      "description": "Макс. швидкість росту T при працюючому компресорі"
+    },
+    "protection.rate_duration": {
+      "type": "int",
+      "unit": "хв",
+      "access": "readwrite",
+      "min": 1,
+      "max": 30,
+      "step": 1,
+      "default": 5,
+      "persist": true,
+      "description": "Тривалість перевищення rate для аварії"
     }
   },
 
@@ -184,7 +349,18 @@
       "protection.low_temp_alarm",
       "protection.sensor1_alarm",
       "protection.sensor2_alarm",
-      "protection.door_alarm"
+      "protection.door_alarm",
+      "protection.short_cycle_alarm",
+      "protection.rapid_cycle_alarm",
+      "protection.continuous_run_alarm",
+      "protection.pulldown_alarm",
+      "protection.rate_alarm",
+      "protection.compressor_starts_1h",
+      "protection.compressor_duty",
+      "protection.compressor_run_time",
+      "protection.last_cycle_run",
+      "protection.last_cycle_off",
+      "protection.compressor_hours"
     ],
     "subscribe": [
       "protection.high_limit",
@@ -194,7 +370,15 @@
       "protection.door_delay",
       "protection.manual_reset",
       "protection.post_defrost_delay",
-      "protection.reset_alarms"
+      "protection.reset_alarms",
+      "protection.min_compressor_run",
+      "protection.max_starts_hour",
+      "protection.max_continuous_run",
+      "protection.pulldown_timeout",
+      "protection.pulldown_min_drop",
+      "protection.max_rise_rate",
+      "protection.rate_duration",
+      "protection.compressor_hours"
     ]
   },
 
@@ -208,7 +392,10 @@
       {"label": "Нижня межа",  "key": "protection.low_limit"},
       {"label": "Затр. HAL",   "key": "protection.high_alarm_delay"},
       {"label": "Затр. LAL",   "key": "protection.low_alarm_delay"},
-      {"label": "Двері",       "key": "protection.door_delay"}
+      {"label": "Двері",       "key": "protection.door_delay"},
+      {"label": "Мін.цикл",    "key": "protection.min_compressor_run"},
+      {"label": "Макс.старт",  "key": "protection.max_starts_hour"},
+      {"label": "Макс.робота", "key": "protection.max_continuous_run"}
     ]
   }
 }

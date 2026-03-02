@@ -89,11 +89,13 @@ static void pr_setup_normal(modesp::SharedState& state,
                              bool  sensor1_ok = true,
                              bool  sensor2_ok = true,
                              bool  door_open  = false,
-                             bool  defrost    = false) {
+                             bool  defrost    = false,
+                             bool  compressor = false) {
     state.set("equipment.air_temp",   air_temp);
     state.set("equipment.sensor1_ok", sensor1_ok);
     state.set("equipment.sensor2_ok", sensor2_ok);
     state.set("equipment.door_open",  door_open);
+    state.set("equipment.compressor", compressor);
     state.set("defrost.active",       defrost);
     state.set("defrost.phase",        modesp::StringValue("idle"));
 }
@@ -605,5 +607,436 @@ TEST_CASE("Protection: sensor failure blocks high and low temp alarm logic [prot
 
         CHECK_MESSAGE(pr_get_bool(state, "protection.high_temp_alarm") == false,
                       "High temp alarm must NOT fire after sensor failure resets pending");
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// COMPRESSOR PROTECTION TESTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// -- Helper: set compressor protection settings for fast testing ---------------
+static void pr_setup_compressor_settings(modesp::SharedState& state,
+                                          int min_run_sec = 120,
+                                          int max_starts = 12,
+                                          int max_cont_min = 360,
+                                          int pulldown_min = 60,
+                                          float pulldown_drop = 2.0f,
+                                          float max_rate = 0.5f,
+                                          int rate_dur_min = 5) {
+    state.set("protection.min_compressor_run", static_cast<int32_t>(min_run_sec));
+    state.set("protection.max_starts_hour",    static_cast<int32_t>(max_starts));
+    state.set("protection.max_continuous_run",  static_cast<int32_t>(max_cont_min));
+    state.set("protection.pulldown_timeout",    static_cast<int32_t>(pulldown_min));
+    state.set("protection.pulldown_min_drop",   pulldown_drop);
+    state.set("protection.max_rise_rate",       max_rate);
+    state.set("protection.rate_duration",       static_cast<int32_t>(rate_dur_min));
+}
+
+// -----------------------------------------------------------------------------
+// TEST 12: No compressor alarm in normal conditions
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: no compressor alarm in normal conditions [compressor]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    pr_setup_normal(state, 5.0f, true, true, false, false, true);
+    pr_setup_compressor_settings(state);
+
+    // Нормальний цикл: 10 хвилин роботи
+    prot.on_update(600000u);
+
+    CHECK(pr_get_bool(state, "protection.short_cycle_alarm") == false);
+    CHECK(pr_get_bool(state, "protection.rapid_cycle_alarm") == false);
+    CHECK(pr_get_bool(state, "protection.continuous_run_alarm") == false);
+    CHECK(pr_get_bool(state, "protection.pulldown_alarm") == false);
+    CHECK(pr_get_bool(state, "protection.rate_alarm") == false);
+}
+
+// -----------------------------------------------------------------------------
+// TEST 13: Short cycle alarm after 3 consecutive short runs
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: short cycle alarm after 3 consecutive short cycles [compressor]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    // min_compressor_run = 120 sec
+    pr_setup_compressor_settings(state, 120);
+    pr_setup_normal(state, 5.0f, true, true, false, false, false);
+
+    // Цикл 1: ON 60 sec → OFF (short: 60 < 120)
+    state.set("equipment.compressor", true);
+    prot.on_update(60000u);
+    state.set("equipment.compressor", false);
+    prot.on_update(SETUP_MS);  // фіксує ON→OFF перехід
+
+    CHECK(pr_get_bool(state, "protection.short_cycle_alarm") == false);
+
+    // Цикл 2: ON 60 sec → OFF (short)
+    state.set("equipment.compressor", true);
+    prot.on_update(60000u);
+    state.set("equipment.compressor", false);
+    prot.on_update(SETUP_MS);
+
+    CHECK(pr_get_bool(state, "protection.short_cycle_alarm") == false);
+
+    // Цикл 3: ON 60 sec → OFF (short) — 3rd consecutive → alarm
+    state.set("equipment.compressor", true);
+    prot.on_update(60000u);
+    state.set("equipment.compressor", false);
+    prot.on_update(SETUP_MS);
+
+    CHECK_MESSAGE(pr_get_bool(state, "protection.short_cycle_alarm") == true,
+                  "Short cycle alarm must fire after 3 consecutive short cycles");
+
+    SUBCASE("auto-clears after normal-length cycle") {
+        // Нормальний цикл: ON 180 sec → OFF (>= 120, resets counter)
+        state.set("equipment.compressor", true);
+        prot.on_update(180000u);
+        state.set("equipment.compressor", false);
+        prot.on_update(SETUP_MS);
+
+        CHECK_MESSAGE(pr_get_bool(state, "protection.short_cycle_alarm") == false,
+                      "Short cycle alarm must auto-clear after normal cycle");
+    }
+}
+
+// -----------------------------------------------------------------------------
+// TEST 14: Rapid cycle alarm with >12 starts in 1 hour
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: rapid cycle alarm with too many starts [compressor]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    // max_starts_hour = 12, min_compressor_run = 120 sec
+    pr_setup_compressor_settings(state, 120, 12);
+    pr_setup_normal(state, 5.0f, true, true, false, false, false);
+
+    // Симулюємо 13 запусків з нормальною тривалістю (180 сек кожен)
+    // Щоб не спрацював short_cycle, кожен цикл >= 120 сек
+    for (int i = 0; i < 13; i++) {
+        state.set("equipment.compressor", true);
+        prot.on_update(180000u);  // 3 хв ON
+        state.set("equipment.compressor", false);
+        prot.on_update(10000u);   // 10 сек OFF
+    }
+
+    CHECK_MESSAGE(pr_get_bool(state, "protection.rapid_cycle_alarm") == true,
+                  "Rapid cycle alarm must fire after 13 starts in < 60 min");
+    CHECK_MESSAGE(pr_get_str(state, "protection.alarm_code") == "rapid_cycle",
+                  "alarm_code must be 'rapid_cycle'");
+}
+
+// -----------------------------------------------------------------------------
+// TEST 15: Continuous run alarm after max_continuous_run
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: continuous run alarm after max duration [compressor]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    // max_continuous_run = 10 min (для швидкості тесту)
+    pr_setup_compressor_settings(state, 120, 12, 10);
+    pr_setup_normal(state, 5.0f, true, true, false, false, true);
+
+    static constexpr uint32_t max_run_ms = 600000u;  // 10 min
+
+    SUBCASE("no alarm before limit") {
+        prot.on_update(max_run_ms - 1u);
+        CHECK(pr_get_bool(state, "protection.continuous_run_alarm") == false);
+    }
+
+    SUBCASE("alarm fires after limit") {
+        prot.on_update(max_run_ms + 1u);
+        CHECK_MESSAGE(pr_get_bool(state, "protection.continuous_run_alarm") == true,
+                      "Continuous run alarm must fire after max duration");
+    }
+
+    SUBCASE("auto-clears when compressor stops") {
+        prot.on_update(max_run_ms + 1u);
+        REQUIRE(pr_get_bool(state, "protection.continuous_run_alarm") == true);
+
+        state.set("equipment.compressor", false);
+        prot.on_update(SETUP_MS);
+
+        CHECK_MESSAGE(pr_get_bool(state, "protection.continuous_run_alarm") == false,
+                      "Continuous run alarm must auto-clear when compressor stops");
+    }
+}
+
+// -----------------------------------------------------------------------------
+// TEST 16: Pulldown alarm — compressor runs but temp doesn't drop
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: pulldown alarm when temp doesn't drop [compressor]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    // pulldown_timeout = 5 min, pulldown_min_drop = 2.0 C
+    pr_setup_compressor_settings(state, 120, 12, 360, 5, 2.0f);
+    // Температура при старті 10°C, компресор ON
+    pr_setup_normal(state, 10.0f, true, true, false, false, true);
+
+    static constexpr uint32_t pulldown_ms = 300000u;  // 5 min
+
+    SUBCASE("no alarm if temp dropped enough") {
+        // Компресор працює 5+ хв, T впала з 10 до 7 (дельта = 3 > 2)
+        prot.on_update(pulldown_ms / 2);
+        state.set("equipment.air_temp", 7.0f);
+        prot.on_update(pulldown_ms / 2 + 1u);
+
+        CHECK_MESSAGE(pr_get_bool(state, "protection.pulldown_alarm") == false,
+                      "No pulldown alarm when temp dropped sufficiently");
+    }
+
+    SUBCASE("alarm if temp didn't drop") {
+        // Компресор працює 5+ хв, T залишилась 10°C (дельта = 0 < 2)
+        prot.on_update(pulldown_ms + 1u);
+
+        CHECK_MESSAGE(pr_get_bool(state, "protection.pulldown_alarm") == true,
+                      "Pulldown alarm must fire when temp didn't drop");
+    }
+
+    SUBCASE("pulldown blocked during defrost") {
+        state.set("defrost.active", true);
+        state.set("defrost.phase", modesp::StringValue("active"));
+        prot.on_update(pulldown_ms + 1u);
+
+        CHECK_MESSAGE(pr_get_bool(state, "protection.pulldown_alarm") == false,
+                      "Pulldown alarm must be blocked during defrost");
+    }
+
+    SUBCASE("auto-clears when compressor stops") {
+        prot.on_update(pulldown_ms + 1u);
+        REQUIRE(pr_get_bool(state, "protection.pulldown_alarm") == true);
+
+        state.set("equipment.compressor", false);
+        prot.on_update(SETUP_MS);
+
+        CHECK_MESSAGE(pr_get_bool(state, "protection.pulldown_alarm") == false,
+                      "Pulldown alarm must auto-clear when compressor stops");
+    }
+}
+
+// -----------------------------------------------------------------------------
+// TEST 17: Rate-of-change alarm — temp rising while compressor ON
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: rate alarm when temp rises while compressor ON [compressor]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    // max_rise_rate = 0.5 C/min, rate_duration = 1 min
+    pr_setup_compressor_settings(state, 120, 12, 360, 60, 2.0f, 0.5f, 1);
+    pr_setup_normal(state, 5.0f, true, true, false, false, true);
+
+    // Симулюємо зростання T на 1°C/хв протягом 2 хв (> 0.5 C/min)
+    // Перший тік для ініціалізації rate tracker
+    prot.on_update(SETUP_MS);
+
+    // Кожен тік = 10 сек, T зростає на ~0.167°C (1°C/хв)
+    float temp = 5.0f;
+    for (int i = 0; i < 18; i++) {  // 18 × 10 sec = 3 min
+        temp += 1.0f / 6.0f;  // +0.167°C за 10 сек = 1°C/хв
+        state.set("equipment.air_temp", temp);
+        prot.on_update(10000u);
+    }
+
+    CHECK_MESSAGE(pr_get_bool(state, "protection.rate_alarm") == true,
+                  "Rate alarm must fire when temp rises > max_rise_rate for rate_duration");
+
+    SUBCASE("rate alarm blocked during defrost") {
+        // Reset
+        state.set("protection.reset_alarms", true);
+        prot.on_update(SETUP_MS);
+        REQUIRE(pr_get_bool(state, "protection.rate_alarm") == false);
+
+        // Симулюємо defrost
+        state.set("defrost.active", true);
+        state.set("defrost.phase", modesp::StringValue("active"));
+
+        temp = 5.0f;
+        state.set("equipment.air_temp", temp);
+        prot.on_update(SETUP_MS);
+
+        for (int i = 0; i < 18; i++) {
+            temp += 1.0f / 6.0f;
+            state.set("equipment.air_temp", temp);
+            prot.on_update(10000u);
+        }
+
+        CHECK_MESSAGE(pr_get_bool(state, "protection.rate_alarm") == false,
+                      "Rate alarm must be blocked during defrost");
+    }
+
+    SUBCASE("rate alarm clears when rate drops") {
+        // Температура стабілізувалась
+        for (int i = 0; i < 12; i++) {
+            prot.on_update(10000u);  // T не змінюється → rate → 0
+        }
+
+        CHECK_MESSAGE(pr_get_bool(state, "protection.rate_alarm") == false,
+                      "Rate alarm must auto-clear when rate drops below threshold");
+    }
+}
+
+// -----------------------------------------------------------------------------
+// TEST 18: Manual reset clears compressor alarms
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: manual reset clears compressor alarms [compressor]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    // Встановлюємо short min_run для швидкості
+    pr_setup_compressor_settings(state, 120, 12, 10);
+    state.set("protection.manual_reset", true);
+    pr_setup_normal(state, 5.0f, true, true, false, false, true);
+
+    // Тригеримо continuous_run alarm
+    prot.on_update(600001u);  // 10 min + 1ms > 10 min limit
+    REQUIRE(pr_get_bool(state, "protection.continuous_run_alarm") == true);
+
+    // Manual reset
+    state.set("protection.reset_alarms", true);
+    prot.on_update(SETUP_MS);
+
+    CHECK_MESSAGE(pr_get_bool(state, "protection.continuous_run_alarm") == false,
+                  "Manual reset must clear continuous_run alarm");
+    CHECK_MESSAGE(pr_get_bool(state, "protection.alarm_active") == false,
+                  "alarm_active must be false after manual reset");
+}
+
+// -----------------------------------------------------------------------------
+// TEST 19: Alarm code priority with new compressor alarms
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: alarm code priority includes compressor alarms [compressor]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    pr_setup_compressor_settings(state, 120, 12, 10);
+    pr_setup_short_delays(state, 1, 1, 1);
+
+    SUBCASE("continuous_run has lower priority than low_temp") {
+        // T=-40 (below low_limit=-35) + continuous_run
+        pr_setup_normal(state, -40.0f, true, true, false, false, true);
+
+        // Тригеримо обидва: low_temp після 60s delay + continuous_run після 10 min
+        prot.on_update(600001u);
+
+        CHECK(pr_get_bool(state, "protection.low_temp_alarm") == true);
+        CHECK(pr_get_bool(state, "protection.continuous_run_alarm") == true);
+        CHECK_MESSAGE(pr_get_str(state, "protection.alarm_code") == "low_temp",
+                      "low_temp must have higher priority than continuous_run");
+    }
+
+    SUBCASE("rate_rise has second-highest priority") {
+        // Sensor1 OK, no err1. Simulate rate alarm + high_temp.
+        pr_setup_normal(state, 5.0f, true, true, false, false, true);
+
+        // Спочатку тригеримо rate через швидке зростання
+        pr_setup_compressor_settings(state, 120, 12, 360, 60, 2.0f, 0.5f, 1);
+        prot.on_update(SETUP_MS);  // init rate tracker
+
+        float temp = 5.0f;
+        for (int i = 0; i < 18; i++) {
+            temp += 1.0f / 6.0f;
+            state.set("equipment.air_temp", temp);
+            prot.on_update(10000u);
+        }
+
+        REQUIRE(pr_get_bool(state, "protection.rate_alarm") == true);
+        // Без err1, rate_rise має найвищий пріоритет
+        CHECK_MESSAGE(pr_get_str(state, "protection.alarm_code") == "rate_rise",
+                      "rate_rise must be second-highest priority (after err1)");
+    }
+}
+
+// -----------------------------------------------------------------------------
+// TEST 20: Compressor diagnostics are published
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: compressor diagnostics published [compressor]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    pr_setup_compressor_settings(state);
+    pr_setup_normal(state, 5.0f, true, true, false, false, true);
+
+    // Компресор ON протягом 10 сек (>= 5 сек тік діагностики)
+    prot.on_update(5000u);
+
+    // Diagnostics мають бути опубліковані
+    auto run_time = state.get("protection.compressor_run_time");
+    REQUIRE(run_time.has_value());
+    const auto* rp = etl::get_if<int32_t>(&run_time.value());
+    CHECK(rp != nullptr);
+    if (rp) CHECK(*rp == 5);  // 5000 ms = 5 sec
+
+    // Duty cycle > 0 (компресор працює)
+    auto duty = state.get("protection.compressor_duty");
+    REQUIRE(duty.has_value());
+    const auto* dp = etl::get_if<float>(&duty.value());
+    CHECK(dp != nullptr);
+    if (dp) CHECK(*dp > 0.0f);
+}
+
+// -----------------------------------------------------------------------------
+// TEST 21: Motor hours accumulation
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: motor hours accumulate when compressor ON [compressor]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    state.set("protection.compressor_hours", 100.0f);  // Simulate existing hours
+    pr_setup_compressor_settings(state);
+    pr_setup_normal(state, 5.0f, true, true, false, false, true);
+
+    // Компресор ON, 2 тіки по 5 сек (=2 інкременти motor hours)
+    prot.on_update(5000u);
+    prot.on_update(5000u);
+
+    auto hours = state.get("protection.compressor_hours");
+    REQUIRE(hours.has_value());
+    const auto* hp = etl::get_if<float>(&hours.value());
+    CHECK(hp != nullptr);
+    if (hp) {
+        // 100 + 2 * (5/3600) = 100.00278
+        CHECK(*hp > 100.0f);
+        CHECK(*hp < 100.01f);
     }
 }
