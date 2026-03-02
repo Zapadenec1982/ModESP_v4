@@ -94,7 +94,8 @@
       data.temp.shift();
     }
     data.temp.push(point);
-    data = data; // Svelte reactivity trigger
+    // Новий об'єкт щоб Svelte гарантовано оновив reactive chain
+    data = { ...data, temp: data.temp.slice() };
   }
 
   onMount(() => {
@@ -241,16 +242,21 @@
       if (d < bestDist) { bestDist = d; best = p; }
     }
     if (best) {
-      const x = PAD.left + xScale(best[0], tMin, tMax);
+      const svgPtX = PAD.left + xScale(best[0], tMin, tMax);
       const firstVis = visibleChannels[0];
       const firstVal = firstVis && best[firstVis.idx] != null ? best[firstVis.idx] / 10 : null;
-      const y = firstVal != null ? PAD.top + yScale(firstVal, vMin, vMax) : PAD.top + CH / 2;
+      const svgPtY = firstVal != null ? PAD.top + yScale(firstVal, vMin, vMax) : PAD.top + CH / 2;
       const d = new Date(best[0] * 1000);
       const time = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
       const vals = visibleChannels
         .filter(ch => best[ch.idx] != null)
-        .map(ch => `${($t[ch.tkey] || ch.name).slice(0,3)}:${(best[ch.idx]/10).toFixed(1)}°`);
-      tooltip = { x, y, text: vals.join(' ') + '  ' + time, width: Math.max(90, vals.join(' ').length * 7 + 50) };
+        .map(ch => ({ name: $t[ch.tkey] || ch.name, val: (best[ch.idx]/10).toFixed(1) + '°' }));
+      tooltip = {
+        svgX: svgPtX, svgY: svgPtY,
+        pctX: (svgPtX / W) * 100,
+        pctY: (svgPtY / H) * 100,
+        vals, time
+      };
     }
   }
   function handleLeave() { tooltip = null; }
@@ -372,14 +378,11 @@
         <text x={xl.x} y={H - PAD.bottom + 22} class="axis-label" text-anchor="middle">{xl.label}</text>
       {/each}
 
-      <!-- Tooltip -->
+      <!-- Tooltip crosshair -->
       {#if tooltip}
-        <circle cx={tooltip.x} cy={tooltip.y} r="3" class="tooltip-dot" />
-        <rect x={tooltip.x + 8} y={tooltip.y - 24} width={tooltip.width} height="20" rx="3"
-              class="tooltip-bg" />
-        <text x={tooltip.x + 12} y={tooltip.y - 10} class="tooltip-text">
-          {tooltip.text}
-        </text>
+        <line x1={tooltip.svgX} y1={PAD.top} x2={tooltip.svgX} y2={PAD.top + CH}
+              stroke="var(--fg-muted)" stroke-width="0.5" stroke-dasharray="2 2" opacity="0.5" />
+        <circle cx={tooltip.svgX} cy={tooltip.svgY} r="4" class="tooltip-dot" />
       {/if}
 
       <!-- Legend (dynamic channels) -->
@@ -401,6 +404,14 @@
         {/if}
       {/if}
     </svg>
+    {#if tooltip}
+      <div class="html-tip" style="left:{tooltip.pctX}%; top:{tooltip.pctY}%">
+        {#each tooltip.vals as v}
+          <span class="tip-ch">{v.name}: <strong>{v.val}</strong></span>
+        {/each}
+        <span class="tip-time">{tooltip.time}</span>
+      </div>
+    {/if}
   {/if}
 
   <!-- Список подій -->
@@ -426,6 +437,7 @@
 <style>
   .chart-container {
     width: 100%;
+    position: relative;
   }
   .chart-header {
     display: flex;
@@ -517,9 +529,26 @@
   .chart-svg .power-mark { stroke: #64748b; stroke-width: 1; stroke-dasharray: 2 2; opacity: 0.5; }
   .chart-svg .axis-label { font-size: 16px; fill: var(--fg-muted); }
   .chart-svg .legend-text { font-size: 14px; fill: var(--fg-muted); }
-  .chart-svg .tooltip-dot { fill: #3b82f6; }
-  .chart-svg .tooltip-bg { fill: var(--bg2); stroke: var(--border); stroke-width: 0.5; }
-  .chart-svg .tooltip-text { font-size: 16px; fill: var(--fg); }
+  .chart-svg .tooltip-dot { fill: #3b82f6; stroke: var(--card); stroke-width: 2; }
+
+  .html-tip {
+    position: absolute;
+    transform: translate(-50%, -120%);
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 5;
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    font-size: 13px;
+  }
+  .tip-ch { color: var(--fg); }
+  .tip-ch strong { font-weight: 700; }
+  .tip-time { color: var(--fg-muted); font-size: 12px; }
 
   /* Events section */
   .events-section {
@@ -570,6 +599,5 @@
   @media (max-width: 480px) {
     .chart-svg .axis-label { font-size: 24px; }
     .chart-svg .legend-text { font-size: 20px; }
-    .chart-svg .tooltip-text { font-size: 24px; }
   }
 </style>

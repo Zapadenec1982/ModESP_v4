@@ -44,7 +44,8 @@
     const cutoff = now - 24 * 3600;
     while (chartData.temp.length > 0 && chartData.temp[0][0] < cutoff) chartData.temp.shift();
     chartData.temp.push(point);
-    chartData = chartData;
+    // Новий об'єкт щоб Svelte гарантовано оновив reactive chain
+    chartData = { ...chartData, temp: chartData.temp.slice() };
   }
 
   onMount(() => { loadChart(); refreshTimer = setInterval(loadChart, 300000); });
@@ -94,9 +95,15 @@
     const val = closest[airIdx] / 10;
     const d = new Date(closest[0] * 1000);
     const timeStr = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    // SVG координати для crosshair/dot
+    const svgPtX = PAD.left + xFn(closest[0]);
+    const svgPtY = PAD.top + yFn(val);
+    // Екранні % для HTML tooltip
+    const pctX = (svgPtX / W) * 100;
+    const pctY = (svgPtY / H) * 100;
     tooltip = {
-      x: PAD.left + xFn(closest[0]),
-      y: PAD.top + yFn(val),
+      svgX: svgPtX, svgY: svgPtY,
+      pctX, pctY,
       temp: val.toFixed(1) + '°C',
       time: timeStr
     };
@@ -128,13 +135,16 @@
         <text x={xl.x} y={H - 4} class="mc-axis" text-anchor="middle">{xl.label}</text>
       {/each}
       {#if tooltip}
-        <line x1={tooltip.x} y1={PAD.top} x2={tooltip.x} y2={H - PAD.bottom} class="mc-cross" />
-        <circle cx={tooltip.x} cy={tooltip.y} r="5" class="mc-dot" />
-        <rect x={tooltip.x - 50} y={tooltip.y - 42} width="100" height="36" rx="4" class="mc-tip-bg" />
-        <text x={tooltip.x} y={tooltip.y - 26} class="mc-tip-val" text-anchor="middle">{tooltip.temp}</text>
-        <text x={tooltip.x} y={tooltip.y - 12} class="mc-tip-time" text-anchor="middle">{tooltip.time}</text>
+        <line x1={tooltip.svgX} y1={PAD.top} x2={tooltip.svgX} y2={H - PAD.bottom} class="mc-cross" />
+        <circle cx={tooltip.svgX} cy={tooltip.svgY} r="5" class="mc-dot" />
       {/if}
     </svg>
+    {#if tooltip}
+      <div class="mc-html-tip" style="left:{tooltip.pctX}%; top:{tooltip.pctY}%">
+        <div class="mc-html-val">{tooltip.temp}</div>
+        <div class="mc-html-time">{tooltip.time}</div>
+      </div>
+    {/if}
     <div class="chart-footer">
       {#if agoMin !== null}
         <span class="chart-ago">{agoMin} {$t['chart.min_ago']}</span>
@@ -152,6 +162,7 @@
     border-radius: var(--radius-2xl);
     border: 1px solid var(--border);
     padding: var(--sp-4);
+    position: relative;
   }
   .mini-chart { width: 100%; display: block; cursor: crosshair; }
   .mini-chart .mc-grid { stroke: var(--border); stroke-width: 0.5; }
@@ -159,9 +170,21 @@
   .mini-chart .mc-axis { font-size: 16px; fill: var(--fg-muted); }
   .mini-chart .mc-cross { stroke: var(--fg-muted); stroke-width: 0.5; stroke-dasharray: 2 2; opacity: 0.5; }
   .mini-chart .mc-dot { fill: #3b82f6; stroke: var(--card); stroke-width: 2; }
-  .mini-chart .mc-tip-bg { fill: var(--bg2); stroke: var(--border); stroke-width: 0.5; }
-  .mini-chart .mc-tip-val { font-size: 18px; fill: var(--fg); font-weight: 600; }
-  .mini-chart .mc-tip-time { font-size: 14px; fill: var(--fg-muted); }
+
+  .mc-html-tip {
+    position: absolute;
+    transform: translate(-50%, -120%);
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 10px;
+    text-align: center;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 5;
+  }
+  .mc-html-val { font-size: 14px; font-weight: 700; color: var(--fg); }
+  .mc-html-time { font-size: 12px; color: var(--fg-muted); }
 
   .chart-footer {
     display: flex;
@@ -191,8 +214,6 @@
 
   @media (max-width: 480px) {
     .mini-chart .mc-axis { font-size: 24px; }
-    .mini-chart .mc-tip-val { font-size: 26px; }
-    .mini-chart .mc-tip-time { font-size: 20px; }
     .tile-chart { padding: var(--sp-3); }
   }
 </style>
