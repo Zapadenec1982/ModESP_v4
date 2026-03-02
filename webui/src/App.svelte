@@ -3,7 +3,7 @@
   import { fade, fly, scale } from 'svelte/transition';
   import { loadUiConfig, uiLoading, uiError, deviceName, pages, navigateTo } from './stores/ui.js';
   import { initWebSocket, state } from './stores/state.js';
-  import { apiGet, needsLogin } from './lib/api.js';
+  import { apiGet, apiPost, needsLogin } from './lib/api.js';
   import { t } from './stores/i18n.js';
   import './stores/theme.js';
   import Layout from './components/Layout.svelte';
@@ -23,6 +23,8 @@
     } catch (e) {
       console.warn('Initial state load failed', e);
     }
+    // Auth probe: POST з пустим body → 401 якщо auth потрібен
+    try { await apiPost('/api/settings', {}); } catch (e) { /* 401 → needsLogin */ }
     initWebSocket();
   });
 
