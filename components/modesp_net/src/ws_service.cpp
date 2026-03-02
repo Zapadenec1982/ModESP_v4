@@ -302,7 +302,8 @@ void WsService::send_full_state_to(int fd) {
     if (!server_ || !state_) return;
 
     // Серіалізуємо повний state для нового клієнта
-    char buf[4096];
+    // 154 entries × ~35 bytes avg = ~5.4KB потрібно
+    char buf[6144];
     WsSerCtx ctx = {buf, sizeof(buf), 0, true};
     ctx.pos += snprintf(buf, sizeof(buf), "{");
 
@@ -310,7 +311,7 @@ void WsService::send_full_state_to(int fd) {
 
     ctx.pos += snprintf(buf + ctx.pos, ctx.remaining(), "}");
 
-    // Захист від OOM: повний state ~3.5KB + AsyncSendCtx overhead
+    // Захист від OOM: повний state ~5KB + AsyncSendCtx overhead
     if (esp_get_free_heap_size() < 16000) {
         ESP_LOGW(TAG, "Heap < 16KB, skip initial state to fd=%d", fd);
         return;
