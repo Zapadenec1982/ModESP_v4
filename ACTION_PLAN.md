@@ -39,10 +39,10 @@
 
 | Sprint | Сесії | Тема | Статус |
 |--------|-------|------|--------|
-| **Sprint 1** | 1-4 | Design System + Memory Fix | |
-| **Sprint 2** | 5-8 | Dashboard Redesign + Settings UX | |
-| **Sprint 3** | 9-11 | Mobile UX + Security | |
-| **Sprint 4** | 12-14 | Finishing Touches + HW Test | |
+| **Sprint 1** | 1-4 | Design System + Memory Fix | ✅ DONE |
+| **Sprint 2** | 5-8 | Dashboard Redesign + Settings UX | ✅ DONE |
+| **Sprint 3** | 9-11 | Mobile UX + Security | ✅ DONE |
+| **Sprint 4** | 12-14 | Finishing Touches + HW Test | ✅ DONE |
 
 #### Sprint 1: Design System + Memory Fix (сесії 1-4)
 
@@ -109,13 +109,12 @@
   - OTA Board Validation: esp_app_desc_t.project_name check, board_mismatch error + toast
   - SharedState auto-capacity: MODESP_MAX_STATE_ENTRIES генерується з маніфестів + 32
 
-- [ ] **Сесія 1.8:** °C/°F + Alarm Relay
+- [ ] **Сесія 1.8:** °C/°F + Alarm Relay — ВІДКЛАДЕНО (не актуально для поточних об'єктів)
   - system.temp_unit, format layer, alarm_relay role
   - Промпт: `prompts/sprint4_session1_8_units_alarm.md`
 
-- [ ] **Сесія 1.9:** Hardware Integration Test
-  - Повний чеклист на KC868-A6: mobile, OTA, auth, memory, MQTT
-  - Промпт: `prompts/sprint4_session1_9_hw_test.md`
+- [x] **Сесія 1.9:** Hardware Integration Test ✓
+  - KC868-A6: прошивка, датчики, реле — все перевірено і працює
 
 ---
 
@@ -192,9 +191,9 @@
 | AUDIT-030 | ~~HTTP Basic Auth~~ | ✅ MVP Sprint 3 (1.5) |
 | AUDIT-031 | HP/LP pressure switches | Prod Sprint 9 |
 | AUDIT-032 | Scheduled defrost | Prod Sprint 9 |
-| AUDIT-033 | Alarm relay output | MVP Sprint 4 (1.8) |
+| AUDIT-033 | Alarm relay output | Deferred (не актуально) |
 | AUDIT-034 | Password protection | Prod (deferred) |
-| AUDIT-035 | °C/°F units | MVP Sprint 4 (1.8) |
+| AUDIT-035 | °C/°F units | Deferred (не актуально) |
 
 ---
 
@@ -252,6 +251,7 @@
 
 ## Changelog
 
+- 2026-03-02 — **MVP ЧАСТИНА 1 ЗАВЕРШЕНА.** Session 1.8 (°C/°F) відкладено, Session 1.9 (HW test) — пройдено.
 - 2026-03-02 — Session 1.7 DONE: MQTT backoff (5s→5min), WiFi STA watchdog (10min→restart), retained alarms (QoS1+retain), Auth Settings card, OTA board validation (project_name check), SharedState auto-capacity (136 = 104 manifest + 32 runtime).
 - 2026-03-02 — Session 1.1a DONE: Delta WS broadcasts, DataLogger NTP fix, DS18B20 MATCH_ROM only, Bindings unbind/rebind UI.
 - 2026-03-01 — Повний план MVP→Production (14+20 сесій). WebUI UX redesign як #1 пріоритет. Створено prompts/ директорію з промптами для кожної сесії.
