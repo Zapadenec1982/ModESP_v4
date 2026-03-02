@@ -1,6 +1,7 @@
 <script>
   import { t } from '../../stores/i18n.js';
   import { wifiPassword } from '../../stores/wifiForm.js';
+  import { mqttPass } from '../../stores/mqttForm.js';
 
   export let config;
   export let value;
@@ -14,6 +15,10 @@
 
   // Sync wifi password з shared store (замість DOM querySelector)
   $: if (config.key === 'wifi.password') wifiPassword.set(inputValue);
+
+  // Sync mqtt password з shared store
+  $: if (config.key === 'mqtt.password') mqttPass.set(inputValue);
+  $: if (config.key === 'mqtt.password' && $mqttPass !== inputValue) inputValue = $mqttPass;
 </script>
 
 <div class="input-widget">

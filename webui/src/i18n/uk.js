@@ -91,6 +91,8 @@ export default {
   'alert.saved_restart': 'Збережено! Перезавантажте.',
   'alert.saved_mqtt': 'Збережено! MQTT перепідключується...',
   'alert.error': 'Помилка збереження',
+  'alert.conn_error': 'Помилка з\'єднання',
+  'alert.invalid_value': 'Некоректне значення',
   'alert.ssid_empty': 'SSID не може бути порожнім',
   'alert.pass_min8': 'Пароль мінімум 8 символів',
   'alert.confirm_ota': 'Оновити прошивку? Пристрій перезавантажиться.',

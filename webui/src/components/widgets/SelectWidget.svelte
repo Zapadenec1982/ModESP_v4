@@ -34,8 +34,9 @@
   <div class="select-label">{config.description || config.key}</div>
   <select class="select-input" value={current} on:change={onChange} {disabled}>
     {#each enriched as opt}
-      <option value={opt.value} disabled={opt.isDisabled}>
-        {opt.label}{opt.isDisabled ? ' ⊘' : ''}
+      <option value={opt.value} disabled={opt.isDisabled}
+        title={opt.isDisabled && opt.disabled_hint ? opt.disabled_hint : ''}>
+        {opt.label}
       </option>
     {/each}
   </select>
@@ -64,6 +65,10 @@
   }
   .select-input:disabled { cursor: not-allowed; }
   .select-input:focus { outline: none; border-color: var(--accent); }
-  .disabled-hint { font-size: 11px; color: var(--warning, #f39c12); margin-top: 4px; }
-  .disabled-reason { font-size: 11px; color: var(--danger, #e74c3c); margin-top: 4px; }
+  .select-input option:disabled {
+    color: var(--fg-muted);
+    text-decoration: line-through;
+  }
+  .disabled-hint { font-size: 12px; color: var(--warning, #f59e0b); margin-top: 4px; }
+  .disabled-reason { font-size: 12px; color: var(--danger, #ef4444); margin-top: 4px; }
 </style>

@@ -1,5 +1,6 @@
 <script>
   import { wifiSsid } from '../../stores/wifiForm.js';
+  import { mqttBroker, mqttUser, mqttPrefix } from '../../stores/mqttForm.js';
 
   export let config;
   export let value;
@@ -14,6 +15,14 @@
   // Sync wifi SSID з shared store (замість DOM querySelector)
   $: if (config.key === 'wifi.ssid') wifiSsid.set(inputValue);
   $: if (config.key === 'wifi.ssid' && $wifiSsid !== inputValue) inputValue = $wifiSsid;
+
+  // Sync mqtt form fields з shared stores
+  $: if (config.key === 'mqtt.broker') mqttBroker.set(inputValue);
+  $: if (config.key === 'mqtt.broker' && $mqttBroker !== inputValue) inputValue = $mqttBroker;
+  $: if (config.key === 'mqtt.user') mqttUser.set(inputValue);
+  $: if (config.key === 'mqtt.user' && $mqttUser !== inputValue) inputValue = $mqttUser;
+  $: if (config.key === 'mqtt.prefix') mqttPrefix.set(inputValue);
+  $: if (config.key === 'mqtt.prefix' && $mqttPrefix !== inputValue) inputValue = $mqttPrefix;
 </script>
 
 <div class="input-widget">

@@ -83,6 +83,8 @@ export default {
   'alert.saved_restart': 'Saved! Restart to apply.',
   'alert.saved_mqtt': 'Saved! MQTT reconnecting...',
   'alert.error': 'Save error',
+  'alert.conn_error': 'Connection error',
+  'alert.invalid_value': 'Invalid value',
   'alert.ssid_empty': 'SSID cannot be empty',
   'alert.pass_min8': 'Password must be at least 8 characters',
   'alert.confirm_ota': 'Update firmware? Device will restart.',

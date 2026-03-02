@@ -2,7 +2,10 @@ const BASE = '';
 
 export async function apiGet(url) {
   const r = await fetch(BASE + url);
-  if (!r.ok) throw new Error(`GET ${url}: ${r.status}`);
+  if (!r.ok) {
+    const text = await r.text().catch(() => '');
+    throw new Error(text || `GET ${url}: ${r.status}`);
+  }
   return r.json();
 }
 
@@ -12,10 +15,9 @@ export async function apiPost(url, data) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   });
-  // AUDIT-010: перевіряємо статус відповіді перед парсингом JSON
   if (!r.ok) {
-    const text = await r.text();
-    throw new Error(text || `POST ${url}: ${r.status}`);
+    const text = await r.text().catch(() => '');
+    throw new Error(text || httpStatusMessage(r.status, url));
   }
   return r.json();
 }
@@ -31,10 +33,22 @@ export async function apiUpload(url, file, onProgress) {
     };
     xhr.onload = () => {
       if (xhr.status === 200) resolve(JSON.parse(xhr.responseText || '{}'));
-      else reject(new Error(xhr.responseText || `HTTP ${xhr.status}`));
+      else reject(new Error(xhr.responseText || httpStatusMessage(xhr.status, url)));
     };
     xhr.onerror = () => reject(new Error('Connection error'));
     xhr.setRequestHeader('Content-Type', 'application/octet-stream');
     xhr.send(file);
   });
+}
+
+function httpStatusMessage(status, url) {
+  const map = {
+    400: 'Bad request',
+    401: 'Unauthorized',
+    404: 'Not found',
+    413: 'Too large',
+    422: 'Invalid value',
+    500: 'Server error',
+  };
+  return map[status] || `${url}: ${status}`;
 }

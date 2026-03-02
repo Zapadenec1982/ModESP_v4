@@ -1,6 +1,7 @@
 <script>
   import { apiGet, apiPost } from '../../lib/api.js';
   import { setStateKey, state } from '../../stores/state.js';
+  import { mqttBroker, mqttUser, mqttPass, mqttPrefix } from '../../stores/mqttForm.js';
   import { t } from '../../stores/i18n.js';
   import { toastSuccess, toastError } from '../../stores/toast.js';
   import { onMount } from 'svelte';
@@ -14,18 +15,18 @@
   onMount(async () => {
     try {
       const d = await apiGet('/api/mqtt');
+      // Status keys для відображення
       setStateKey('mqtt.connected', d.connected || false);
       setStateKey('mqtt.status', d.status || 'unknown');
-      setStateKey('mqtt.broker', d.broker || '');
       setStateKey('mqtt.enabled', d.enabled || false);
+      // Form fields через stores (TextInput/PasswordInput синхронізуються)
+      mqttBroker.set(d.broker || '');
+      mqttUser.set(d.user || '');
+      mqttPrefix.set(d.prefix || '');
+      // Port через $state (NumberInput читає звідти)
+      setStateKey('mqtt.port', d.port || 1883);
+      // Password не повертається з API — store лишається порожнім
       prevEnabled = !!d.enabled;
-      // Fill form inputs via DOM
-      setTimeout(() => {
-        setInput('mqtt.broker', d.broker || '');
-        setInput('mqtt.user', d.user || '');
-        setInput('mqtt.prefix', d.prefix || '');
-        setInput('mqtt.port', d.port || 1883);
-      }, 50);
     } catch (e) {}
     mounted = true;
   });
@@ -38,24 +39,14 @@
       .catch(() => {});
   }
 
-  function setInput(key, val) {
-    const el = document.querySelector(`[data-widget-key="${key}"] input`);
-    if (el) el.value = val;
-  }
-
-  function getInput(key) {
-    const el = document.querySelector(`[data-widget-key="${key}"] input`);
-    return el?.value ?? '';
-  }
-
   async function save() {
     loading = true;
     const data = {
-      broker: getInput('mqtt.broker').trim(),
-      port: parseInt(getInput('mqtt.port')) || 1883,
-      user: getInput('mqtt.user').trim(),
-      password: getInput('mqtt.password'),
-      prefix: getInput('mqtt.prefix').trim(),
+      broker: ($mqttBroker || '').trim(),
+      port: parseInt($state['mqtt.port']) || 1883,
+      user: ($mqttUser || '').trim(),
+      password: $mqttPass || '',
+      prefix: ($mqttPrefix || '').trim(),
       enabled: !!$state['mqtt.enabled'],
     };
 
