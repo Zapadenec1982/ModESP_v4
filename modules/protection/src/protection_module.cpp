@@ -563,13 +563,12 @@ void ProtectionModule::publish_compressor_diagnostics() {
     state_set("protection.last_cycle_run", last_run, false);
     state_set("protection.last_cycle_off", last_off, false);
 
-    // compressor_hours — persist раз на годину (720 × 5 сек = 3600 сек)
+    // compressor_hours — persist раз на 30 хв (360 × 5с = 1800с)
+    // state_set() тригерить persist callback → NVS write, тому викликаємо РІДКО
     hours_persist_counter_++;
-    if (hours_persist_counter_ >= 720) {
+    if (hours_persist_counter_ >= 360) {
         hours_persist_counter_ = 0;
         state_set("protection.compressor_hours", compressor_hours_);
-    } else {
-        state_set("protection.compressor_hours", compressor_hours_, false);
     }
 }
 
