@@ -115,7 +115,7 @@
   }
   input[type=range]::-webkit-slider-thumb {
     -webkit-appearance: none;
-    width: 36px; height: 36px;
+    width: 44px; height: 44px;
     border-radius: var(--radius-full);
     background: var(--accent);
     border: 3px solid var(--card);
@@ -123,7 +123,7 @@
     cursor: pointer;
   }
   input[type=range]::-moz-range-thumb {
-    width: 36px; height: 36px;
+    width: 44px; height: 44px;
     border-radius: var(--radius-full);
     background: var(--accent);
     border: 3px solid var(--card);

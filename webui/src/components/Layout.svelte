@@ -22,6 +22,20 @@
   $: currentTitle = $pages.find(p => p.id === currentPage)?.title || '';
   $: sortedPages = [...$pages].sort((a, b) => (a.order || 0) - (b.order || 0));
 
+  // Mobile bottom tabs: max 4 visible + "More" if > 5 pages
+  const MAX_TABS = 4;
+  $: hasMore = sortedPages.length > MAX_TABS + 1;
+  $: visibleTabs = hasMore ? sortedPages.slice(0, MAX_TABS) : sortedPages;
+  $: moreTabs = hasMore ? sortedPages.slice(MAX_TABS) : [];
+
+  // "More" overlay state
+  let moreOpen = false;
+
+  function navigateMore(id) {
+    currentPage = id;
+    moreOpen = false;
+  }
+
   // Connection overlay — показувати через 5с після disconnect (уникнути flicker)
   let showOverlay = false;
   let overlayTimer = null;
@@ -119,7 +133,7 @@
 
   <!-- Bottom tabs (mobile) -->
   <nav class="bottom-tabs">
-    {#each sortedPages as page}
+    {#each visibleTabs as page}
       <button
         class="tab-item"
         class:active={currentPage === page.id}
@@ -129,7 +143,41 @@
         <span class="tab-label">{page.title}</span>
       </button>
     {/each}
+    {#if hasMore}
+      <button
+        class="tab-item"
+        class:active={moreTabs.some(p => p.id === currentPage)}
+        on:click={() => moreOpen = !moreOpen}
+      >
+        <Icon name="more-horizontal" size={20} />
+        <span class="tab-label">{$t['nav.more']}</span>
+      </button>
+    {/if}
   </nav>
+
+  <!-- "More" overlay -->
+  {#if moreOpen}
+    <div class="more-overlay" transition:fade={{ duration: 150 }}>
+      <div class="more-sheet">
+        <div class="more-header">
+          <span class="more-title">{$t['nav.more']}</span>
+          <button class="more-close" on:click={() => moreOpen = false}>
+            <Icon name="x" size={20} />
+          </button>
+        </div>
+        {#each moreTabs as page}
+          <button
+            class="more-item"
+            class:active={currentPage === page.id}
+            on:click={() => navigateMore(page.id)}
+          >
+            <Icon name={page.icon || 'home'} size={22} />
+            <span>{page.title}</span>
+          </button>
+        {/each}
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -393,38 +441,112 @@
     background: var(--bg2);
     border-top: 1px solid var(--border);
     z-index: 20;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
+    padding-bottom: env(safe-area-inset-bottom, 0);
   }
-
-  .bottom-tabs::-webkit-scrollbar { display: none; }
 
   .tab-item {
     flex: 1;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 4px;
-    padding: 8px 4px 10px;
+    gap: 3px;
+    padding: 6px 4px 8px;
     border: none;
+    border-top: 2px solid transparent;
     background: none;
     color: var(--fg-muted);
-    font-size: 10px;
+    font-size: 11px;
     cursor: pointer;
-    min-width: 56px;
+    min-width: 48px;
+    min-height: 52px;
     transition: color 0.15s;
   }
 
   .tab-item.active {
     color: var(--accent);
+    border-top-color: var(--accent);
   }
 
   .tab-label {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 64px;
+    max-width: 72px;
+  }
+
+  /* === "More" overlay === */
+  .more-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 25;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+  }
+
+  .more-sheet {
+    background: var(--bg2);
+    border-radius: 16px 16px 0 0;
+    width: 100%;
+    max-width: 480px;
+    padding: 8px 0;
+    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0));
+  }
+
+  .more-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .more-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--fg);
+  }
+
+  .more-close {
+    background: none;
+    border: none;
+    color: var(--fg-muted);
+    cursor: pointer;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+  }
+
+  .more-close:hover {
+    background: var(--bg-hover);
+  }
+
+  .more-item {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 14px 20px;
+    width: 100%;
+    border: none;
+    background: none;
+    color: var(--fg-muted);
+    font-size: 15px;
+    cursor: pointer;
+    transition: background 0.15s;
+    text-align: left;
+  }
+
+  .more-item:hover {
+    background: var(--bg-hover);
+  }
+
+  .more-item.active {
+    color: var(--accent);
+    background: var(--accent-bg);
   }
 
   /* === Responsive === */
@@ -435,7 +557,7 @@
     .ws-badge { display: block; }
     .content {
       padding: 16px;
-      padding-bottom: 72px;
+      padding-bottom: calc(72px + env(safe-area-inset-bottom, 0));
     }
     .topbar {
       padding: 12px 16px;
@@ -446,13 +568,17 @@
   }
 
   @media (min-width: 769px) and (max-width: 1024px) {
-    .sidebar { width: 64px; }
-    .sidebar-header { justify-content: center; padding: 16px 8px; }
-    .logo-text { display: none; }
-    .nav-item { justify-content: center; padding: 12px; }
-    .nav-label { display: none; }
-    .sidebar-footer { text-align: center; padding: 12px 8px; }
-    .ws-status { justify-content: center; font-size: 0; }
-    .main-area { margin-left: 64px; }
+    .sidebar { display: none; }
+    .main-area { margin-left: 0; }
+    .bottom-tabs { display: flex; }
+    .ws-badge { display: block; }
+    .content {
+      padding: 20px 24px;
+      padding-bottom: calc(72px + env(safe-area-inset-bottom, 0));
+      max-width: 640px;
+    }
+    .topbar {
+      padding: 14px 20px;
+    }
   }
 </style>

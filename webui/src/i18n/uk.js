@@ -117,6 +117,9 @@ export default {
   'pass.show': 'Показати',
   'pass.hide': 'Сховати',
 
+  // Navigation
+  'nav.more': 'Ще',
+
   // Buttons
   'btn.action': 'Дія',
   'btn.save': 'Зберегти',

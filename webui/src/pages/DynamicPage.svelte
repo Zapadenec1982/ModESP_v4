@@ -37,12 +37,16 @@
     display: grid;
     grid-template-columns: 1fr;
     gap: 0;
+    max-width: 640px;
+    margin: 0 auto;
+    width: 100%;
   }
 
-  @media (min-width: 768px) {
+  @media (min-width: 1025px) {
     .page-grid {
       grid-template-columns: repeat(2, 1fr);
       gap: 16px;
+      max-width: none;
     }
   }
 

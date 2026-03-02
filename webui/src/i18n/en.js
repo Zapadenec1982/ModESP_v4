@@ -104,6 +104,8 @@ export default {
   'pass.show': 'Show',
   'pass.hide': 'Hide',
 
+  'nav.more': 'More',
+
   'btn.action': 'Action',
   'btn.save': 'Save',
   'btn.save_ap': 'Save AP',

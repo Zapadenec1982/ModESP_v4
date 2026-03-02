@@ -60,8 +60,9 @@
   .select-label { font-size: 14px; color: var(--fg-muted); margin-bottom: 8px; }
   .select-input {
     width: 100%;
-    padding: 8px 12px;
+    padding: 10px 12px;
     font-size: 14px;
+    min-height: 44px;
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 6px;

@@ -73,21 +73,17 @@
 
 #### Sprint 2: Dashboard Redesign + Settings UX (сесії 5-8)
 
-- [ ] **Сесія 1.2a:** Dashboard Layout + Information Hierarchy
-  - Alarm зверху, equipment pills з текстом, вторинні температури
-  - Промпт: `prompts/sprint2_session1_2a_dashboard_layout.md`
+- [x] **Сесія 1.2a:** Dashboard Layout — СКІП (pills відхилено, dashboard залишається як є)
 
-- [ ] **Сесія 1.2b:** Slider + MiniChart Improvements
-  - Збільшити touch targets, min/max labels, pending save indicator
-  - Промпт: `prompts/sprint2_session1_2b_slider_minichart.md`
+- [x] **Сесія 1.2b:** Slider + MiniChart Improvements ✓
+  - Chart live update ($: reactive), Clock jank fix, WS reconnect fix
 
-- [ ] **Сесія 1.3a:** Debounce + Form Behavior
-  - createSettingSender() utility, debounce всіх widgets
-  - Промпт: `prompts/sprint2_session1_3a_debounce_forms.md`
+- [x] **Сесія 1.3a:** Debounce + Form Behavior ✓
+  - createSettingSender() utility, debounce всіх widgets (NumberInput 500ms, Toggle/Select instant)
+  - Pending dot, flash border, opacity states
 
-- [ ] **Сесія 1.3b:** Form Fixes + Error Handling
-  - MqttSave stores, API error enrichment, connection overlay
-  - Промпт: `prompts/sprint2_session1_3b_form_fixes_errors.md`
+- [x] **Сесія 1.3b:** Form Fixes + Error Handling ✓
+  - MqttSave stores, SelectWidget polish, API error enrichment, i18n
 
 #### Sprint 3: Mobile UX + Security (сесії 9-11)
 
