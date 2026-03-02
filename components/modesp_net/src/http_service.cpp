@@ -983,8 +983,22 @@ esp_err_t HttpService::handle_post_ota(httpd_req_t* req) {
         return ESP_FAIL;
     }
 
-    ESP_LOGI(TAG, "OTA: Writing to partition '%s' at offset 0x%lx",
-             update_partition->label, (unsigned long)update_partition->address);
+    // Валідація розміру: firmware повинна поміститися в partition
+    if (req->content_len > (int)update_partition->size) {
+        ESP_LOGE(TAG, "OTA: Firmware too large (%d > %lu)",
+                 req->content_len, (unsigned long)update_partition->size);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Firmware too large");
+        return ESP_FAIL;
+    }
+    if (req->content_len < 256) {
+        ESP_LOGE(TAG, "OTA: File too small (%d bytes)", req->content_len);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "File too small");
+        return ESP_FAIL;
+    }
+
+    ESP_LOGI(TAG, "OTA: Writing to partition '%s' at offset 0x%lx (%d bytes)",
+             update_partition->label, (unsigned long)update_partition->address,
+             req->content_len);
 
     esp_ota_handle_t ota_handle;
     esp_err_t err = esp_ota_begin(update_partition, OTA_WITH_SEQUENTIAL_WRITES, &ota_handle);
@@ -998,6 +1012,7 @@ esp_err_t HttpService::handle_post_ota(httpd_req_t* req) {
     char buf[1024];
     int remaining = req->content_len;
     int received_total = 0;
+    bool magic_checked = false;
 
     while (remaining > 0) {
         int to_recv = (remaining < (int)sizeof(buf)) ? remaining : (int)sizeof(buf);
@@ -1010,6 +1025,18 @@ esp_err_t HttpService::handle_post_ota(httpd_req_t* req) {
             esp_ota_abort(ota_handle);
             httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Receive error");
             return ESP_FAIL;
+        }
+
+        // Перевірка magic byte (ESP_IMAGE_HEADER_MAGIC = 0xE9) у першому chunk
+        if (!magic_checked && recv_len > 0) {
+            magic_checked = true;
+            if (static_cast<uint8_t>(buf[0]) != 0xE9) {
+                ESP_LOGE(TAG, "OTA: Invalid magic byte 0x%02X (expected 0xE9)",
+                         static_cast<uint8_t>(buf[0]));
+                esp_ota_abort(ota_handle);
+                httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Not a valid ESP32 firmware");
+                return ESP_FAIL;
+            }
         }
 
         err = esp_ota_write(ota_handle, buf, recv_len);

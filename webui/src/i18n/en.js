@@ -93,6 +93,9 @@ export default {
   'ota.uploading': 'Uploading...',
   'ota.done': 'Done! Restarting...',
   'ota.upload': 'Upload firmware',
+  'ota.select': 'Select firmware file',
+  'ota.restarting': 'Restarting in {0}s...',
+  'ota.too_large': 'File too large (max ~1.4 MB)',
 
   'wifi.scan': 'Scan',
   'wifi.scanning': 'Scanning...',

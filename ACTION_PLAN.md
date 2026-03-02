@@ -90,13 +90,13 @@
 - [x] **Сесія 1.4:** Mobile UX Polish ✓
   - Bottom tabs 4+More, tablet bottom tabs + single column, 44px touch targets, safe-area
 
-- [ ] **Сесія 1.5:** HTTP Basic Auth
-  - check_auth() middleware, NVS credentials, WebUI login prompt
-  - Промпт: `prompts/sprint3_session1_5_http_auth.md`
+- [x] **Сесія 1.5:** HTTP Basic Auth ✓
+  - check_auth() middleware (mbedtls base64), NVS "auth" namespace, LoginModal, sessionStorage
+  - Default: admin/modesp, POST /api/auth/password для зміни
 
-- [ ] **Сесія 1.6:** OTA Safety
-  - Size validation, magic byte, rollback timeout 60s
-  - Промпт: `prompts/sprint3_session1_6_ota_safety.md`
+- [x] **Сесія 1.6:** OTA Safety ✓
+  - Size validation (> partition или < 256), magic byte 0xE9, rollback timeout 60s
+  - WebUI: file select + size display + countdown, i18n ota.select/restarting/too_large
 
 #### Sprint 4: Finishing Touches (сесії 12-14)
 

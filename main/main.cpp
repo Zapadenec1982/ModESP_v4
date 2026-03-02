@@ -107,13 +107,16 @@ extern "C" void app_main(void)
     // ── Step 0: NVS init (before everything) ──
     modesp::nvs_helper::init();
 
-    // ── Step 0b: OTA validity — mark running app as valid ──
+    // ── Step 0b: OTA validity — deferred validation (60s timeout) ──
     const esp_partition_t* running = esp_ota_get_running_partition();
-    esp_ota_img_states_t ota_state;
-    if (esp_ota_get_state_partition(running, &ota_state) == ESP_OK) {
-        if (ota_state == ESP_OTA_IMG_PENDING_VERIFY) {
-            ESP_LOGI(TAG, "OTA: First boot after update — marking as valid");
-            esp_ota_mark_app_valid_cancel_rollback();
+    bool ota_pending_verify = false;
+    {
+        esp_ota_img_states_t ota_state;
+        if (esp_ota_get_state_partition(running, &ota_state) == ESP_OK) {
+            if (ota_state == ESP_OTA_IMG_PENDING_VERIFY) {
+                ota_pending_verify = true;
+                ESP_LOGW(TAG, "OTA: New firmware — validating (60s timeout)...");
+            }
         }
     }
     ESP_LOGI(TAG, "Running from: %s (0x%lx)",
@@ -307,7 +310,21 @@ extern "C" void app_main(void)
         // 2. Update all modules (business logic reads from drivers)
         app.modules().update_all(dt_ms);
 
-        // 3. Uptime + heap diagnostics in SharedState (once per second)
+        // 3. OTA rollback validation (60s timeout)
+        if (ota_pending_verify) {
+            bool net_ok = wifi_service.is_connected() && http_service.server();
+            if (net_ok) {
+                esp_ota_mark_app_valid_cancel_rollback();
+                ota_pending_verify = false;
+                ESP_LOGI(TAG, "OTA: Firmware validated (WiFi + HTTP OK after %lus)",
+                         (unsigned long)app.uptime_sec());
+            } else if (app.uptime_sec() > 60) {
+                ESP_LOGE(TAG, "OTA: Validation timeout (60s) — rollback on next reboot");
+                esp_restart();
+            }
+        }
+
+        // 4. Uptime + heap diagnostics in SharedState (once per second)
         static uint32_t sec_counter = 0;
         sec_counter += dt_ms;
         if (sec_counter >= 1000) {
@@ -320,10 +337,10 @@ extern "C" void app_main(void)
                             static_cast<int32_t>(largest), false);
         }
 
-        // 4. HW watchdog reset
+        // 5. HW watchdog reset
         if (wdt_subscribed) esp_task_wdt_reset();
 
-        // 5. Precise loop timing
+        // 6. Precise loop timing
         vTaskDelayUntil(&last_wake, period);
     }
 }

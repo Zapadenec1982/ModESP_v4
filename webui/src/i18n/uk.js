@@ -102,6 +102,9 @@ export default {
   'ota.uploading': 'Завантаження...',
   'ota.done': 'Готово! Перезапуск...',
   'ota.upload': 'Оновити прошивку',
+  'ota.select': 'Обрати файл прошивки',
+  'ota.restarting': 'Перезапуск через {0}с...',
+  'ota.too_large': 'Файл занадто великий (макс. ~1.4 MB)',
 
   // WiFi
   'wifi.scan': 'Сканувати',
