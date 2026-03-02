@@ -36,7 +36,7 @@ public:
 private:
     static constexpr const char* NVS_NAMESPACE = "persist";
     static constexpr uint32_t DEBOUNCE_MS = 5000;  // 5 секунд debounce
-    static constexpr size_t MAX_PERSIST_KEYS = 48;  // >= STATE_META_COUNT (33)
+    static constexpr size_t MAX_PERSIST_KEYS = gen::STATE_META_COUNT;
 
     SharedState* ext_state_ = nullptr;
 
