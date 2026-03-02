@@ -151,4 +151,6 @@ export default {
 
   // Chart
   'chart.title': 'Температура',
+  'chart.min_ago': 'хв тому',
+  'chart.detail': 'Детальний графік',
 };

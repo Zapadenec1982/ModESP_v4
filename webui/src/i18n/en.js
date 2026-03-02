@@ -134,4 +134,6 @@ export default {
   'eq.ntc_nominal': 'Nominal resistance (25°C)',
 
   'chart.title': 'Temperature',
+  'chart.min_ago': 'min ago',
+  'chart.detail': 'Detailed chart',
 };

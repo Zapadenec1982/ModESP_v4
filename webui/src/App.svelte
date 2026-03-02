@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { fade, fly, scale } from 'svelte/transition';
-  import { loadUiConfig, uiLoading, uiError, deviceName, pages } from './stores/ui.js';
+  import { loadUiConfig, uiLoading, uiError, deviceName, pages, navigateTo } from './stores/ui.js';
   import { initWebSocket, state } from './stores/state.js';
   import { apiGet } from './lib/api.js';
   import { t } from './stores/i18n.js';
@@ -26,6 +26,7 @@
   });
 
   $: document.title = $deviceName;
+  $: if ($navigateTo) { currentPage = $navigateTo; $navigateTo = null; }
 </script>
 
 {#if $uiLoading}

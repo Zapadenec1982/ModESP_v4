@@ -49,6 +49,9 @@ export const stateMeta = derived(uiConfig, $ui => $ui?.state_meta || {});
 /** Device name */
 export const deviceName = derived(uiConfig, $ui => $ui?.device_name || 'ModESP');
 
+/** Navigation request (set page id to navigate) */
+export const navigateTo = writable(null);
+
 /** Loading state */
 export const uiLoading = writable(true);
 
