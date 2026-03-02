@@ -7,8 +7,8 @@
   import { downsampleAvg } from '../lib/downsample.js';
   import { buildSegments, tempRange, computeTimeLabels, computeTempLabels } from '../lib/chart.js';
 
-  const W = 654, H = 220;
-  const PAD = { top: 12, right: 12, bottom: 24, left: 44 };
+  const W = 654, H = 240;
+  const PAD = { top: 14, right: 14, bottom: 36, left: 56 };
   const CW = W - PAD.left - PAD.right;
   const CH = H - PAD.top - PAD.bottom;
 
@@ -116,7 +116,7 @@
     >
       {#each yLabels as yl}
         <line x1={PAD.left} y1={yl.y} x2={W - PAD.right} y2={yl.y} class="mc-grid" />
-        <text x={PAD.left - 4} y={yl.y + 3} class="mc-axis" text-anchor="end">{yl.label}</text>
+        <text x={PAD.left - 6} y={yl.y + 5} class="mc-axis" text-anchor="end">{yl.label}</text>
       {/each}
       {#if spY != null}
         <line x1={PAD.left} y1={spY} x2={W - PAD.right} y2={spY} class="mc-setpoint" />
@@ -130,9 +130,9 @@
       {#if tooltip}
         <line x1={tooltip.x} y1={PAD.top} x2={tooltip.x} y2={H - PAD.bottom} class="mc-cross" />
         <circle cx={tooltip.x} cy={tooltip.y} r="5" class="mc-dot" />
-        <rect x={tooltip.x - 42} y={tooltip.y - 32} width="84" height="28" rx="4" class="mc-tip-bg" />
-        <text x={tooltip.x} y={tooltip.y - 20} class="mc-tip-val" text-anchor="middle">{tooltip.temp}</text>
-        <text x={tooltip.x} y={tooltip.y - 10} class="mc-tip-time" text-anchor="middle">{tooltip.time}</text>
+        <rect x={tooltip.x - 50} y={tooltip.y - 42} width="100" height="36" rx="4" class="mc-tip-bg" />
+        <text x={tooltip.x} y={tooltip.y - 26} class="mc-tip-val" text-anchor="middle">{tooltip.temp}</text>
+        <text x={tooltip.x} y={tooltip.y - 12} class="mc-tip-time" text-anchor="middle">{tooltip.time}</text>
       {/if}
     </svg>
     <div class="chart-footer">
@@ -156,12 +156,12 @@
   .mini-chart { width: 100%; display: block; cursor: crosshair; }
   .mini-chart .mc-grid { stroke: var(--border); stroke-width: 0.5; }
   .mini-chart .mc-setpoint { stroke: #f59e0b; stroke-width: 1; stroke-dasharray: 4 2; opacity: 0.7; }
-  .mini-chart .mc-axis { font-size: 11px; fill: var(--fg-muted); }
+  .mini-chart .mc-axis { font-size: 16px; fill: var(--fg-muted); }
   .mini-chart .mc-cross { stroke: var(--fg-muted); stroke-width: 0.5; stroke-dasharray: 2 2; opacity: 0.5; }
   .mini-chart .mc-dot { fill: #3b82f6; stroke: var(--card); stroke-width: 2; }
   .mini-chart .mc-tip-bg { fill: var(--bg2); stroke: var(--border); stroke-width: 0.5; }
-  .mini-chart .mc-tip-val { font-size: 12px; fill: var(--fg); font-weight: 600; }
-  .mini-chart .mc-tip-time { font-size: 10px; fill: var(--fg-muted); }
+  .mini-chart .mc-tip-val { font-size: 18px; fill: var(--fg); font-weight: 600; }
+  .mini-chart .mc-tip-time { font-size: 14px; fill: var(--fg-muted); }
 
   .chart-footer {
     display: flex;
@@ -190,7 +190,9 @@
   }
 
   @media (max-width: 480px) {
-    .mini-chart .mc-axis { font-size: 16px; }
+    .mini-chart .mc-axis { font-size: 24px; }
+    .mini-chart .mc-tip-val { font-size: 26px; }
+    .mini-chart .mc-tip-time { font-size: 20px; }
     .tile-chart { padding: var(--sp-3); }
   }
 </style>

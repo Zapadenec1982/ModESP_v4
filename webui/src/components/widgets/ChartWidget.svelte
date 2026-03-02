@@ -28,8 +28,8 @@
 
   // SVG dimensions
   const W = 720;
-  const H = 280;
-  const PAD = { top: 20, right: 16, bottom: 40, left: 50 };
+  const H = 300;
+  const PAD = { top: 20, right: 16, bottom: 48, left: 60 };
   const CW = W - PAD.left - PAD.right;
   const CH = H - PAD.top - PAD.bottom;
 
@@ -364,12 +364,12 @@
 
       <!-- Y axis labels -->
       {#each tempLabels as tl}
-        <text x={PAD.left - 6} y={tl.y + 4} class="axis-label" text-anchor="end">{tl.label}</text>
+        <text x={PAD.left - 8} y={tl.y + 5} class="axis-label" text-anchor="end">{tl.label}</text>
       {/each}
 
       <!-- X axis labels -->
       {#each timeLabels as xl}
-        <text x={xl.x} y={H - PAD.bottom + 18} class="axis-label" text-anchor="middle">{xl.label}</text>
+        <text x={xl.x} y={H - PAD.bottom + 22} class="axis-label" text-anchor="middle">{xl.label}</text>
       {/each}
 
       <!-- Tooltip -->
@@ -384,20 +384,20 @@
 
       <!-- Legend (dynamic channels) -->
       {#each visibleChannels as ch, i}
-        <rect x={PAD.left + i * 80} y={H - 12} width="8" height="8" fill={ch.color} />
-        <text x={PAD.left + i * 80 + 12} y={H - 5} class="legend-text">{$t[ch.tkey] || ch.name}</text>
+        <rect x={PAD.left + i * 100} y={H - 16} width="10" height="10" fill={ch.color} />
+        <text x={PAD.left + i * 100 + 14} y={H - 6} class="legend-text">{$t[ch.tkey] || ch.name}</text>
       {/each}
       <!-- Zone legend -->
       {#if true}
-        {@const lx = PAD.left + visibleChannels.length * 80}
-        <rect x={lx} y={H - 12} width="8" height="8" fill="#22c55e" opacity="0.5" />
-        <text x={lx + 12} y={H - 5} class="legend-text">{$t['chart.legend_comp']}</text>
-        <rect x={lx + 60} y={H - 12} width="8" height="8" fill="#f97316" opacity="0.5" />
-        <text x={lx + 72} y={H - 5} class="legend-text">{$t['chart.legend_defrost']}</text>
+        {@const lx = PAD.left + visibleChannels.length * 100}
+        <rect x={lx} y={H - 16} width="10" height="10" fill="#22c55e" opacity="0.5" />
+        <text x={lx + 14} y={H - 6} class="legend-text">{$t['chart.legend_comp']}</text>
+        <rect x={lx + 80} y={H - 16} width="10" height="10" fill="#f97316" opacity="0.5" />
+        <text x={lx + 94} y={H - 6} class="legend-text">{$t['chart.legend_defrost']}</text>
         {#if spY != null}
-          <line x1={lx + 130} y1={H - 8} x2={lx + 148} y2={H - 8}
+          <line x1={lx + 170} y1={H - 10} x2={lx + 192} y2={H - 10}
                 stroke="#f59e0b" stroke-width="1" stroke-dasharray="4 2" />
-          <text x={lx + 152} y={H - 5} class="legend-text">{$t['chart.legend_setpoint']}</text>
+          <text x={lx + 196} y={H - 6} class="legend-text">{$t['chart.legend_setpoint']}</text>
         {/if}
       {/if}
     </svg>
@@ -515,11 +515,11 @@
   .chart-svg .zone-defrost { fill: #f97316; opacity: 0.2; }
   .chart-svg .alarm-mark { stroke: #ef4444; stroke-width: 1; opacity: 0.7; }
   .chart-svg .power-mark { stroke: #64748b; stroke-width: 1; stroke-dasharray: 2 2; opacity: 0.5; }
-  .chart-svg .axis-label { font-size: 10px; fill: var(--fg-muted); }
-  .chart-svg .legend-text { font-size: 9px; fill: var(--fg-muted); }
+  .chart-svg .axis-label { font-size: 16px; fill: var(--fg-muted); }
+  .chart-svg .legend-text { font-size: 14px; fill: var(--fg-muted); }
   .chart-svg .tooltip-dot { fill: #3b82f6; }
   .chart-svg .tooltip-bg { fill: var(--bg2); stroke: var(--border); stroke-width: 0.5; }
-  .chart-svg .tooltip-text { font-size: 11px; fill: var(--fg); }
+  .chart-svg .tooltip-text { font-size: 16px; fill: var(--fg); }
 
   /* Events section */
   .events-section {
@@ -566,4 +566,10 @@
   .event-alarm .event-label { color: #ef4444; }
   .event-defrost .event-label { color: #f97316; }
   .event-power .event-label { color: #64748b; }
+
+  @media (max-width: 480px) {
+    .chart-svg .axis-label { font-size: 24px; }
+    .chart-svg .legend-text { font-size: 20px; }
+    .chart-svg .tooltip-text { font-size: 24px; }
+  }
 </style>
