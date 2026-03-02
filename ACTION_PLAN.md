@@ -22,10 +22,11 @@
 **Стабільність:** 30+ годин на реальному KC868-A6. Всі алгоритми працюють.
 
 **Відомі проблеми:**
-- Витік пам'яті виправлено костилями (WS heap guard 40KB, broadcast 3000ms)
-- WebUI — прототипний рівень, потребує UX/дизайн переосмислення
-- Немає HTTP авторизації
-- OTA без валідації розміру/підпису
+- ~~Витік пам'яті~~ — ВИРІШЕНО (delta WS broadcasts, heap guard 16/8KB, interval 1500ms)
+- ~~HTTP авторизація~~ — ВИРІШЕНО (Session 1.5: Basic Auth + LoginModal + Auth Settings Card)
+- ~~OTA без валідації~~ — ВИРІШЕНО (Session 1.6+: size/magic/board validation, rollback)
+- ~~MQTT reconnect без backoff~~ — ВИРІШЕНО (Session 1.7: exponential backoff 5s→5min)
+- SharedState ~17KB RAM — задокументовано оптимізацію (docs/02_core.md)
 
 ---
 
@@ -100,9 +101,13 @@
 
 #### Sprint 4: Finishing Touches (сесії 12-14)
 
-- [ ] **Сесія 1.7:** MQTT Backoff + WiFi Recovery
-  - Exponential backoff, STA watchdog 10 хв
-  - Промпт: `prompts/sprint4_session1_7_mqtt_wifi.md`
+- [x] **Сесія 1.7:** MQTT Backoff + WiFi Recovery ✓
+  - MQTT: disable auto-reconnect, manual backoff 5s→10s→20s...→5min, reset on connect
+  - WiFi STA watchdog: cumulative disconnect > 10min → esp_restart(), reset after 1hr stable
+  - MQTT Retained Alarms: QoS 1 + retain для protection.*, periodic 5min re-publish
+  - Auth Settings Card: Безпека card on System page (toggle/change/reset)
+  - OTA Board Validation: esp_app_desc_t.project_name check, board_mismatch error + toast
+  - SharedState auto-capacity: MODESP_MAX_STATE_ENTRIES генерується з маніфестів + 32
 
 - [ ] **Сесія 1.8:** °C/°F + Alarm Relay
   - system.temp_unit, format layer, alarm_relay role
@@ -184,7 +189,7 @@
 ### Open AUDIT Items (MVP + Production)
 | ID | Опис | Sprint |
 |----|------|--------|
-| AUDIT-030 | HTTP Basic Auth | MVP Sprint 3 (1.5) |
+| AUDIT-030 | ~~HTTP Basic Auth~~ | ✅ MVP Sprint 3 (1.5) |
 | AUDIT-031 | HP/LP pressure switches | Prod Sprint 9 |
 | AUDIT-032 | Scheduled defrost | Prod Sprint 9 |
 | AUDIT-033 | Alarm relay output | MVP Sprint 4 (1.8) |
@@ -247,6 +252,7 @@
 
 ## Changelog
 
+- 2026-03-02 — Session 1.7 DONE: MQTT backoff (5s→5min), WiFi STA watchdog (10min→restart), retained alarms (QoS1+retain), Auth Settings card, OTA board validation (project_name check), SharedState auto-capacity (136 = 104 manifest + 32 runtime).
 - 2026-03-02 — Session 1.1a DONE: Delta WS broadcasts, DataLogger NTP fix, DS18B20 MATCH_ROM only, Bindings unbind/rebind UI.
 - 2026-03-01 — Повний план MVP→Production (14+20 сесій). WebUI UX redesign як #1 пріоритет. Створено prompts/ директорію з промптами для кожної сесії.
 - 2026-03-01 — Phase 12a DONE: KC868-A6 board support. Heap optimization.
