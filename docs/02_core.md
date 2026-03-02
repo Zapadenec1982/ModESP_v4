@@ -216,7 +216,8 @@ int32_t mode   = read_int("thermostat.fan_mode", 0);
 Thread-safe key-value store з фіксованим розміром.
 O(1) average access, zero heap allocation.
 
-Ємність контролюється через `MODESP_MAX_STATE_ENTRIES` (default 128).
+Ємність генерується автоматично: `MODESP_MAX_STATE_ENTRIES` = manifest keys + 32 (runtime margin).
+Визначається в `generated/state_meta.h`, включається через `shared_state.h`.
 
 ```cpp
 #pragma once
@@ -228,9 +229,8 @@ O(1) average access, zero heap allocation.
 
 namespace modesp {
 
-#ifndef MODESP_MAX_STATE_ENTRIES
-#define MODESP_MAX_STATE_ENTRIES 128
-#endif
+// Визначається в generated/state_meta.h (auto-generated)
+#include "state_meta.h"  // MODESP_MAX_STATE_ENTRIES
 
 class SharedState {
 public:
@@ -289,13 +289,32 @@ private:
 } // namespace modesp
 ```
 
-**RAM:** ~8 KB для 128 entries (StateKey=32B + StateValue~36B = ~68B x 128).
+**RAM (ESP32, 32-bit):** ~17KB для 136 entries:
+- Map nodes: 136 × ~88B (key 40 + value 44 + link 4) = ~12KB
+- Map buckets: 256 × ~12B = ~3KB (next_power_of_2 від capacity)
+- changed_keys_ vector: 32 × 40B = 1.3KB
+- Метадані: ~0.2KB
 
 **version_ counter:** інкрементується на кожен `set()` — WsService порівнює версії для delta broadcast.
 
 **Persist callback:** `set()` перевіряє зміну значення → викликає callback ПОЗА mutex для PersistService.
 
 **set_failures_ (BUG-018):** лічильник невдалих `set()` операцій (mutex timeout). Доступний для діагностики через `system.set_failures` state key.
+
+### Оптимізація пам'яті (на майбутнє)
+
+Зараз SharedState займає ~17KB з ~280KB RAM ESP32. При зростанні проекту (нові модулі/ключі)
+capacity збільшується автоматично, але кожен entry = ~88 bytes + bucket overhead.
+
+**Стратегії оптимізації (за пріоритетом):**
+
+| Стратегія | Економія | Складність | Опис |
+|-----------|----------|------------|------|
+| Numeric key IDs | ~5KB | Велика | Замінити etl::string<32> ключі на uint16_t. Генератор присвоює ID, lookup table для серіалізації. Зачіпає SharedState API, WS, MQTT, HTTP. |
+| Typed map split | ~6-8KB | Середня | Окремі typed maps: float_map (80% ключів, 8B/entry), int_map, bool_map, string_map (~19 ключів, 44B/entry). Зменшує variant overhead. |
+| Quick wins | ~2-3KB | Мала | changed_keys_ bitset (1.2KB), зменшити StateKey до etl::string<24> (1KB), замінити string values на int enums де можливо. |
+
+**Тригер:** моніторити `system.heap_free`. Якщо < 30KB — час оптимізувати.
 
 ## module_manager.h — Управління модулями
 
