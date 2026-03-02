@@ -380,6 +380,7 @@ void ProtectionModule::update_compressor_tracker(bool compressor_on, float temp,
             // Нормальний цикл — скидаємо лічильник
             comp_.short_cycle_count = 0;
         }
+
     }
     comp_.prev_state = compressor_on;
 
@@ -562,10 +563,9 @@ void ProtectionModule::publish_compressor_diagnostics() {
     state_set("protection.last_cycle_run", last_run, false);
     state_set("protection.last_cycle_off", last_off, false);
 
-    // compressor_hours — persist кожні 5 хвилин (60 × 5 сек = 300 сек)
-    // Щоб не зношувати NVS (100K write cycles) при оновленні кожні 5 сек
+    // compressor_hours — persist раз на годину (720 × 5 сек = 3600 сек)
     hours_persist_counter_++;
-    if (hours_persist_counter_ >= 60) {
+    if (hours_persist_counter_ >= 720) {
         hours_persist_counter_ = 0;
         state_set("protection.compressor_hours", compressor_hours_);
     } else {
