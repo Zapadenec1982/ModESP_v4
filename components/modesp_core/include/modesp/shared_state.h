@@ -24,7 +24,7 @@
 namespace modesp {
 
 #ifndef MODESP_MAX_STATE_ENTRIES
-#define MODESP_MAX_STATE_ENTRIES 128
+#define MODESP_MAX_STATE_ENTRIES 160
 #endif
 
 /// Максимум змінених ключів між WS broadcast-ами.
