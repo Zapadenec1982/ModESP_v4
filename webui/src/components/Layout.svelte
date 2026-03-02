@@ -5,7 +5,6 @@
   import { wsConnected, state } from '../stores/state.js';
   import { theme, toggleTheme } from '../stores/theme.js';
   import { t, language, toggleLanguage } from '../stores/i18n.js';
-  import { apiGet } from '../lib/api.js';
   import { toastSuccess } from '../stores/toast.js';
   import Icon from './Icon.svelte';
   import Clock from './Clock.svelte';
@@ -36,13 +35,9 @@
       }
     } else {
       if (overlayTimer) { clearTimeout(overlayTimer); overlayTimer = null; }
-      if (showOverlay || wasDisconnected) {
-        // Оновити state після reconnect
-        apiGet('/api/state').then(data => {
-          state.update(s => ({ ...s, ...data }));
-        }).catch(() => {});
-        if (showOverlay) toastSuccess($t['conn.restored']);
-      }
+      // WS вже надсилає full state при підключенні — HTTP запит не потрібен
+      // (apiGet('/api/state') конкурував з WS за httpd сокети → каскадний reconnect)
+      if (showOverlay) toastSuccess($t['conn.restored']);
       showOverlay = false;
       wasDisconnected = false;
     }
