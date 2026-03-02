@@ -1,8 +1,8 @@
 <script>
-  import { apiPost } from '../../lib/api.js';
+  import { onDestroy } from 'svelte';
   import { setStateKey } from '../../stores/state.js';
   import { state } from '../../stores/state.js';
-  import { toastError } from '../../stores/toast.js';
+  import { createSettingSender } from '../../lib/settings.js';
 
   export let config;
   export let value;
@@ -21,18 +21,23 @@
   $: currentOpt = enriched.find(o => o.value === current);
   $: hint = currentOpt?.isDisabled ? currentOpt.disabled_hint : null;
 
+  const sender = createSettingSender(config.key, {
+    debounceMs: 0,
+    endpoint: config.api_endpoint || '/api/settings'
+  });
+  const { pending, cleanup } = sender;
+  onDestroy(cleanup);
+
   function onChange(e) {
     const nv = parseInt(e.target.value);
     if (isNaN(nv)) return;
-    setStateKey(config.key, nv);
-    const endpoint = config.api_endpoint || '/api/settings';
-    apiPost(endpoint, { [config.key]: nv }).catch(e => toastError(e.message));
+    sender.send(nv);
   }
 </script>
 
-<div class="select-widget" class:disabled>
+<div class="select-widget" class:disabled class:is-pending={$pending}>
   <div class="select-label">{config.description || config.key}</div>
-  <select class="select-input" value={current} on:change={onChange} {disabled}>
+  <select class="select-input" value={current} on:change={onChange} disabled={disabled || $pending}>
     {#each enriched as opt}
       <option value={opt.value} disabled={opt.isDisabled}
         title={opt.isDisabled && opt.disabled_hint ? opt.disabled_hint : ''}>
@@ -49,8 +54,9 @@
 </div>
 
 <style>
-  .select-widget { padding: 4px 0; }
+  .select-widget { padding: 4px 0; transition: opacity 0.2s; }
   .select-widget.disabled { opacity: 0.5; }
+  .select-widget.is-pending { opacity: 0.6; }
   .select-label { font-size: 14px; color: var(--fg-muted); margin-bottom: 8px; }
   .select-input {
     width: 100%;

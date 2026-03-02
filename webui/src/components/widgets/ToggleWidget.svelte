@@ -1,26 +1,30 @@
 <script>
-  import { apiPost } from '../../lib/api.js';
+  import { onDestroy } from 'svelte';
   import { setStateKey } from '../../stores/state.js';
-  import { toastError } from '../../stores/toast.js';
+  import { createSettingSender } from '../../lib/settings.js';
 
   export let config;
   export let value;
 
   $: isOn = !!value;
 
+  const sender = createSettingSender(config.key, { debounceMs: 0 });
+  const { pending, cleanup } = sender;
+  onDestroy(cleanup);
+
   function toggle() {
     const nv = !isOn;
-    setStateKey(config.key, nv);
-    if (!config.form_only) {
-      const endpoint = config.api_endpoint || '/api/settings';
-      apiPost(endpoint, { [config.key]: nv }).catch(e => toastError(e.message));
+    if (config.form_only) {
+      setStateKey(config.key, nv);
+    } else {
+      sender.send(nv);
     }
   }
 </script>
 
-<div class="widget-row">
+<div class="widget-row" class:is-pending={$pending}>
   <span class="label">{config.description || config.key}</span>
-  <button class="toggle" class:on={isOn} on:click={toggle}>
+  <button class="toggle" class:on={isOn} on:click={toggle} disabled={$pending}>
     <span class="toggle-thumb"></span>
   </button>
 </div>
@@ -28,8 +32,10 @@
 <style>
   .widget-row {
     display: flex; align-items: center; justify-content: space-between;
-    min-height: 40px; padding: 4px 0;
+    min-height: 44px; padding: 4px 0;
+    transition: opacity 0.2s;
   }
+  .widget-row.is-pending { opacity: 0.6; }
   .label { font-size: 14px; color: var(--fg-muted); }
   .toggle {
     width: 48px; height: 26px;
@@ -41,6 +47,7 @@
     transition: background 0.2s;
     padding: 0;
   }
+  .toggle:disabled { cursor: wait; }
   .toggle.on { background: var(--success); }
   .toggle-thumb {
     position: absolute;
