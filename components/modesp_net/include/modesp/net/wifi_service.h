@@ -76,6 +76,12 @@ private:
     uint32_t rssi_timer_ = 0;
     static constexpr uint32_t RSSI_INTERVAL_MS = 10000;
 
+    // STA watchdog: restart якщо disconnect сумарно > 10 хв
+    uint32_t disconnect_accum_ms_ = 0;
+    uint32_t stable_timer_ms_ = 0;
+    static constexpr uint32_t WIFI_MAX_DISCONNECT_MS = 600000;   // 10 min
+    static constexpr uint32_t WIFI_STABLE_RESET_MS = 3600000;    // 1 hour
+
     bool load_credentials();
     bool start_sta();
     bool start_ap();

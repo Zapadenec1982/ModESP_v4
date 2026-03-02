@@ -144,6 +144,21 @@ void MqttService::on_update(uint32_t dt_ms) {
         return;
     }
 
+    // Reconnect з exponential backoff (client створено, але не з'єднано)
+    if (client_ && !connected_ && enabled_) {
+        reconnect_timer_ms_ += dt_ms;
+        if (reconnect_timer_ms_ >= reconnect_delay_ms_) {
+            reconnect_timer_ms_ = 0;
+            ESP_LOGI(TAG, "MQTT reconnect (backoff %lums)",
+                     (unsigned long)reconnect_delay_ms_);
+            esp_mqtt_client_reconnect(client_);
+            // Exponential backoff
+            reconnect_delay_ms_ = std::min(reconnect_delay_ms_ * 2,
+                                            MQTT_MAX_RECONNECT_MS);
+        }
+        return;
+    }
+
     if (!enabled_ || !connected_) return;
 
     publish_timer_ += dt_ms;
@@ -199,6 +214,8 @@ bool MqttService::start_client() {
     mqtt_cfg.session.last_will.qos = 1;
     mqtt_cfg.session.last_will.retain = 1;
 
+    mqtt_cfg.network.disable_auto_reconnect = true;
+
     client_ = esp_mqtt_client_init(&mqtt_cfg);
     if (!client_) {
         ESP_LOGE(TAG, "Failed to init MQTT client");
@@ -249,6 +266,8 @@ void MqttService::mqtt_event_handler(void* args, esp_event_base_t base,
     switch (event->event_id) {
         case MQTT_EVENT_CONNECTED: {
             self->connected_ = true;
+            self->reconnect_timer_ms_ = 0;
+            self->reconnect_delay_ms_ = MQTT_INITIAL_RECONNECT_MS;
             self->last_version_ = 0;  // Форсуємо повну публікацію
             self->state_set("mqtt.connected", true);
             self->state_set("mqtt.status", "connected");
@@ -273,6 +292,7 @@ void MqttService::mqtt_event_handler(void* args, esp_event_base_t base,
 
         case MQTT_EVENT_DISCONNECTED:
             self->connected_ = false;
+            self->reconnect_timer_ms_ = 0;  // Перший reconnect через reconnect_delay_ms_
             self->state_set("mqtt.connected", false);
             self->state_set("mqtt.status", "disconnected");
             ESP_LOGW(TAG, "Disconnected from broker");

@@ -63,6 +63,12 @@ private:
     uint32_t publish_timer_ = 0;
     static constexpr uint32_t PUBLISH_INTERVAL_MS = 1000;
 
+    // Reconnect з exponential backoff
+    uint32_t reconnect_timer_ms_ = 0;
+    uint32_t reconnect_delay_ms_ = MQTT_INITIAL_RECONNECT_MS;
+    static constexpr uint32_t MQTT_INITIAL_RECONNECT_MS = 5000;   // 5s
+    static constexpr uint32_t MQTT_MAX_RECONNECT_MS = 300000;     // 5 min
+
     // Кеш останніх опублікованих значень для delta-publish
     static constexpr size_t MAX_PUBLISH_KEYS = 16;
     char last_payloads_[MAX_PUBLISH_KEYS][32] = {};

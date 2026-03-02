@@ -184,6 +184,26 @@ void WiFiService::on_update(uint32_t dt_ms) {
             }
         }
     }
+
+    // STA Watchdog: рестарт при тривалому disconnect
+    if (!ap_mode_) {
+        if (connected_) {
+            stable_timer_ms_ += dt_ms;
+            if (stable_timer_ms_ >= WIFI_STABLE_RESET_MS) {
+                // Стабільне з'єднання 1 годину — скидаємо лічильник
+                disconnect_accum_ms_ = 0;
+                stable_timer_ms_ = 0;
+            }
+        } else {
+            stable_timer_ms_ = 0;
+            disconnect_accum_ms_ += dt_ms;
+            if (disconnect_accum_ms_ >= WIFI_MAX_DISCONNECT_MS) {
+                ESP_LOGE(TAG, "WiFi unstable (%lums disconnect), restarting...",
+                         (unsigned long)disconnect_accum_ms_);
+                esp_restart();
+            }
+        }
+    }
 }
 
 // ── Credentials ─────────────────────────────────────────────────
