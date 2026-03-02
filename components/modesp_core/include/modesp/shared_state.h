@@ -20,12 +20,9 @@
 #include "etl/optional.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
+#include "state_meta.h"  // MODESP_MAX_STATE_ENTRIES (auto-generated)
 
 namespace modesp {
-
-#ifndef MODESP_MAX_STATE_ENTRIES
-#define MODESP_MAX_STATE_ENTRIES 160
-#endif
 
 /// Максимум змінених ключів між WS broadcast-ами.
 /// При переповненні — fallback на повну серіалізацію.
