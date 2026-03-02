@@ -8,6 +8,8 @@
   export let config;
 
   let loading = false;
+  let mounted = false;
+  let prevEnabled = null;
 
   onMount(async () => {
     try {
@@ -16,6 +18,7 @@
       setStateKey('mqtt.status', d.status || 'unknown');
       setStateKey('mqtt.broker', d.broker || '');
       setStateKey('mqtt.enabled', d.enabled || false);
+      prevEnabled = !!d.enabled;
       // Fill form inputs via DOM
       setTimeout(() => {
         setInput('mqtt.broker', d.broker || '');
@@ -24,7 +27,16 @@
         setInput('mqtt.port', d.port || 1883);
       }, 50);
     } catch (e) {}
+    mounted = true;
   });
+
+  // Instant toggle: при зміні mqtt.enabled одразу відправляємо на сервер
+  $: if (mounted && prevEnabled !== null && !!$state['mqtt.enabled'] !== prevEnabled) {
+    prevEnabled = !!$state['mqtt.enabled'];
+    apiPost('/api/mqtt', { enabled: prevEnabled })
+      .then(r => { if (r.ok) toastSuccess($t['alert.saved_mqtt']); })
+      .catch(() => {});
+  }
 
   function setInput(key, val) {
     const el = document.querySelector(`[data-widget-key="${key}"] input`);

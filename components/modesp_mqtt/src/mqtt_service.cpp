@@ -551,8 +551,11 @@ esp_err_t MqttService::handle_post_mqtt(httpd_req_t* req) {
             strncpy(new_user, val, sizeof(new_user) - 1);
             new_user[sizeof(new_user) - 1] = '\0';
         } else if (strcmp(k, "password") == 0) {
-            strncpy(new_pass, val, sizeof(new_pass) - 1);
-            new_pass[sizeof(new_pass) - 1] = '\0';
+            // Порожній пароль = не змінювати збережений (WebUI не показує пароль)
+            if (strlen(val) > 0) {
+                strncpy(new_pass, val, sizeof(new_pass) - 1);
+                new_pass[sizeof(new_pass) - 1] = '\0';
+            }
         } else if (strcmp(k, "prefix") == 0) {
             strncpy(new_prefix, val, sizeof(new_prefix) - 1);
             new_prefix[sizeof(new_prefix) - 1] = '\0';
