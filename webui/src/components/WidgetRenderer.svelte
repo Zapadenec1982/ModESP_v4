@@ -21,6 +21,7 @@
   import FileUploadWidget from './widgets/FileUploadWidget.svelte';
   import ChartWidget from './widgets/ChartWidget.svelte';
   import AuthSave from './widgets/AuthSave.svelte';
+  import ActionsGrid from './widgets/ActionsGrid.svelte';
 
   export let widget;
   export let value;
@@ -47,7 +48,8 @@
     defrost_toggle: DefrostToggle,
     file_upload: FileUploadWidget,
     chart: ChartWidget,
-    auth_save: AuthSave
+    auth_save: AuthSave,
+    actions_grid: ActionsGrid
   };
 
   $: component = widgetMap[widget.widget] || ValueWidget;
