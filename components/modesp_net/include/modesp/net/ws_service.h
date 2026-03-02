@@ -34,9 +34,9 @@ private:
     SharedState* state_ = nullptr;
     bool ws_registered_ = false;
 
-    // Connected clients (4 slots: 3 active + 1 для reconnect overlap)
-    static constexpr size_t MAX_WS_CLIENTS = 4;
-    int client_fds_[MAX_WS_CLIENTS] = {-1, -1, -1, -1};
+    // Connected clients (3 active browsers)
+    static constexpr size_t MAX_WS_CLIENTS = 3;
+    int client_fds_[MAX_WS_CLIENTS] = {-1, -1, -1};
 
     // BUG-021: mutex для client_fds_ (доступ з main loop + httpd потоків)
     StaticSemaphore_t clients_mutex_buf_;

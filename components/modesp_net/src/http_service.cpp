@@ -1400,7 +1400,7 @@ bool HttpService::start_server() {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
     config.max_uri_handlers = 48;
-    config.max_open_sockets = 6;   // 4 WS + 2 HTTP; lwIP has 10 total (1 listener + 6 sess + 1 MQTT = 8, headroom for accept)
+    config.max_open_sockets = 4;   // 3 WS + 1 HTTP; lwIP 10 total (1 listener + 4 sess + 1 MQTT = 6)
     config.stack_size = 8192;
 
     // WebSocket connections are long-lived. The default recv_wait_timeout
