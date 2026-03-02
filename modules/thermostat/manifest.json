@@ -429,33 +429,6 @@
         ]
       },
       {
-        "title": "Захист компресора",
-        "group": "settings",
-        "collapsible": true,
-        "widgets": [
-          {
-            "key": "thermostat.min_off_time",
-            "widget": "number_input"
-          },
-          {
-            "key": "thermostat.min_on_time",
-            "widget": "number_input"
-          },
-          {
-            "key": "thermostat.startup_delay",
-            "widget": "number_input"
-          },
-          {
-            "key": "thermostat.safety_run_on",
-            "widget": "number_input"
-          },
-          {
-            "key": "thermostat.safety_run_off",
-            "widget": "number_input"
-          }
-        ]
-      },
-      {
         "title": "Вентиляція",
         "group": "settings",
         "collapsible": true,

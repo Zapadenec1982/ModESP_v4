@@ -45,6 +45,36 @@
       "type": "bool",
       "description": "Чи активна розморозка (блокує аварію високої температури)",
       "optional": true
+    },
+    "thermostat.min_off_time": {
+      "source_module": "thermostat",
+      "type": "int",
+      "description": "Мін. час паузи компресора (UI-only, settings on protection page)",
+      "optional": true
+    },
+    "thermostat.min_on_time": {
+      "source_module": "thermostat",
+      "type": "int",
+      "description": "Мін. час роботи компресора (UI-only)",
+      "optional": true
+    },
+    "thermostat.startup_delay": {
+      "source_module": "thermostat",
+      "type": "int",
+      "description": "Затримка після подачі живлення (UI-only)",
+      "optional": true
+    },
+    "thermostat.safety_run_on": {
+      "source_module": "thermostat",
+      "type": "int",
+      "description": "Час роботи в Safety Run (UI-only)",
+      "optional": true
+    },
+    "thermostat.safety_run_off": {
+      "source_module": "thermostat",
+      "type": "int",
+      "description": "Час паузи в Safety Run (UI-only)",
+      "optional": true
     }
   },
 
@@ -593,6 +623,33 @@
           {
             "key": "protection.manual_reset",
             "widget": "toggle"
+          }
+        ]
+      },
+      {
+        "title": "Захист компресора",
+        "group": "settings",
+        "collapsible": true,
+        "widgets": [
+          {
+            "key": "thermostat.min_off_time",
+            "widget": "number_input"
+          },
+          {
+            "key": "thermostat.min_on_time",
+            "widget": "number_input"
+          },
+          {
+            "key": "thermostat.startup_delay",
+            "widget": "number_input"
+          },
+          {
+            "key": "thermostat.safety_run_on",
+            "widget": "number_input"
+          },
+          {
+            "key": "thermostat.safety_run_off",
+            "widget": "number_input"
           }
         ]
       },
