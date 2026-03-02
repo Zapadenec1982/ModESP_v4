@@ -104,6 +104,19 @@ export default {
   'pass.show': 'Show',
   'pass.hide': 'Hide',
 
+  'auth.title': 'Authorization',
+  'auth.user': 'Username',
+  'auth.pass': 'Password',
+  'auth.login': 'Log in',
+  'auth.error': 'Wrong username or password',
+  'auth.change_pass': 'Change Password',
+  'auth.current_pass': 'Current password',
+  'auth.new_pass': 'New password',
+  'auth.confirm_pass': 'Confirm password',
+  'auth.pass_changed': 'Password changed',
+  'auth.pass_mismatch': 'Passwords do not match',
+  'auth.pass_short': 'Minimum 4 characters',
+
   'nav.more': 'More',
 
   'btn.action': 'Action',

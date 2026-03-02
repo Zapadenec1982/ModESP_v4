@@ -4,6 +4,7 @@
  */
 
 #include "modesp/net/mqtt_service.h"
+#include "modesp/net/http_service.h"
 #include "modesp/shared_state.h"
 #include "modesp/services/nvs_helper.h"
 #include "modesp/types.h"
@@ -497,6 +498,7 @@ esp_err_t MqttService::handle_get_mqtt(httpd_req_t* req) {
 }
 
 esp_err_t MqttService::handle_post_mqtt(httpd_req_t* req) {
+    if (!HttpService::check_auth(req)) return ESP_OK;
     auto* self = static_cast<MqttService*>(req->user_ctx);
 
     char buf[384];

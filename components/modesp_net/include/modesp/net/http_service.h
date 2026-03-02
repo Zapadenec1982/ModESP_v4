@@ -55,6 +55,11 @@ public:
     // Server handle (needed by WsService)
     httpd_handle_t server() const { return server_; }
 
+    /// HTTP Basic Auth — перевірка Authorization header.
+    /// Надсилає 401 Unauthorized якщо credentials невірні.
+    /// Можна викликати з будь-якого handler (MqttService тощо) — credentials статичні.
+    static bool check_auth(httpd_req_t* req);
+
     // Register wildcard static file handler — call AFTER all other
     // URI handlers (API, WebSocket) are registered, because the /*
     // wildcard with httpd_uri_match_wildcard would shadow them.
@@ -72,6 +77,8 @@ private:
 
     bool start_server();
     void register_api_handlers();
+    static void load_auth_from_nvs();
+    static void save_auth_to_nvs();
 
     // API handlers (static — httpd requires function pointers)
     static esp_err_t handle_get_state(httpd_req_t* req);
@@ -96,6 +103,7 @@ private:
     static esp_err_t handle_get_ow_scan(httpd_req_t* req);
     static esp_err_t handle_get_log(httpd_req_t* req);
     static esp_err_t handle_get_log_summary(httpd_req_t* req);
+    static esp_err_t handle_post_auth_password(httpd_req_t* req);
     static esp_err_t handle_static(httpd_req_t* req);
 
     // CORS

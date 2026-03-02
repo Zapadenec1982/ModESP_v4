@@ -87,9 +87,8 @@
 
 #### Sprint 3: Mobile UX + Security (сесії 9-11)
 
-- [ ] **Сесія 1.4:** Mobile UX Polish
-  - Bottom tabs max 5 + "More", tablet 1-column, 44px touch targets
-  - Промпт: `prompts/sprint3_session1_4_mobile_ux.md`
+- [x] **Сесія 1.4:** Mobile UX Polish ✓
+  - Bottom tabs 4+More, tablet bottom tabs + single column, 44px touch targets, safe-area
 
 - [ ] **Сесія 1.5:** HTTP Basic Auth
   - check_auth() middleware, NVS credentials, WebUI login prompt

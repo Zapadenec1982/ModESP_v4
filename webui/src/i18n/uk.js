@@ -117,6 +117,20 @@ export default {
   'pass.show': 'Показати',
   'pass.hide': 'Сховати',
 
+  // Auth
+  'auth.title': 'Авторизація',
+  'auth.user': 'Користувач',
+  'auth.pass': 'Пароль',
+  'auth.login': 'Увійти',
+  'auth.error': 'Невірний логін або пароль',
+  'auth.change_pass': 'Змінити пароль',
+  'auth.current_pass': 'Поточний пароль',
+  'auth.new_pass': 'Новий пароль',
+  'auth.confirm_pass': 'Підтвердити пароль',
+  'auth.pass_changed': 'Пароль змінено',
+  'auth.pass_mismatch': 'Паролі не збігаються',
+  'auth.pass_short': 'Мінімум 4 символи',
+
   // Navigation
   'nav.more': 'Ще',
 

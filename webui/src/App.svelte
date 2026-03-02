@@ -3,11 +3,12 @@
   import { fade, fly, scale } from 'svelte/transition';
   import { loadUiConfig, uiLoading, uiError, deviceName, pages, navigateTo } from './stores/ui.js';
   import { initWebSocket, state } from './stores/state.js';
-  import { apiGet } from './lib/api.js';
+  import { apiGet, needsLogin } from './lib/api.js';
   import { t } from './stores/i18n.js';
   import './stores/theme.js';
   import Layout from './components/Layout.svelte';
   import Toast from './components/Toast.svelte';
+  import LoginModal from './components/LoginModal.svelte';
   import Dashboard from './pages/Dashboard.svelte';
   import DynamicPage from './pages/DynamicPage.svelte';
   import BindingsEditor from './pages/BindingsEditor.svelte';
@@ -55,6 +56,10 @@
       </div>
     {/key}
   </Layout>
+{/if}
+
+{#if $needsLogin}
+  <LoginModal />
 {/if}
 
 <Toast />

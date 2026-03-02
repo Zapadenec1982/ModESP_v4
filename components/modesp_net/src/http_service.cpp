@@ -22,6 +22,7 @@
 #include "esp_app_format.h"
 #include "esp_sntp.h"
 #include "modesp/services/nvs_helper.h"
+#include "mbedtls/base64.h"
 
 #include "state_meta.h"
 #include "jsmn.h"
@@ -35,6 +36,93 @@
 static const char* TAG = "HTTP";
 
 namespace modesp {
+
+// ── Auth credentials (static, accessible from any handler) ──────
+
+static char s_auth_user[32] = "admin";
+static char s_auth_pass[64] = "modesp";
+static const char* AUTH_NVS_NS = "auth";
+
+void HttpService::load_auth_from_nvs() {
+    nvs_helper::read_str(AUTH_NVS_NS, "user", s_auth_user, sizeof(s_auth_user));
+    nvs_helper::read_str(AUTH_NVS_NS, "pass", s_auth_pass, sizeof(s_auth_pass));
+    ESP_LOGI(TAG, "Auth loaded (user='%s')", s_auth_user);
+}
+
+void HttpService::save_auth_to_nvs() {
+    nvs_helper::write_str(AUTH_NVS_NS, "user", s_auth_user);
+    nvs_helper::write_str(AUTH_NVS_NS, "pass", s_auth_pass);
+    ESP_LOGI(TAG, "Auth saved (user='%s')", s_auth_user);
+}
+
+bool HttpService::check_auth(httpd_req_t* req) {
+    // Читаємо Authorization header
+    size_t hdr_len = httpd_req_get_hdr_value_len(req, "Authorization");
+    if (hdr_len == 0 || hdr_len > 200) {
+        httpd_resp_set_status(req, "401 Unauthorized");
+        httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"ModESP\"");
+        httpd_resp_set_type(req, "text/plain");
+        httpd_resp_send(req, "Unauthorized", HTTPD_RESP_USE_STRLEN);
+        return false;
+    }
+
+    char auth_buf[202];
+    if (httpd_req_get_hdr_value_str(req, "Authorization", auth_buf, sizeof(auth_buf)) != ESP_OK) {
+        httpd_resp_set_status(req, "401 Unauthorized");
+        httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"ModESP\"");
+        httpd_resp_set_type(req, "text/plain");
+        httpd_resp_send(req, "Unauthorized", HTTPD_RESP_USE_STRLEN);
+        return false;
+    }
+
+    // Перевіряємо "Basic " prefix
+    if (strncmp(auth_buf, "Basic ", 6) != 0) {
+        httpd_resp_set_status(req, "401 Unauthorized");
+        httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"ModESP\"");
+        httpd_resp_set_type(req, "text/plain");
+        httpd_resp_send(req, "Unauthorized", HTTPD_RESP_USE_STRLEN);
+        return false;
+    }
+
+    // Base64 decode
+    unsigned char decoded[128];
+    size_t decoded_len = 0;
+    int ret = mbedtls_base64_decode(decoded, sizeof(decoded) - 1, &decoded_len,
+                                     (const unsigned char*)(auth_buf + 6),
+                                     strlen(auth_buf + 6));
+    if (ret != 0 || decoded_len == 0) {
+        httpd_resp_set_status(req, "401 Unauthorized");
+        httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"ModESP\"");
+        httpd_resp_set_type(req, "text/plain");
+        httpd_resp_send(req, "Unauthorized", HTTPD_RESP_USE_STRLEN);
+        return false;
+    }
+    decoded[decoded_len] = '\0';
+
+    // Розділяємо user:pass
+    char* colon = strchr((char*)decoded, ':');
+    if (!colon) {
+        httpd_resp_set_status(req, "401 Unauthorized");
+        httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"ModESP\"");
+        httpd_resp_set_type(req, "text/plain");
+        httpd_resp_send(req, "Unauthorized", HTTPD_RESP_USE_STRLEN);
+        return false;
+    }
+
+    *colon = '\0';
+    const char* user = (char*)decoded;
+    const char* pass = colon + 1;
+
+    if (strcmp(user, s_auth_user) == 0 && strcmp(pass, s_auth_pass) == 0) {
+        return true;
+    }
+
+    httpd_resp_set_status(req, "401 Unauthorized");
+    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"ModESP\"");
+    httpd_resp_set_type(req, "text/plain");
+    httpd_resp_send(req, "Unauthorized", HTTPD_RESP_USE_STRLEN);
+    return false;
+}
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -196,6 +284,7 @@ esp_err_t HttpService::handle_get_bindings(httpd_req_t* req) {
 }
 
 esp_err_t HttpService::handle_post_bindings(httpd_req_t* req) {
+    if (!check_auth(req)) return ESP_OK;
     // Приймаємо JSON body — bindings.json зазвичай < 512 байт
     char buf[1024];
     int total = 0;
@@ -347,6 +436,7 @@ esp_err_t HttpService::handle_get_modules(httpd_req_t* req) {
 }
 
 esp_err_t HttpService::handle_post_settings(httpd_req_t* req) {
+    if (!check_auth(req)) return ESP_OK;
     auto* self = static_cast<HttpService*>(req->user_ctx);
 
     char buf[256];
@@ -428,6 +518,7 @@ esp_err_t HttpService::handle_post_settings(httpd_req_t* req) {
 }
 
 esp_err_t HttpService::handle_post_wifi(httpd_req_t* req) {
+    if (!check_auth(req)) return ESP_OK;
     auto* self = static_cast<HttpService*>(req->user_ctx);
 
     char buf[256];
@@ -483,6 +574,7 @@ esp_err_t HttpService::handle_post_wifi(httpd_req_t* req) {
 }
 
 esp_err_t HttpService::handle_get_wifi_scan(httpd_req_t* req) {
+    if (!check_auth(req)) return ESP_OK;
     auto* self = static_cast<HttpService*>(req->user_ctx);
 
     if (!self->wifi_) {
@@ -572,6 +664,7 @@ esp_err_t HttpService::handle_get_wifi_ap(httpd_req_t* req) {
 }
 
 esp_err_t HttpService::handle_post_wifi_ap(httpd_req_t* req) {
+    if (!check_auth(req)) return ESP_OK;
     char buf[256];
     int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
     if (len <= 0) {
@@ -635,6 +728,7 @@ esp_err_t HttpService::handle_post_wifi_ap(httpd_req_t* req) {
 }
 
 esp_err_t HttpService::handle_post_restart(httpd_req_t* req) {
+    if (!check_auth(req)) return ESP_OK;
     auto* self = static_cast<HttpService*>(req->user_ctx);
     set_cors_headers(req);
     httpd_resp_set_type(req, "application/json");
@@ -657,6 +751,7 @@ esp_err_t HttpService::handle_post_restart(httpd_req_t* req) {
 }
 
 esp_err_t HttpService::handle_post_factory_reset(httpd_req_t* req) {
+    if (!check_auth(req)) return ESP_OK;
     set_cors_headers(req);
     httpd_resp_set_type(req, "application/json");
 
@@ -737,6 +832,7 @@ esp_err_t HttpService::handle_get_backup(httpd_req_t* req) {
 }
 
 esp_err_t HttpService::handle_post_restore(httpd_req_t* req) {
+    if (!check_auth(req)) return ESP_OK;
     auto* self = static_cast<HttpService*>(req->user_ctx);
 
     char buf[2048];
@@ -869,6 +965,7 @@ esp_err_t HttpService::handle_get_ota(httpd_req_t* req) {
 }
 
 esp_err_t HttpService::handle_post_ota(httpd_req_t* req) {
+    if (!check_auth(req)) return ESP_OK;
     set_cors_headers(req);
 
     ESP_LOGI(TAG, "OTA: Starting firmware update (%d bytes)", req->content_len);
@@ -997,6 +1094,7 @@ esp_err_t HttpService::handle_get_time(httpd_req_t* req) {
 }
 
 esp_err_t HttpService::handle_post_time(httpd_req_t* req) {
+    if (!check_auth(req)) return ESP_OK;
     set_cors_headers(req);
 
     char buf[256];
@@ -1308,6 +1406,72 @@ esp_err_t HttpService::handle_static(httpd_req_t* req) {
     return ESP_OK;
 }
 
+// ── Auth password change ────────────────────────────────────────
+
+esp_err_t HttpService::handle_post_auth_password(httpd_req_t* req) {
+    if (!check_auth(req)) return ESP_OK;
+
+    char buf[256];
+    int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (len <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty body");
+        return ESP_FAIL;
+    }
+    buf[len] = '\0';
+
+    // Parse {"current":"...","new":"..."}
+    jsmn_parser parser;
+    jsmntok_t tokens[12];
+    jsmn_init(&parser);
+    int r = jsmn_parse(&parser, buf, len, tokens, 12);
+    if (r < 1 || tokens[0].type != JSMN_OBJECT) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+        return ESP_FAIL;
+    }
+
+    const char* current_pass = nullptr;
+    const char* new_pass = nullptr;
+
+    for (int i = 1; i + 1 < r; i += 2) {
+        if (tokens[i].type != JSMN_STRING) continue;
+        buf[tokens[i].end] = '\0';
+        buf[tokens[i + 1].end] = '\0';
+        const char* key = buf + tokens[i].start;
+        const char* val = buf + tokens[i + 1].start;
+
+        if (strcmp(key, "current") == 0) current_pass = val;
+        else if (strcmp(key, "new") == 0) new_pass = val;
+    }
+
+    if (!current_pass || !new_pass) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing current/new");
+        return ESP_FAIL;
+    }
+
+    // Перевірка поточного пароля
+    if (strcmp(current_pass, s_auth_pass) != 0) {
+        httpd_resp_set_status(req, "403 Forbidden");
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_send(req, "{\"error\":\"wrong_password\"}", HTTPD_RESP_USE_STRLEN);
+        return ESP_OK;
+    }
+
+    // Валідація нового пароля (мінімум 4 символи)
+    if (strlen(new_pass) < 4) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Password too short (min 4)");
+        return ESP_FAIL;
+    }
+
+    // Зберігаємо
+    strncpy(s_auth_pass, new_pass, sizeof(s_auth_pass) - 1);
+    s_auth_pass[sizeof(s_auth_pass) - 1] = '\0';
+    save_auth_to_nvs();
+
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, "{\"ok\":true}", HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+}
+
 // ── Server setup ────────────────────────────────────────────────
 
 void HttpService::register_api_handlers() {
@@ -1338,11 +1502,12 @@ void HttpService::register_api_handlers() {
         {"/api/onewire/scan", HTTP_GET, handle_get_ow_scan},
         {"/api/log",         HTTP_GET, handle_get_log},
         {"/api/log/summary", HTTP_GET, handle_get_log_summary},
+        {"/api/auth/password", HTTP_POST, handle_post_auth_password},
     };
 
     // Реєструємо handlers + OPTIONS для CORS preflight
     // Використовуємо масив для відстеження URI, де OPTIONS вже зареєстрований
-    const char* options_registered[16] = {};
+    const char* options_registered[24] = {};
     int options_count = 0;
 
     for (auto& ep : endpoints) {
@@ -1432,6 +1597,7 @@ bool HttpService::start_server() {
 
 bool HttpService::on_init() {
     ESP_LOGI(TAG, "Starting HTTP service...");
+    load_auth_from_nvs();
     return start_server();
 }
 
