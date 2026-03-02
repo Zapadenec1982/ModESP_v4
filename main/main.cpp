@@ -141,6 +141,7 @@ extern "C" void app_main(void)
         char build_dt[32];
         snprintf(build_dt, sizeof(build_dt), "%s %s", desc->date, desc->time);
         app.state().set("_ota.date", build_dt);
+        app.state().set("_ota.board", desc->project_name);
     }
 
     // WatchdogService needs ModuleManager reference

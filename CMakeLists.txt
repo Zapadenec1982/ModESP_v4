@@ -45,8 +45,13 @@ else()
     message(WARNING "Python3 not found — skipping UI generation")
 endif()
 
+# Читаємо назву плати з board.json для ідентифікації прошивки
+file(READ "${CMAKE_SOURCE_DIR}/data/board.json" _BOARD_JSON_CONTENT)
+string(JSON _BOARD_NAME GET "${_BOARD_JSON_CONTENT}" "board")
+message(STATUS "ModESP board name: ${_BOARD_NAME}")
+
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(ModESP_v4)
+project(modesp_${_BOARD_NAME})
 
 # Generate LittleFS image from data/ directory and flash to "data" partition
 littlefs_create_partition_image(data data FLASH_IN_PROJECT)

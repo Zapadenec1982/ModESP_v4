@@ -991,6 +991,8 @@ class UIJsonGenerator:
                          "description": "Версія"},
                         {"key": "_ota.date", "widget": "value",
                          "description": "Дата збірки"},
+                        {"key": "_ota.board", "widget": "value",
+                         "description": "Плата"},
                         {"key": "_ota.upload", "widget": "firmware_upload",
                          "api_endpoint": "/api/ota",
                          "label": "Вибрати .bin файл",

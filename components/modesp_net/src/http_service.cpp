@@ -961,12 +961,13 @@ esp_err_t HttpService::handle_get_ota(httpd_req_t* req) {
     char buf[256];
     snprintf(buf, sizeof(buf),
         "{\"partition\":\"%s\",\"version\":\"%s\",\"idf\":\"%s\","
-        "\"date\":\"%s\",\"time\":\"%s\"}",
+        "\"date\":\"%s\",\"time\":\"%s\",\"board\":\"%s\"}",
         running ? running->label : "?",
         desc->version,
         desc->idf_ver,
         desc->date,
-        desc->time);
+        desc->time,
+        desc->project_name);
 
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_sendstr(req, buf);
@@ -1021,6 +1022,7 @@ esp_err_t HttpService::handle_post_ota(httpd_req_t* req) {
     int remaining = req->content_len;
     int received_total = 0;
     bool magic_checked = false;
+    bool board_checked = false;
 
     while (remaining > 0) {
         int to_recv = (remaining < (int)sizeof(buf)) ? remaining : (int)sizeof(buf);
@@ -1044,6 +1046,34 @@ esp_err_t HttpService::handle_post_ota(httpd_req_t* req) {
                 esp_ota_abort(ota_handle);
                 httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Not a valid ESP32 firmware");
                 return ESP_FAIL;
+            }
+        }
+
+        // Валідація плати: esp_app_desc_t на offset 0x20 у .bin
+        if (!board_checked && received_total == 0 && recv_len >= 0x70) {
+            board_checked = true;
+            static constexpr size_t DESC_OFFSET = 0x20;
+            static constexpr size_t NAME_OFFSET = DESC_OFFSET + 48; // project_name
+            uint32_t desc_magic;
+            memcpy(&desc_magic, buf + DESC_OFFSET, 4);
+            if (desc_magic == 0xABCD5432) {
+                char incoming_name[33] = {};
+                memcpy(incoming_name, buf + NAME_OFFSET, 32);
+                const char* running_name = esp_app_get_description()->project_name;
+                if (strcmp(incoming_name, running_name) != 0) {
+                    ESP_LOGE(TAG, "OTA: Board mismatch: running '%s', incoming '%s'",
+                             running_name, incoming_name);
+                    esp_ota_abort(ota_handle);
+                    char err_msg[160];
+                    snprintf(err_msg, sizeof(err_msg),
+                        "{\"error\":\"board_mismatch\",\"running\":\"%s\",\"incoming\":\"%s\"}",
+                        running_name, incoming_name);
+                    httpd_resp_set_type(req, "application/json");
+                    httpd_resp_set_status(req, "400 Bad Request");
+                    httpd_resp_sendstr(req, err_msg);
+                    return ESP_FAIL;
+                }
+                ESP_LOGI(TAG, "OTA: Board check OK (%s)", running_name);
             }
         }
 

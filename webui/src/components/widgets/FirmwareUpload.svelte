@@ -24,6 +24,7 @@
       setStateKey('_ota.partition', d.partition || '');
       setStateKey('_ota.idf', d.idf || '');
       setStateKey('_ota.date', `${d.date || ''} ${d.time || ''}`);
+      if (d.board) setStateKey('_ota.board', d.board);
     } catch (e) {}
     return () => { if (countdownTimer) clearInterval(countdownTimer); };
   });
@@ -73,7 +74,18 @@
         }
       }, 1000);
     } catch (e) {
-      status = 'Error: ' + e.message;
+      // Перевірка board mismatch помилки
+      let msg = e.message;
+      try {
+        const err = JSON.parse(msg);
+        if (err.error === 'board_mismatch') {
+          msg = ($t['ota.board_mismatch'] || 'Board mismatch: {incoming} (expected {running})')
+            .replace('{incoming}', err.incoming)
+            .replace('{running}', err.running);
+          toastWarn(msg);
+        }
+      } catch (_) {}
+      status = 'Error: ' + msg;
       uploading = false;
     }
     fileInput.value = '';

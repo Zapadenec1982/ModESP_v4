@@ -36,6 +36,7 @@ export default {
   'Інформація': 'Information',
   'Прошивка': 'Firmware',
   'Оновлення прошивки': 'Firmware Update',
+  'Плата': 'Board',
   'Налаштування часу': 'Time Settings',
   'Бекап налаштувань': 'Settings Backup',
   'Безпека': 'Security',

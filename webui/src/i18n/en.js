@@ -96,6 +96,7 @@ export default {
   'ota.select': 'Select firmware file',
   'ota.restarting': 'Restarting in {0}s...',
   'ota.too_large': 'File too large (max ~1.4 MB)',
+  'ota.board_mismatch': 'Firmware for different board: {incoming} (expected {running})',
 
   'wifi.scan': 'Scan',
   'wifi.scanning': 'Scanning...',

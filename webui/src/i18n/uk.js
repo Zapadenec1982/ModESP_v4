@@ -105,6 +105,7 @@ export default {
   'ota.select': 'Обрати файл прошивки',
   'ota.restarting': 'Перезапуск через {0}с...',
   'ota.too_large': 'Файл занадто великий (макс. ~1.4 MB)',
+  'ota.board_mismatch': 'Прошивка для іншої плати: {incoming} (потрібна {running})',
 
   // WiFi
   'wifi.scan': 'Сканувати',
