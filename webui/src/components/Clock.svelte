@@ -22,10 +22,13 @@
     return `${h}:${m}:${ss}`;
   }
 
+  // Оновлювати лише коли server time СПРАВДІ змінився (не кожен WS broadcast)
+  let prevServerTime = '';
   $: {
     const st = $state['system.time'];
     const sd = $state['system.date'];
-    if (st && st !== '--:--:--') {
+    if (st && st !== '--:--:--' && st !== prevServerTime) {
+      prevServerTime = st;
       serverSeconds = parseHMS(st);
       clockTime = st;
     }

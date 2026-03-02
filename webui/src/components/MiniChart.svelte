@@ -14,9 +14,8 @@
 
   let chartData = null;
   let refreshTimer;
-  let unsubLive;
   let lastLiveTs = 0;
-  const LIVE_THROTTLE = 10; // оновлення графіка не частіше ніж кожні 10с
+  const LIVE_THROTTLE = 10;
   let svgEl;
 
   // Tooltip
@@ -26,32 +25,27 @@
     try { chartData = await apiGet('/api/log?hours=24'); } catch {}
   }
 
-  onMount(() => {
-    loadChart();
-    refreshTimer = setInterval(loadChart, 300000);
-    // Реактивне оновлення: підписка на зміни state store
-    unsubLive = state.subscribe(s => {
-      if (!chartData?.channels || !chartData?.temp) return;
-      const now = Math.floor(Date.now() / 1000);
-      if (now - lastLiveTs < LIVE_THROTTLE) return;
-      const aIdx = chartData.channels.indexOf('air');
-      if (aIdx < 0) return;
-      const airVal = s['equipment.air_temp'];
-      if (airVal == null || typeof airVal !== 'number') return;
+  onMount(() => { loadChart(); refreshTimer = setInterval(loadChart, 300000); });
+  onDestroy(() => { if (refreshTimer) clearInterval(refreshTimer); });
+
+  // Reactive live update: додаємо точку при зміні air_temp (throttle 10с)
+  $: liveAir = $state['equipment.air_temp'];
+  $: if (chartData?.temp && typeof liveAir === 'number') {
+    const now = Math.floor(Date.now() / 1000);
+    if (now - lastLiveTs >= LIVE_THROTTLE) {
       lastLiveTs = now;
-      const point = new Array(chartData.channels.length + 1).fill(null);
-      point[0] = now;
-      point[aIdx + 1] = Math.round(airVal * 10);
-      const cutoff = now - 24 * 3600;
-      while (chartData.temp.length > 0 && chartData.temp[0][0] < cutoff) chartData.temp.shift();
-      chartData.temp.push(point);
-      chartData = { ...chartData, temp: chartData.temp.slice() };
-    });
-  });
-  onDestroy(() => {
-    if (refreshTimer) clearInterval(refreshTimer);
-    if (unsubLive) unsubLive();
-  });
+      const aIdx = chartData.channels.indexOf('air');
+      if (aIdx >= 0) {
+        const point = new Array(chartData.channels.length + 1).fill(null);
+        point[0] = now;
+        point[aIdx + 1] = Math.round(liveAir * 10);
+        const cutoff = now - 24 * 3600;
+        while (chartData.temp.length > 0 && chartData.temp[0][0] < cutoff) chartData.temp.shift();
+        chartData.temp.push(point);
+        chartData = { ...chartData, temp: chartData.temp.slice() };
+      }
+    }
+  }
 
   $: airIdx = chartData?.channels ? chartData.channels.indexOf('air') + 1 : 1;
   $: pts = chartData?.temp || [];

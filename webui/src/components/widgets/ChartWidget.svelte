@@ -16,9 +16,8 @@
   let tooltip = null;
   let svgEl;
   let refreshTimer;
-  let unsubLive;
   let lastLiveTs = 0;
-  const LIVE_THROTTLE = 10; // оновлення графіка не частіше ніж кожні 10с
+  const LIVE_THROTTLE = 10;
   let showEvents = false;
 
   // Channel name → state key (дзеркалює CHANNEL_DEFS з бекенду)
@@ -65,20 +64,25 @@
     loading = false;
   }
 
-  onMount(() => {
-    loadData();
-    refreshTimer = setInterval(loadData, 300000);
-    // Реактивне оновлення: підписка на зміни state store
-    unsubLive = state.subscribe(s => {
-      if (!data?.channels || !data?.temp) return;
-      const now = Math.floor(Date.now() / 1000);
-      if (now - lastLiveTs < LIVE_THROTTLE) return;
+  onMount(() => { loadData(); refreshTimer = setInterval(loadData, 300000); });
+  onDestroy(() => { if (refreshTimer) clearInterval(refreshTimer); });
+
+  // Reactive live update: збираємо актуальні значення каналів з $state
+  $: liveVals = {
+    air: $state['equipment.air_temp'],
+    evap: $state['equipment.evap_temp'],
+    cond: $state['equipment.cond_temp'],
+    setpoint: $state['thermostat.setpoint'],
+    humidity: $state['equipment.humidity']
+  };
+  $: if (data?.temp && liveVals) {
+    const now = Math.floor(Date.now() / 1000);
+    if (now - lastLiveTs >= LIVE_THROTTLE) {
       const chs = data.channels;
       const point = [now];
       let hasAny = false;
       for (const name of chs) {
-        const key = CH_STATE_KEYS[name];
-        const sv = key ? s[key] : undefined;
+        const sv = liveVals[name];
         if (sv != null && typeof sv === 'number') {
           point.push(Math.round(sv * 10));
           hasAny = true;
@@ -86,18 +90,15 @@
           point.push(null);
         }
       }
-      if (!hasAny) return;
-      lastLiveTs = now;
-      const cutoff = now - hours * 3600;
-      while (data.temp.length > 0 && data.temp[0][0] < cutoff) data.temp.shift();
-      data.temp.push(point);
-      data = { ...data, temp: data.temp.slice() };
-    });
-  });
-  onDestroy(() => {
-    if (refreshTimer) clearInterval(refreshTimer);
-    if (unsubLive) unsubLive();
-  });
+      if (hasAny) {
+        lastLiveTs = now;
+        const cutoff = now - hours * 3600;
+        while (data.temp.length > 0 && data.temp[0][0] < cutoff) data.temp.shift();
+        data.temp.push(point);
+        data = { ...data, temp: data.temp.slice() };
+      }
+    }
+  }
 
   function setHours(h) { hours = h; loadData(); }
 
