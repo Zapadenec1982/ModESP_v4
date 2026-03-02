@@ -63,7 +63,8 @@ void ProtectionModule::sync_settings() {
     max_rise_rate_ = read_float("protection.max_rise_rate", 0.5f);
     rate_duration_ms_ = static_cast<uint32_t>(
         read_int("protection.rate_duration", 5)) * 60000;
-    compressor_hours_ = read_float("protection.compressor_hours", 0.0f);
+    // compressor_hours_ читається ТІЛЬКИ в on_init() —
+    // тут не перечитуємо, бо модуль акумулює значення між записами в state
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -73,6 +74,8 @@ void ProtectionModule::sync_settings() {
 bool ProtectionModule::on_init() {
     // PersistService вже відновив збережені значення з NVS → SharedState (Phase 1)
     sync_settings();
+    // compressor_hours — акумулятивний наробіток, читаємо тільки раз при init
+    compressor_hours_ = read_float("protection.compressor_hours", 0.0f);
 
     // Початковий стан — існуючі
     state_set("protection.lockout", false);
@@ -563,10 +566,10 @@ void ProtectionModule::publish_compressor_diagnostics() {
     state_set("protection.last_cycle_run", last_run, false);
     state_set("protection.last_cycle_off", last_off, false);
 
-    // compressor_hours — persist раз на 30 хв (360 × 5с = 1800с)
+    // compressor_hours — persist раз на 1 год (720 × 5с = 3600с)
     // state_set() тригерить persist callback → NVS write, тому викликаємо РІДКО
     hours_persist_counter_++;
-    if (hours_persist_counter_ >= 360) {
+    if (hours_persist_counter_ >= 720) {
         hours_persist_counter_ = 0;
         state_set("protection.compressor_hours", compressor_hours_);
     }

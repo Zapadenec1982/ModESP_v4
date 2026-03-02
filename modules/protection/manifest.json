@@ -397,5 +397,240 @@
       {"label": "Макс.старт",  "key": "protection.max_starts_hour"},
       {"label": "Макс.робота", "key": "protection.max_continuous_run"}
     ]
+  },
+
+  "ui": {
+    "page": "Захист",
+    "page_id": "protection",
+    "icon": "shield",
+    "order": 3,
+    "cards": [
+      {
+        "title": "Статус аварій",
+        "widgets": [
+          {
+            "key": "protection.alarm_active",
+            "widget": "indicator",
+            "label": "Аварія",
+            "on_label": "АВАРІЯ",
+            "off_label": "Норма",
+            "on_color": "#ef4444",
+            "off_color": "#22c55e"
+          },
+          {
+            "key": "protection.alarm_code",
+            "widget": "status_text",
+            "label": "Код аварії"
+          },
+          {
+            "key": "protection.high_temp_alarm",
+            "widget": "indicator",
+            "label": "Висока T",
+            "on_label": "АВАРІЯ",
+            "off_label": "Норма",
+            "on_color": "#ef4444",
+            "off_color": "#64748b"
+          },
+          {
+            "key": "protection.low_temp_alarm",
+            "widget": "indicator",
+            "label": "Низька T",
+            "on_label": "АВАРІЯ",
+            "off_label": "Норма",
+            "on_color": "#ef4444",
+            "off_color": "#64748b"
+          },
+          {
+            "key": "protection.sensor1_alarm",
+            "widget": "indicator",
+            "label": "Датчик 1",
+            "on_label": "ОБРИВ",
+            "off_label": "Норма",
+            "on_color": "#ef4444",
+            "off_color": "#64748b"
+          },
+          {
+            "key": "protection.sensor2_alarm",
+            "widget": "indicator",
+            "label": "Датчик 2",
+            "on_label": "ОБРИВ",
+            "off_label": "Норма",
+            "on_color": "#ef4444",
+            "off_color": "#64748b"
+          },
+          {
+            "key": "protection.door_alarm",
+            "widget": "indicator",
+            "label": "Двері",
+            "on_label": "ВІДКРИТІ",
+            "off_label": "Норма",
+            "on_color": "#f59e0b",
+            "off_color": "#64748b",
+            "visible_when": {"key": "equipment.has_door_contact", "eq": true}
+          },
+          {
+            "key": "protection.short_cycle_alarm",
+            "widget": "indicator",
+            "label": "Короткий цикл",
+            "on_label": "АВАРІЯ",
+            "off_label": "Норма",
+            "on_color": "#ef4444",
+            "off_color": "#64748b"
+          },
+          {
+            "key": "protection.rapid_cycle_alarm",
+            "widget": "indicator",
+            "label": "Часті запуски",
+            "on_label": "АВАРІЯ",
+            "off_label": "Норма",
+            "on_color": "#ef4444",
+            "off_color": "#64748b"
+          },
+          {
+            "key": "protection.continuous_run_alarm",
+            "widget": "indicator",
+            "label": "Безперервна робота",
+            "on_label": "АВАРІЯ",
+            "off_label": "Норма",
+            "on_color": "#ef4444",
+            "off_color": "#64748b"
+          },
+          {
+            "key": "protection.pulldown_alarm",
+            "widget": "indicator",
+            "label": "Pulldown",
+            "on_label": "АВАРІЯ",
+            "off_label": "Норма",
+            "on_color": "#ef4444",
+            "off_color": "#64748b"
+          },
+          {
+            "key": "protection.rate_alarm",
+            "widget": "indicator",
+            "label": "Швидкість T",
+            "on_label": "АВАРІЯ",
+            "off_label": "Норма",
+            "on_color": "#ef4444",
+            "off_color": "#64748b"
+          },
+          {
+            "key": "protection.reset_alarms",
+            "widget": "button",
+            "label": "Скинути аварії"
+          }
+        ]
+      },
+      {
+        "title": "Діагностика компресора",
+        "widgets": [
+          {
+            "key": "protection.compressor_starts_1h",
+            "widget": "value",
+            "label": "Запусків/год"
+          },
+          {
+            "key": "protection.compressor_duty",
+            "widget": "value",
+            "label": "Duty cycle",
+            "format": "%.0f%%"
+          },
+          {
+            "key": "protection.compressor_run_time",
+            "widget": "value",
+            "label": "Час роботи",
+            "format": "duration"
+          },
+          {
+            "key": "protection.last_cycle_run",
+            "widget": "value",
+            "label": "Останній цикл",
+            "format": "duration"
+          },
+          {
+            "key": "protection.last_cycle_off",
+            "widget": "value",
+            "label": "Останній простій",
+            "format": "duration"
+          },
+          {
+            "key": "protection.compressor_hours",
+            "widget": "value",
+            "label": "Мотогодини",
+            "format": "%.1f"
+          }
+        ]
+      },
+      {
+        "title": "Налаштування захисту",
+        "group": "settings",
+        "collapsible": true,
+        "widgets": [
+          {
+            "key": "protection.high_limit",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.low_limit",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.high_alarm_delay",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.low_alarm_delay",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.door_delay",
+            "widget": "number_input",
+            "visible_when": {"key": "equipment.has_door_contact", "eq": true}
+          },
+          {
+            "key": "protection.post_defrost_delay",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.manual_reset",
+            "widget": "toggle"
+          }
+        ]
+      },
+      {
+        "title": "Моніторинг компресора",
+        "group": "settings",
+        "collapsible": true,
+        "widgets": [
+          {
+            "key": "protection.min_compressor_run",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.max_starts_hour",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.max_continuous_run",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.pulldown_timeout",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.pulldown_min_drop",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.max_rise_rate",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.rate_duration",
+            "widget": "number_input"
+          }
+        ]
+      }
+    ]
   }
 }

@@ -1021,23 +1021,28 @@ TEST_CASE("Protection: motor hours accumulate when compressor ON [compressor]") 
     ProtectionModule prot;
     modesp::ModuleManager mgr;
     mgr.register_module(prot);
+
+    // Встановлюємо початкові мотогодини ДО init — щоб on_init їх прочитав
+    state.set("protection.compressor_hours", 100.0f);
     mgr.init_all(state);
 
-    state.set("protection.compressor_hours", 100.0f);  // Simulate existing hours
     pr_setup_compressor_settings(state);
     pr_setup_normal(state, 5.0f, true, true, false, false, true);
 
-    // Компресор ON, 2 тіки по 5 сек (=2 інкременти motor hours)
-    prot.on_update(5000u);
-    prot.on_update(5000u);
+    // Motor hours записуються в state кожні 720 циклів (persist optimization).
+    // Тому виконуємо 721 тік по 5 сек для тригеру запису в state.
+    // 720 * 5/3600 = 1.0 year (годин наробітку за цикл)
+    for (int i = 0; i < 721; i++) {
+        prot.on_update(5000u);
+    }
 
     auto hours = state.get("protection.compressor_hours");
     REQUIRE(hours.has_value());
     const auto* hp = etl::get_if<float>(&hours.value());
     CHECK(hp != nullptr);
     if (hp) {
-        // 100 + 2 * (5/3600) = 100.00278
-        CHECK(*hp > 100.0f);
-        CHECK(*hp < 100.01f);
+        // 100 + 720 * (5/3600) = 101.0
+        CHECK(*hp > 100.5f);
+        CHECK(*hp < 101.5f);
     }
 }
