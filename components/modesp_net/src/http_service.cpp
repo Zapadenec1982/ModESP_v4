@@ -41,21 +41,29 @@ namespace modesp {
 
 static char s_auth_user[32] = "admin";
 static char s_auth_pass[64] = "modesp";
+static bool s_auth_enabled = true;
 static const char* AUTH_NVS_NS = "auth";
 
 void HttpService::load_auth_from_nvs() {
     nvs_helper::read_str(AUTH_NVS_NS, "user", s_auth_user, sizeof(s_auth_user));
     nvs_helper::read_str(AUTH_NVS_NS, "pass", s_auth_pass, sizeof(s_auth_pass));
-    ESP_LOGI(TAG, "Auth loaded (user='%s')", s_auth_user);
+    bool enabled = true;
+    nvs_helper::read_bool(AUTH_NVS_NS, "enabled", enabled);
+    s_auth_enabled = enabled;
+    ESP_LOGI(TAG, "Auth loaded (user='%s', enabled=%d)", s_auth_user, s_auth_enabled);
 }
 
 void HttpService::save_auth_to_nvs() {
     nvs_helper::write_str(AUTH_NVS_NS, "user", s_auth_user);
     nvs_helper::write_str(AUTH_NVS_NS, "pass", s_auth_pass);
-    ESP_LOGI(TAG, "Auth saved (user='%s')", s_auth_user);
+    nvs_helper::write_bool(AUTH_NVS_NS, "enabled", s_auth_enabled);
+    ESP_LOGI(TAG, "Auth saved (user='%s', enabled=%d)", s_auth_user, s_auth_enabled);
 }
 
 bool HttpService::check_auth(httpd_req_t* req) {
+    // Якщо auth вимкнено — пропускаємо
+    if (!s_auth_enabled) return true;
+
     // Читаємо Authorization header
     size_t hdr_len = httpd_req_get_hdr_value_len(req, "Authorization");
     if (hdr_len == 0 || hdr_len > 200) {
@@ -1433,12 +1441,26 @@ esp_err_t HttpService::handle_static(httpd_req_t* req) {
     return ESP_OK;
 }
 
-// ── Auth password change ────────────────────────────────────────
+// ── Auth settings (GET + POST) ──────────────────────────────────
 
-esp_err_t HttpService::handle_post_auth_password(httpd_req_t* req) {
+esp_err_t HttpService::handle_get_auth(httpd_req_t* req) {
+    // GET /api/auth — публічний (без auth), ніколи не повертає пароль
+    set_cors_headers(req);
+    char buf[128];
+    snprintf(buf, sizeof(buf),
+             "{\"enabled\":%s,\"username\":\"%s\"}",
+             s_auth_enabled ? "true" : "false",
+             s_auth_user);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_send(req, buf, HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+}
+
+esp_err_t HttpService::handle_post_auth(httpd_req_t* req) {
     if (!check_auth(req)) return ESP_OK;
+    set_cors_headers(req);
 
-    char buf[256];
+    char buf[384];
     int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
     if (len <= 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty body");
@@ -1446,11 +1468,11 @@ esp_err_t HttpService::handle_post_auth_password(httpd_req_t* req) {
     }
     buf[len] = '\0';
 
-    // Parse {"current":"...","new":"..."}
+    // Parse JSON: enabled, username, current_pass, new_pass, reset
     jsmn_parser parser;
-    jsmntok_t tokens[12];
+    jsmntok_t tokens[16];
     jsmn_init(&parser);
-    int r = jsmn_parse(&parser, buf, len, tokens, 12);
+    int r = jsmn_parse(&parser, buf, len, tokens, 16);
     if (r < 1 || tokens[0].type != JSMN_OBJECT) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
         return ESP_FAIL;
@@ -1458,6 +1480,9 @@ esp_err_t HttpService::handle_post_auth_password(httpd_req_t* req) {
 
     const char* current_pass = nullptr;
     const char* new_pass = nullptr;
+    const char* username = nullptr;
+    int enabled_val = -1;  // -1 = не вказано
+    bool reset = false;
 
     for (int i = 1; i + 1 < r; i += 2) {
         if (tokens[i].type != JSMN_STRING) continue;
@@ -1466,32 +1491,62 @@ esp_err_t HttpService::handle_post_auth_password(httpd_req_t* req) {
         const char* key = buf + tokens[i].start;
         const char* val = buf + tokens[i + 1].start;
 
-        if (strcmp(key, "current") == 0) current_pass = val;
-        else if (strcmp(key, "new") == 0) new_pass = val;
+        if (strcmp(key, "current_pass") == 0) current_pass = val;
+        else if (strcmp(key, "new_pass") == 0) new_pass = val;
+        else if (strcmp(key, "username") == 0) username = val;
+        else if (strcmp(key, "enabled") == 0) {
+            enabled_val = (val[0] == 't') ? 1 : 0;
+        }
+        else if (strcmp(key, "reset") == 0) {
+            reset = (val[0] == 't');
+        }
     }
 
-    if (!current_pass || !new_pass) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing current/new");
-        return ESP_FAIL;
-    }
-
-    // Перевірка поточного пароля
-    if (strcmp(current_pass, s_auth_pass) != 0) {
-        httpd_resp_set_status(req, "403 Forbidden");
+    // Скидання до заводських
+    if (reset) {
+        if (!current_pass || strcmp(current_pass, s_auth_pass) != 0) {
+            httpd_resp_set_status(req, "403 Forbidden");
+            httpd_resp_set_type(req, "application/json");
+            httpd_resp_send(req, "{\"error\":\"wrong_password\"}", HTTPD_RESP_USE_STRLEN);
+            return ESP_OK;
+        }
+        strncpy(s_auth_user, "admin", sizeof(s_auth_user) - 1);
+        strncpy(s_auth_pass, "modesp", sizeof(s_auth_pass) - 1);
+        s_auth_enabled = true;
+        save_auth_to_nvs();
+        ESP_LOGI(TAG, "Auth reset to factory defaults");
         httpd_resp_set_type(req, "application/json");
-        httpd_resp_send(req, "{\"error\":\"wrong_password\"}", HTTPD_RESP_USE_STRLEN);
+        httpd_resp_send(req, "{\"ok\":true,\"reset\":true}", HTTPD_RESP_USE_STRLEN);
         return ESP_OK;
     }
 
-    // Валідація нового пароля (мінімум 4 символи)
-    if (strlen(new_pass) < 4) {
-        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Password too short (min 4)");
-        return ESP_FAIL;
+    // Зміна пароля — потрібен current_pass
+    if (new_pass) {
+        if (!current_pass || strcmp(current_pass, s_auth_pass) != 0) {
+            httpd_resp_set_status(req, "403 Forbidden");
+            httpd_resp_set_type(req, "application/json");
+            httpd_resp_send(req, "{\"error\":\"wrong_password\"}", HTTPD_RESP_USE_STRLEN);
+            return ESP_OK;
+        }
+        if (strlen(new_pass) < 4) {
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Password too short (min 4)");
+            return ESP_FAIL;
+        }
+        strncpy(s_auth_pass, new_pass, sizeof(s_auth_pass) - 1);
+        s_auth_pass[sizeof(s_auth_pass) - 1] = '\0';
     }
 
-    // Зберігаємо
-    strncpy(s_auth_pass, new_pass, sizeof(s_auth_pass) - 1);
-    s_auth_pass[sizeof(s_auth_pass) - 1] = '\0';
+    // Зміна username
+    if (username && strlen(username) > 0 && strlen(username) < sizeof(s_auth_user)) {
+        strncpy(s_auth_user, username, sizeof(s_auth_user) - 1);
+        s_auth_user[sizeof(s_auth_user) - 1] = '\0';
+    }
+
+    // Toggle enabled
+    if (enabled_val >= 0) {
+        s_auth_enabled = (enabled_val == 1);
+    }
+
     save_auth_to_nvs();
 
     httpd_resp_set_type(req, "application/json");
@@ -1529,7 +1584,8 @@ void HttpService::register_api_handlers() {
         {"/api/onewire/scan", HTTP_GET, handle_get_ow_scan},
         {"/api/log",         HTTP_GET, handle_get_log},
         {"/api/log/summary", HTTP_GET, handle_get_log_summary},
-        {"/api/auth/password", HTTP_POST, handle_post_auth_password},
+        {"/api/auth", HTTP_GET,  handle_get_auth},
+        {"/api/auth", HTTP_POST, handle_post_auth},
     };
 
     // Реєструємо handlers + OPTIONS для CORS preflight

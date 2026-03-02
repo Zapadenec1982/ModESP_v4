@@ -119,6 +119,12 @@ export default {
   'auth.pass_changed': 'Password changed',
   'auth.pass_mismatch': 'Passwords do not match',
   'auth.pass_short': 'Minimum 4 characters',
+  'auth.enabled': 'Authentication enabled',
+  'auth.saved': 'Settings saved',
+  'auth.reset': 'Reset to defaults',
+  'auth.reset_confirm': 'Reset login and password to admin/modesp?',
+  'auth.reset_done': 'Reset to factory defaults',
+  'auth.current_pass_required': 'Enter current password',
 
   'nav.more': 'More',
 

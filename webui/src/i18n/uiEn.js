@@ -38,6 +38,7 @@ export default {
   'Оновлення прошивки': 'Firmware Update',
   'Налаштування часу': 'Time Settings',
   'Бекап налаштувань': 'Settings Backup',
+  'Безпека': 'Security',
   'Дії': 'Actions',
 
   // Equipment / Sensors descriptions
@@ -220,6 +221,7 @@ export default {
   'Відновити з бекапу': 'Restore from backup',
   'Перезавантажити': 'Restart',
   'Скинути до заводських': 'Factory Reset',
+  'Налаштування аутентифікації': 'Authentication settings',
 
   // Confirm messages
   'Перезавантажити пристрій?': 'Restart device?',

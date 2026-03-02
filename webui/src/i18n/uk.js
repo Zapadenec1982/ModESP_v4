@@ -133,6 +133,12 @@ export default {
   'auth.pass_changed': 'Пароль змінено',
   'auth.pass_mismatch': 'Паролі не збігаються',
   'auth.pass_short': 'Мінімум 4 символи',
+  'auth.enabled': 'Аутентифікація увімкнена',
+  'auth.saved': 'Налаштування збережено',
+  'auth.reset': 'Скинути до заводських',
+  'auth.reset_confirm': 'Скинути логін та пароль до admin/modesp?',
+  'auth.reset_done': 'Скинуто до заводських налаштувань',
+  'auth.current_pass_required': 'Введіть поточний пароль',
 
   // Navigation
   'nav.more': 'Ще',

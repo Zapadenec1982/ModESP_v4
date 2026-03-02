@@ -103,7 +103,8 @@ private:
     static esp_err_t handle_get_ow_scan(httpd_req_t* req);
     static esp_err_t handle_get_log(httpd_req_t* req);
     static esp_err_t handle_get_log_summary(httpd_req_t* req);
-    static esp_err_t handle_post_auth_password(httpd_req_t* req);
+    static esp_err_t handle_get_auth(httpd_req_t* req);
+    static esp_err_t handle_post_auth(httpd_req_t* req);
     static esp_err_t handle_static(httpd_req_t* req);
 
     // CORS

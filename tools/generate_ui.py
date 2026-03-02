@@ -1016,6 +1016,14 @@ class UIJsonGenerator:
                     ],
                 },
                 {
+                    "title": "Безпека",
+                    "collapsible": True,
+                    "widgets": [
+                        {"key": "_action.auth_save", "widget": "auth_save",
+                         "description": "Налаштування аутентифікації"},
+                    ],
+                },
+                {
                     "title": "Дії",
                     "collapsible": True,
                     "widgets": [
