@@ -45,8 +45,9 @@
   @media (min-width: 1025px) {
     .page-grid {
       grid-template-columns: repeat(2, 1fr);
-      gap: 16px;
-      max-width: none;
+      gap: 0 16px;
+      max-width: 1100px;
+      align-items: start;
     }
   }
 
