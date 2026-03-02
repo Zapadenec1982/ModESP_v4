@@ -14,6 +14,7 @@ export default {
   'dash.compressor': 'Компресор',
   'dash.fan': 'Вентилятор',
   'dash.heater': 'Нагрівач',
+  'dash.valve': 'Клапан ГГ',
   'dash.door': 'Двері',
   'dash.condenser': 'Конденсатор',
   'dash.comp': 'КОМП',

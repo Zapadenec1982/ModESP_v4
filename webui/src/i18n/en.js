@@ -11,6 +11,7 @@ export default {
   'dash.compressor': 'Compressor',
   'dash.fan': 'Fan',
   'dash.heater': 'Heater',
+  'dash.valve': 'HG Valve',
   'dash.door': 'Door',
   'dash.condenser': 'Condenser',
   'dash.comp': 'COMP',

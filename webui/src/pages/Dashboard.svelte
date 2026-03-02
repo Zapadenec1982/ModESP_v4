@@ -14,6 +14,7 @@
   $: thermoState = $state['thermostat.state'];
   $: defrostActive = $state['defrost.active'];
   $: defrostPhase = $state['defrost.phase'];
+  $: defrostType = $state['defrost.type']; // 0=natural, 1=electric, 2=hot gas
   $: alarmActive = $state['protection.alarm_active'];
   $: alarmCode = $state['protection.alarm_code'];
   $: nightActive = $state['thermostat.night_active'];
@@ -87,13 +88,24 @@
         </svg>
       </div>
 
-      <!-- Defrost relay -->
+      <!-- Defrost relay: іконка залежить від типу відтайки -->
       {#if defrostRelay}
-        <div class="status-item" title={$t['dash.heater']}>
-          <svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke="var(--status-heater)" stroke-width="2">
-            <path d="M12 2c0 4-4 6-4 10a4 4 0 0 0 8 0c0-4-4-6-4-10z" fill="rgba(239,68,68,0.2)"/>
-            <path d="M12 2c0 4-4 6-4 10a4 4 0 0 0 8 0c0-4-4-6-4-10z"/>
-          </svg>
+        <div class="status-item" title={defrostType === 2 ? $t['dash.valve'] : $t['dash.heater']}>
+          {#if defrostType === 2}
+            <!-- Гарячий газ — клапан -->
+            <svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke="var(--status-defrost)" stroke-width="2">
+              <path d="M12 2v6M12 16v6" stroke-linecap="round"/>
+              <path d="M6 8l6 4 6-4" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M6 16l6-4 6 4" stroke-linecap="round" stroke-linejoin="round"/>
+              <circle cx="12" cy="12" r="2" fill="var(--status-defrost)" opacity="0.3"/>
+            </svg>
+          {:else}
+            <!-- Електричний тен — вогонь -->
+            <svg class="status-icon" viewBox="0 0 24 24" fill="none" stroke="var(--status-heater)" stroke-width="2">
+              <path d="M12 2c0 4-4 6-4 10a4 4 0 0 0 8 0c0-4-4-6-4-10z" fill="rgba(239,68,68,0.2)"/>
+              <path d="M12 2c0 4-4 6-4 10a4 4 0 0 0 8 0c0-4-4-6-4-10z"/>
+            </svg>
+          {/if}
         </div>
       {/if}
 
