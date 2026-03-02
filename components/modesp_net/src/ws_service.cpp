@@ -301,26 +301,33 @@ void WsService::broadcast_state() {
 void WsService::send_full_state_to(int fd) {
     if (!server_ || !state_) return;
 
-    // Серіалізуємо повний state для нового клієнта
+    // Захист від OOM: ~6KB serialize + AsyncSendCtx copy
+    if (esp_get_free_heap_size() < 20000) {
+        ESP_LOGW(TAG, "Heap < 20KB, skip initial state to fd=%d", fd);
+        return;
+    }
+
+    // Серіалізуємо повний state для нового клієнта (heap, не stack!)
     // 154 entries × ~35 bytes avg = ~5.4KB потрібно
-    char buf[6144];
-    WsSerCtx ctx = {buf, sizeof(buf), 0, true};
-    ctx.pos += snprintf(buf, sizeof(buf), "{");
+    static constexpr size_t BUF_SIZE = 6144;
+    char* buf = static_cast<char*>(malloc(BUF_SIZE));
+    if (!buf) {
+        ESP_LOGW(TAG, "No memory for serialize buf to fd=%d", fd);
+        return;
+    }
+
+    WsSerCtx ctx = {buf, BUF_SIZE, 0, true};
+    ctx.pos += snprintf(buf, BUF_SIZE, "{");
 
     state_->for_each(ws_serialize_entry, &ctx);
 
     ctx.pos += snprintf(buf + ctx.pos, ctx.remaining(), "}");
 
-    // Захист від OOM: повний state ~5KB + AsyncSendCtx overhead
-    if (esp_get_free_heap_size() < 16000) {
-        ESP_LOGW(TAG, "Heap < 16KB, skip initial state to fd=%d", fd);
-        return;
-    }
-
     auto* send_ctx = static_cast<AsyncSendCtx*>(
         malloc(sizeof(AsyncSendCtx) + ctx.pos));
     if (!send_ctx) {
         ESP_LOGW(TAG, "No memory for initial state to fd=%d", fd);
+        free(buf);
         return;
     }
     send_ctx->server = server_;
@@ -329,6 +336,7 @@ void WsService::send_full_state_to(int fd) {
     send_ctx->type   = HTTPD_WS_TYPE_TEXT;
     send_ctx->len    = ctx.pos;
     memcpy(send_ctx->data, buf, ctx.pos);
+    free(buf);
 
     if (httpd_queue_work(server_, async_send_cb, send_ctx) != ESP_OK) {
         ESP_LOGW(TAG, "Queue full for initial state fd=%d", fd);
