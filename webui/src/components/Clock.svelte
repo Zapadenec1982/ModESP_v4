@@ -62,13 +62,14 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    color: var(--fg-muted);
-    font-size: 13px;
+    color: var(--text-3);
+    font-family: var(--font-mono);
+    font-size: 12px;
     font-variant-numeric: tabular-nums;
   }
   .clock-time {
     font-weight: 500;
-    color: var(--fg);
+    color: var(--text-2);
   }
   .clock-date {
     opacity: 0.7;

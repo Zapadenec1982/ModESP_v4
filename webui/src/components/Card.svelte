@@ -62,40 +62,52 @@
 
 <style>
   .card {
-    background: var(--card);
-    border-radius: var(--radius-2xl);
+    background: var(--surface);
+    border-radius: var(--radius);
     border: 1px solid var(--border);
-    margin-bottom: var(--sp-4);
+    margin-bottom: 16px;
     overflow: hidden;
-    transition: box-shadow var(--transition-slow);
+    position: relative;
+    transition: background 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
+  }
+
+  /* Top-line gradient accent */
+  .card::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, var(--border-accent) 50%, transparent 100%);
+    z-index: 1;
   }
 
   :global(:root[data-theme="light"]) .card {
     box-shadow: var(--shadow-xs);
   }
 
-  /* Variant: status — subtle accent bg */
   .card-status {
-    border-color: var(--accent, var(--border));
+    border-color: var(--accent);
   }
 
-  /* Variant: alarm — red border + subtle red bg */
   .card-alarm {
     border-color: var(--alarm-border);
     background: var(--alarm-bg);
   }
 
   .card-title {
-    font-size: var(--text-sm);
-    font-weight: var(--fw-bold);
-    color: var(--fg-muted);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-2);
     text-transform: uppercase;
     letter-spacing: 1px;
-    padding: var(--sp-3) var(--sp-4);
+    padding: 12px 16px;
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
-    gap: var(--sp-1-5);
+    gap: 6px;
+    font-family: var(--font-display);
   }
 
   .card-alarm .card-title {
@@ -109,7 +121,7 @@
   }
 
   .card-title.collapsible:hover {
-    color: var(--fg);
+    color: var(--text-1);
   }
 
   .card-alarm .card-title.collapsible:hover {
@@ -118,7 +130,7 @@
 
   .arrow {
     display: inline-flex;
-    transition: transform var(--transition-normal);
+    transition: transform 0.2s ease;
   }
 
   .arrow.open {
@@ -126,6 +138,6 @@
   }
 
   .card-body {
-    padding: var(--sp-3) var(--sp-4);
+    padding: 12px 16px;
   }
 </style>

@@ -54,28 +54,36 @@
 </div>
 
 <style>
-  .select-widget { padding: 4px 0; transition: opacity 0.2s; }
+  .select-widget { padding: 4px 0; transition: opacity 0.2s ease; }
   .select-widget.disabled { opacity: 0.5; }
   .select-widget.is-pending { opacity: 0.6; }
-  .select-label { font-size: 14px; color: var(--fg-muted); margin-bottom: 8px; }
+  .select-label { font-size: 13px; color: var(--text-2); margin-bottom: 8px; }
   .select-input {
     width: 100%;
-    padding: 10px 12px;
-    font-size: 14px;
+    padding: 10px 32px 10px 12px;
+    font-size: 13px;
+    font-weight: 500;
+    font-family: var(--font-display);
     min-height: 44px;
-    background: var(--bg);
+    background: var(--bg-warm);
     border: 1px solid var(--border);
-    border-radius: 6px;
-    color: var(--fg);
+    border-radius: var(--radius-xs);
+    color: var(--text-1);
     cursor: pointer;
-    appearance: auto;
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b6f7e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+    transition: border-color 0.15s ease;
   }
-  .select-input:disabled { cursor: not-allowed; }
+  .select-input:disabled { cursor: not-allowed; opacity: 0.5; }
+  .select-input:hover { border-color: var(--border-accent); }
   .select-input:focus { outline: none; border-color: var(--accent); }
   .select-input option:disabled {
-    color: var(--fg-muted);
+    color: var(--text-3);
     text-decoration: line-through;
   }
-  .disabled-hint { font-size: 12px; color: var(--warning, #f59e0b); margin-top: 4px; }
-  .disabled-reason { font-size: 12px; color: var(--danger, #ef4444); margin-top: 4px; }
+  .disabled-hint { font-size: 11px; color: var(--warn); margin-top: 4px; }
+  .disabled-reason { font-size: 11px; color: var(--danger); margin-top: 4px; }
 </style>

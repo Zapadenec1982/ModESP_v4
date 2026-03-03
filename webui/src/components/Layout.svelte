@@ -1,6 +1,6 @@
 <script>
   import { onDestroy } from 'svelte';
-  import { fade } from 'svelte/transition';
+  import { fade, fly } from 'svelte/transition';
   import { pages, deviceName } from '../stores/ui.js';
   import { wsConnected, state } from '../stores/state.js';
   import { theme, toggleTheme } from '../stores/theme.js';
@@ -11,49 +11,34 @@
 
   export let currentPage = 'dashboard';
 
-  // AUDIT-009: alarm banner на всіх сторінках
+  // Alarm banner on all pages (AUDIT-009)
   $: alarmActive = $state['protection.alarm_active'];
   $: alarmCode = $state['protection.alarm_code'];
 
+  // Mobile sidebar state
+  let sidebarOpen = false;
+
   function navigate(id) {
     currentPage = id;
+    sidebarOpen = false;
   }
 
   $: currentTitle = $pages.find(p => p.id === currentPage)?.title || '';
   $: sortedPages = [...$pages].sort((a, b) => (a.order || 0) - (b.order || 0));
 
-  // Mobile bottom tabs: max 4 visible + "More" if > 5 pages
-  const MAX_TABS = 4;
-  $: hasMore = sortedPages.length > MAX_TABS + 1;
-  $: visibleTabs = hasMore ? sortedPages.slice(0, MAX_TABS) : sortedPages;
-  $: moreTabs = hasMore ? sortedPages.slice(MAX_TABS) : [];
-
-  // "More" overlay state
-  let moreOpen = false;
-
-  function navigateMore(id) {
-    currentPage = id;
-    moreOpen = false;
-  }
-
-  // Connection overlay — показувати через 5с після disconnect (уникнути flicker)
+  // Connection overlay — show after 5s disconnect (avoid flicker)
   let showOverlay = false;
   let overlayTimer = null;
-  let wasDisconnected = false;
 
   const unsub = wsConnected.subscribe(connected => {
     if (!connected) {
       if (!overlayTimer) {
-        wasDisconnected = true;
         overlayTimer = setTimeout(() => { showOverlay = true; }, 5000);
       }
     } else {
       if (overlayTimer) { clearTimeout(overlayTimer); overlayTimer = null; }
-      // WS вже надсилає full state при підключенні — HTTP запит не потрібен
-      // (apiGet('/api/state') конкурував з WS за httpd сокети → каскадний reconnect)
       if (showOverlay) toastSuccess($t['conn.restored']);
       showOverlay = false;
-      wasDisconnected = false;
     }
   });
 
@@ -64,10 +49,12 @@
 </script>
 
 <div class="layout">
-  <!-- Sidebar (desktop) -->
-  <aside class="sidebar">
+  <!-- Sidebar -->
+  <aside class="sidebar" class:open={sidebarOpen}>
     <div class="sidebar-header">
-      <span class="logo">❄</span>
+      <div class="logo-mark">
+        <Icon name="snowflake" size={20} />
+      </div>
       <span class="logo-text">{$deviceName}</span>
     </div>
     <nav class="sidebar-nav">
@@ -77,7 +64,7 @@
           class:active={currentPage === page.id}
           on:click={() => navigate(page.id)}
         >
-          <Icon name={page.icon || 'home'} size={20} />
+          <Icon name={page.icon || 'home'} size={18} />
           <span class="nav-label">{page.title}</span>
         </button>
       {/each}
@@ -85,39 +72,60 @@
     <div class="sidebar-footer">
       <div class="ws-status" class:connected={$wsConnected}>
         <span class="ws-dot"></span>
-        {$wsConnected ? $t['status.online'] : $t['status.offline']}
+        <span>{$wsConnected ? $t['status.online'] : $t['status.offline']} · v4.0</span>
       </div>
     </div>
   </aside>
 
+  <!-- Mobile overlay -->
+  {#if sidebarOpen}
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <div class="sidebar-overlay" on:click={() => sidebarOpen = false}
+         transition:fade={{ duration: 200 }}></div>
+  {/if}
+
   <!-- Main content -->
   <div class="main-area">
-    <!-- AUDIT-009: alarm banner на всіх сторінках -->
+    <!-- Alarm strip -->
     {#if alarmActive}
-      <div class="alarm-banner" on:click={() => navigate('protection')}>
-        {$t['alarm.banner']}: {alarmCode ? String(alarmCode).toUpperCase().replace('_', ' ') : ''}
-      </div>
+      <button class="alarm-strip" on:click={() => navigate('protection')}>
+        <span class="alarm-blink">⚠</span>
+        <span>{$t['alarm.banner']}: {alarmCode ? String(alarmCode).toUpperCase().replace('_', ' ') : ''}</span>
+      </button>
     {/if}
+
     <header class="topbar">
-      <h1 class="topbar-title">{currentTitle}</h1>
+      <div class="topbar-left">
+        <button class="hamburger" on:click={() => sidebarOpen = !sidebarOpen}>
+          <Icon name="menu" size={22} />
+        </button>
+        <h1 class="topbar-title">{currentTitle}</h1>
+      </div>
       <div class="topbar-right">
         <Clock />
-        <button class="topbar-btn" on:click={toggleLanguage} title="Language">
+        <button class="topbar-btn lang-btn" on:click={toggleLanguage} title="Language">
           {$language === 'uk' ? 'UA' : 'EN'}
         </button>
-        <button class="topbar-btn" on:click={toggleTheme} title="Theme">
-          <Icon name={$theme === 'dark' ? 'sun' : 'moon'} size={18} />
+        <!-- Theme toggle -->
+        <button class="theme-toggle" on:click={toggleTheme}
+                title={$theme === 'dark' ? 'Light mode' : 'Dark mode'}>
+          <span class="toggle-track">
+            <span class="toggle-knob" class:light={$theme === 'light'}>
+              <Icon name={$theme === 'dark' ? 'moon' : 'sun'} size={12} />
+            </span>
+          </span>
         </button>
-        <div class="ws-badge" class:connected={$wsConnected}>
+        <div class="ws-indicator" class:connected={$wsConnected}>
           <span class="ws-dot"></span>
         </div>
       </div>
     </header>
+
     <main class="content">
       <slot />
     </main>
 
-    <!-- Connection overlay (після 5с disconnect) -->
+    <!-- Connection overlay -->
     {#if showOverlay}
       <div class="conn-overlay" transition:fade={{ duration: 200 }}>
         <div class="conn-dialog">
@@ -130,68 +138,20 @@
       </div>
     {/if}
   </div>
-
-  <!-- Bottom tabs (mobile) -->
-  <nav class="bottom-tabs">
-    {#each visibleTabs as page}
-      <button
-        class="tab-item"
-        class:active={currentPage === page.id}
-        on:click={() => navigate(page.id)}
-      >
-        <Icon name={page.icon || 'home'} size={20} />
-        <span class="tab-label">{page.title}</span>
-      </button>
-    {/each}
-    {#if hasMore}
-      <button
-        class="tab-item"
-        class:active={moreTabs.some(p => p.id === currentPage)}
-        on:click={() => moreOpen = !moreOpen}
-      >
-        <Icon name="more-horizontal" size={20} />
-        <span class="tab-label">{$t['nav.more']}</span>
-      </button>
-    {/if}
-  </nav>
-
-  <!-- "More" overlay -->
-  {#if moreOpen}
-    <div class="more-overlay" transition:fade={{ duration: 150 }}>
-      <div class="more-sheet">
-        <div class="more-header">
-          <span class="more-title">{$t['nav.more']}</span>
-          <button class="more-close" on:click={() => moreOpen = false}>
-            <Icon name="x" size={20} />
-          </button>
-        </div>
-        {#each moreTabs as page}
-          <button
-            class="more-item"
-            class:active={currentPage === page.id}
-            on:click={() => navigateMore(page.id)}
-          >
-            <Icon name={page.icon || 'home'} size={22} />
-            <span>{page.title}</span>
-          </button>
-        {/each}
-      </div>
-    </div>
-  {/if}
 </div>
 
 <style>
   .layout {
     display: flex;
     min-height: 100vh;
-    background: var(--bg);
-    color: var(--fg);
+    position: relative;
+    z-index: 1;
   }
 
-  /* === Sidebar (desktop) === */
+  /* ── Sidebar ─────────────────────────────────────── */
   .sidebar {
-    width: 220px;
-    background: var(--bg2);
+    width: var(--sidebar-w);
+    background: var(--surface);
     border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
@@ -199,25 +159,40 @@
     top: 0;
     left: 0;
     bottom: 0;
-    z-index: 20;
+    z-index: 30;
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                background 0.4s ease, border-color 0.4s ease;
   }
 
   .sidebar-header {
     padding: 20px 16px;
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     border-bottom: 1px solid var(--border);
   }
 
-  .logo {
-    font-size: 24px;
+  .logo-mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
+    background: linear-gradient(135deg, var(--frost-dim) 0%, rgba(86, 212, 232, 0.12) 100%);
+    border: 1px solid var(--frost-border);
+    box-shadow: 0 0 16px var(--frost-glow), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--frost);
+    flex-shrink: 0;
   }
 
   .logo-text {
     font-size: 16px;
     font-weight: 700;
-    color: var(--fg);
+    background: linear-gradient(135deg, var(--frost) 0%, var(--text-1) 40%, var(--text-2) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
     letter-spacing: 0.5px;
   }
 
@@ -235,26 +210,42 @@
     align-items: center;
     gap: 12px;
     padding: 10px 12px;
-    border: none;
+    border: 1px solid transparent;
     background: none;
-    color: var(--fg-muted);
-    font-size: 14px;
-    font-weight: 500;
-    border-radius: 8px;
+    color: var(--text-3);
+    font-size: 13.5px;
+    font-weight: 450;
+    font-family: var(--font-display);
+    border-radius: var(--radius-xs);
     cursor: pointer;
-    transition: all 0.15s;
+    transition: all 0.15s ease;
     text-align: left;
     width: 100%;
+    position: relative;
   }
 
   .nav-item:hover {
-    background: var(--bg-hover);
-    color: var(--fg);
+    background: var(--surface-hover);
+    color: var(--text-1);
   }
 
   .nav-item.active {
-    background: var(--accent-bg);
-    color: var(--accent);
+    background: var(--frost-dim);
+    border-color: var(--frost-border);
+    color: var(--frost);
+  }
+
+  /* Frost accent bar for active item */
+  .nav-item.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--frost);
+    box-shadow: 0 0 8px var(--frost-glow);
   }
 
   .nav-label {
@@ -264,7 +255,7 @@
   }
 
   .sidebar-footer {
-    padding: 12px 16px;
+    padding: 14px 16px;
     border-top: 1px solid var(--border);
   }
 
@@ -272,43 +263,223 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    font-size: 12px;
-    color: var(--fg-muted);
+    font-size: 11px;
+    color: var(--text-3);
+    font-weight: 450;
   }
 
   .ws-dot {
-    width: 8px;
-    height: 8px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
-    background: var(--error);
+    background: var(--danger);
     display: inline-block;
+    flex-shrink: 0;
   }
 
-  .ws-status.connected .ws-dot,
-  .ws-badge.connected .ws-dot {
-    background: var(--success);
-    box-shadow: 0 0 6px var(--success);
+  .ws-status.connected .ws-dot {
+    background: var(--ok);
+    box-shadow: 0 0 8px var(--ok-glow);
   }
 
-  /* === Alarm banner (AUDIT-009) === */
-  .alarm-banner {
-    background: var(--alarm-dark);
+  /* ── Mobile sidebar overlay ──────────────────────── */
+  .sidebar-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 25;
+  }
+
+  /* ── Alarm strip ─────────────────────────────────── */
+  .alarm-strip {
+    background: linear-gradient(90deg, var(--alarm-dark) 0%, var(--alarm-text) 50%, var(--alarm-dark) 100%);
+    background-size: 200% 100%;
+    animation: alarmSlide 3s ease-in-out infinite;
     color: #fff;
     text-align: center;
-    padding: var(--sp-2) var(--sp-4);
-    font-size: var(--text-base);
-    font-weight: var(--fw-bold);
-    letter-spacing: 1px;
+    padding: 8px 16px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
     cursor: pointer;
-    animation: alarm-flash 1.5s infinite;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    height: 36px;
   }
 
-  @keyframes alarm-flash {
-    0%, 100% { background: var(--alarm-dark); }
-    50% { background: var(--alarm-text); }
+  .alarm-blink {
+    animation: alarmBlink 1s step-end infinite;
   }
 
-  /* === Connection overlay === */
+  @keyframes alarmSlide {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+
+  @keyframes alarmBlink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+  }
+
+  /* ── Topbar (glass header) ───────────────────────── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    height: var(--header-h);
+    background: var(--glass-heavy);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    transition: background 0.4s ease, border-color 0.4s ease;
+  }
+
+  .topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .hamburger {
+    display: none;
+    background: none;
+    border: none;
+    color: var(--text-2);
+    cursor: pointer;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-xs);
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease;
+  }
+
+  .hamburger:hover {
+    background: var(--surface-hover);
+  }
+
+  .topbar-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-1);
+  }
+
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .topbar-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-3);
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--font-display);
+    transition: all 0.15s ease;
+  }
+
+  .topbar-btn:hover {
+    background: var(--surface-hover);
+    color: var(--text-1);
+    border-color: var(--border-accent);
+  }
+
+  /* ── Theme toggle ────────────────────────────────── */
+  .theme-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    align-items: center;
+  }
+
+  .toggle-track {
+    width: 52px;
+    height: 28px;
+    border-radius: 14px;
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    position: relative;
+    display: flex;
+    align-items: center;
+    transition: background 0.4s ease, border-color 0.4s ease;
+  }
+
+  .toggle-knob {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    position: absolute;
+    left: 3px;
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1),
+                background 0.4s ease;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  }
+
+  .toggle-knob.light {
+    transform: translateX(24px);
+  }
+
+  /* ── WS indicator (mobile) ───────────────────────── */
+  .ws-indicator {
+    display: none;
+  }
+
+  .ws-indicator .ws-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--danger);
+    display: block;
+  }
+
+  .ws-indicator.connected .ws-dot {
+    background: var(--ok);
+    box-shadow: 0 0 8px var(--ok-glow);
+  }
+
+  /* ── Main area ───────────────────────────────────── */
+  .main-area {
+    flex: 1;
+    margin-left: var(--sidebar-w);
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    transition: margin-left 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .content {
+    flex: 1;
+    padding: 20px 24px;
+    max-width: var(--content-max);
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  /* ── Connection overlay ──────────────────────────── */
   .conn-overlay {
     position: fixed;
     inset: 0;
@@ -320,11 +491,14 @@
   }
 
   .conn-dialog {
-    background: var(--card);
-    border-radius: var(--radius-2xl);
-    padding: var(--sp-8) var(--sp-6);
+    background: var(--glass-heavy);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: var(--radius);
+    border: 1px solid var(--border-glow);
+    padding: 32px 24px;
     text-align: center;
-    box-shadow: var(--shadow-lg);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     max-width: 320px;
     width: 90%;
   }
@@ -334,251 +508,77 @@
     height: 32px;
     border: 3px solid var(--border);
     border-top-color: var(--accent);
-    border-radius: var(--radius-full);
-    animation: conn-spin 0.8s linear infinite;
-    margin: 0 auto var(--sp-4);
+    border-radius: 50%;
+    animation: connSpin 0.8s linear infinite;
+    margin: 0 auto 16px;
   }
 
-  @keyframes conn-spin {
+  @keyframes connSpin {
     to { transform: rotate(360deg); }
   }
 
   .conn-text {
-    font-size: var(--text-md);
-    color: var(--fg-muted);
-    margin-bottom: var(--sp-4);
+    font-size: 14px;
+    color: var(--text-2);
+    margin-bottom: 16px;
   }
 
   .conn-retry {
     background: var(--accent);
     color: #fff;
     border: none;
-    border-radius: var(--radius-lg);
-    padding: var(--sp-2-5) var(--sp-6);
-    font-size: var(--text-md);
-    font-weight: var(--fw-semibold);
+    border-radius: var(--radius-xs);
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 600;
+    font-family: var(--font-display);
     cursor: pointer;
     min-height: var(--touch-min);
-    transition: opacity var(--transition-fast);
+    transition: opacity 0.15s ease;
   }
 
   .conn-retry:hover {
     opacity: 0.9;
   }
 
-  /* === Main area === */
-  .main-area {
-    flex: 1;
-    margin-left: 220px;
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
-  }
+  /* ── Responsive ──────────────────────────────────── */
+  @media (max-width: 1024px) {
+    .sidebar {
+      transform: translateX(-100%);
+    }
 
-  .topbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 24px;
-    background: var(--bg2);
-    border-bottom: 1px solid var(--border);
-    position: sticky;
-    top: 0;
-    z-index: 10;
-  }
+    .sidebar.open {
+      transform: translateX(0);
+    }
 
-  .topbar-title {
-    font-size: 18px;
-    font-weight: 600;
-  }
+    .main-area {
+      margin-left: 0;
+    }
 
-  .topbar-right {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
+    .hamburger {
+      display: flex;
+    }
 
-  .topbar-btn {
-    background: none;
-    border: 1px solid var(--border);
-    color: var(--fg-muted);
-    width: 32px;
-    height: 32px;
-    border-radius: 6px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    font-weight: 600;
-    transition: all 0.15s;
-  }
-  .topbar-btn:hover {
-    background: var(--bg-hover);
-    color: var(--fg);
-    border-color: var(--accent);
-  }
+    .ws-indicator {
+      display: block;
+    }
 
-  .ws-badge {
-    display: none;
-  }
-
-  .content {
-    flex: 1;
-    padding: 20px 24px;
-    max-width: 960px;
-    width: 100%;
-    margin: 0 auto;
-  }
-
-  /* === Bottom tabs (mobile) === */
-  .bottom-tabs {
-    display: none;
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    background: var(--bg2);
-    border-top: 1px solid var(--border);
-    z-index: 20;
-    padding-bottom: env(safe-area-inset-bottom, 0);
-  }
-
-  .tab-item {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 3px;
-    padding: 6px 4px 8px;
-    border: none;
-    border-top: 2px solid transparent;
-    background: none;
-    color: var(--fg-muted);
-    font-size: 11px;
-    cursor: pointer;
-    min-width: 48px;
-    min-height: 52px;
-    transition: color 0.15s;
-  }
-
-  .tab-item.active {
-    color: var(--accent);
-    border-top-color: var(--accent);
-  }
-
-  .tab-label {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 72px;
-  }
-
-  /* === "More" overlay === */
-  .more-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.4);
-    z-index: 25;
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-  }
-
-  .more-sheet {
-    background: var(--bg2);
-    border-radius: 16px 16px 0 0;
-    width: 100%;
-    max-width: 480px;
-    padding: 8px 0;
-    padding-bottom: calc(60px + env(safe-area-inset-bottom, 0));
-  }
-
-  .more-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 20px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .more-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--fg);
-  }
-
-  .more-close {
-    background: none;
-    border: none;
-    color: var(--fg-muted);
-    cursor: pointer;
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 8px;
-  }
-
-  .more-close:hover {
-    background: var(--bg-hover);
-  }
-
-  .more-item {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 14px 20px;
-    width: 100%;
-    border: none;
-    background: none;
-    color: var(--fg-muted);
-    font-size: 15px;
-    cursor: pointer;
-    transition: background 0.15s;
-    text-align: left;
-  }
-
-  .more-item:hover {
-    background: var(--bg-hover);
-  }
-
-  .more-item.active {
-    color: var(--accent);
-    background: var(--accent-bg);
-  }
-
-  /* === Responsive === */
-  @media (max-width: 768px) {
-    .sidebar { display: none; }
-    .main-area { margin-left: 0; }
-    .bottom-tabs { display: flex; }
-    .ws-badge { display: block; }
     .content {
       padding: 16px;
-      padding-bottom: calc(72px + env(safe-area-inset-bottom, 0));
     }
+
     .topbar {
-      padding: 12px 16px;
+      padding: 0 16px;
     }
+
     .topbar-title {
-      font-size: 16px;
+      font-size: 15px;
     }
   }
 
-  @media (min-width: 769px) and (max-width: 1024px) {
-    .sidebar { display: none; }
-    .main-area { margin-left: 0; }
-    .bottom-tabs { display: flex; }
-    .ws-badge { display: block; }
-    .content {
-      padding: 20px 24px;
-      padding-bottom: calc(72px + env(safe-area-inset-bottom, 0));
-      max-width: 640px;
-    }
-    .topbar {
-      padding: 14px 20px;
+  @media (min-width: 1025px) {
+    .sidebar-overlay {
+      display: none;
     }
   }
 </style>

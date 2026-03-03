@@ -12,8 +12,13 @@
   import Dashboard from './pages/Dashboard.svelte';
   import DynamicPage from './pages/DynamicPage.svelte';
   import BindingsEditor from './pages/BindingsEditor.svelte';
+  import ProtectionPage from './pages/ProtectionPage.svelte';
 
   let currentPage = 'dashboard';
+
+  // Ambient light state class
+  $: alarmActive = $state['protection.alarm_active'];
+  $: ambientClass = alarmActive ? 'state-alarm' : 'state-ok';
 
   onMount(async () => {
     await loadUiConfig();
@@ -31,6 +36,12 @@
   $: document.title = $deviceName;
   $: if ($navigateTo) { currentPage = $navigateTo; $navigateTo = null; }
 </script>
+
+<!-- Mesh gradient background — subtle frost+accent depth -->
+<div class="mesh-bg"></div>
+
+<!-- Ambient light — state-dependent glow -->
+<div class="ambient {ambientClass}"></div>
 
 {#if $uiLoading}
   <div class="loading-screen" in:fade={{ duration: 200 }}>
@@ -50,6 +61,8 @@
       <div in:fly={{ x: 20, duration: 200, delay: 50 }} out:fade={{ duration: 100 }}>
         {#if currentPage === 'dashboard'}
           <Dashboard />
+        {:else if currentPage === 'protection'}
+          <ProtectionPage />
         {:else if currentPage === 'bindings'}
           <BindingsEditor />
         {:else}
@@ -67,54 +80,152 @@
 <Toast />
 
 <style>
-  /* Theme colors (override per theme, complement tokens.css) */
-  :global(:root) {
-    --bg: #0f172a;
-    --bg2: #1e293b;
-    --card: #1e293b;
-    --border: #334155;
-    --bg-hover: rgba(59, 130, 246, 0.1);
-    --fg: #f1f5f9;
-    --fg-muted: #94a3b8;
-    --accent: #3b82f6;
-    --accent-bg: rgba(59, 130, 246, 0.15);
-    --success: #22c55e;
-    --warning: #f59e0b;
-    --error: #ef4444;
-    --color-scheme: dark;
-  }
-
+  /* ── Light theme overrides ─────────────────────── */
   :global(:root[data-theme="light"]) {
-    --bg: #f8fafc;
-    --bg2: #ffffff;
-    --card: #ffffff;
-    --border: #e2e8f0;
-    --bg-hover: rgba(59, 130, 246, 0.08);
-    --fg: #0f172a;
-    --fg-muted: #64748b;
-    --accent: #2563eb;
-    --accent-bg: rgba(37, 99, 235, 0.1);
-    --success: #16a34a;
-    --warning: #d97706;
-    --error: #dc2626;
+    --bg: #edf2f9;
+    --bg-warm: #e4ebf5;
+    --surface: #f8fafe;
+    --surface-2: #f0f4fb;
+    --surface-3: #e6ecf5;
+    --surface-hover: #dfe7f3;
+    --glass: rgba(248, 250, 254, 0.9);
+    --glass-heavy: rgba(237, 242, 249, 0.95);
+    --border: rgba(50, 80, 140, 0.09);
+    --border-subtle: rgba(50, 80, 140, 0.05);
+    --border-accent: rgba(50, 80, 140, 0.11);
+    --border-glow: rgba(58, 127, 224, 0.10);
+    --text-1: #1a2438;
+    --text-2: #4a5570;
+    --text-3: #7a8599;
+    --text-4: #a8b2c2;
+    --accent: #3a7fe0;
+    --accent-bright: #2968c4;
+    --accent-dim: rgba(58, 127, 224, 0.06);
+    --accent-glow: rgba(58, 127, 224, 0.08);
+    --accent-glow-s: rgba(58, 127, 224, 0.15);
+    --ok: #10b981;
+    --ok-dim: rgba(16, 185, 129, 0.06);
+    --ok-glow: rgba(16, 185, 129, 0.10);
+    --ok-border: rgba(16, 185, 129, 0.14);
+    --danger: #dc2626;
+    --danger-dim: rgba(220, 38, 38, 0.05);
+    --danger-glow: rgba(220, 38, 38, 0.08);
+    --danger-border: rgba(220, 38, 38, 0.16);
+    --warn: #b45309;
+    --warn-dim: rgba(180, 83, 9, 0.05);
+    --warn-glow: rgba(180, 83, 9, 0.08);
+    --info: #0891b2;
+    --info-dim: rgba(8, 145, 178, 0.05);
+    --info-glow: rgba(8, 145, 178, 0.08);
+    --frost: #0aa4c2;
+    --frost-dim: rgba(10, 164, 194, 0.06);
+    --frost-glow: rgba(10, 164, 194, 0.10);
+    --frost-border: rgba(10, 164, 194, 0.12);
+    --fg: var(--text-1);
+    --fg-muted: var(--text-2);
+    --card: var(--surface);
+    --bg2: var(--surface);
+    --bg-hover: var(--surface-hover);
+    --accent-bg: var(--accent-dim);
+    --success: var(--ok);
+    --error: var(--danger);
+    --warning: var(--warn);
     --color-scheme: light;
   }
 
+  /* ── Global reset ──────────────────────────────── */
   :global(*) {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
   }
 
   :global(body) {
     background: var(--bg);
-    color: var(--fg);
-    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    color: var(--text-1);
+    font-family: var(--font-display);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    transition: background-color 0.3s, color 0.3s;
+    overflow-x: hidden;
+    transition: background 0.4s ease, color 0.4s ease;
   }
 
+  /* ── Noise texture overlay ─────────────────────── */
+  :global(body::before) {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.015'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.5;
+  }
+
+  :global(:root[data-theme="light"] body::before) {
+    opacity: 0.12;
+  }
+
+  /* ── Mesh gradient background ──────────────────── */
+  .mesh-bg {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse 70% 50% at 8% 3%, rgba(86, 212, 232, 0.04) 0%, transparent 55%),
+      radial-gradient(ellipse 60% 60% at 88% 85%, rgba(91, 156, 245, 0.03) 0%, transparent 50%);
+    transition: background 0.4s ease;
+  }
+
+  :global(:root[data-theme="light"]) .mesh-bg {
+    background:
+      radial-gradient(ellipse 70% 50% at 8% 3%, rgba(86, 212, 232, 0.09) 0%, transparent 55%),
+      radial-gradient(ellipse 60% 60% at 88% 85%, rgba(58, 127, 224, 0.06) 0%, transparent 50%);
+  }
+
+  /* ── Ambient light ─────────────────────────────── */
+  .ambient {
+    position: fixed;
+    top: -200px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 800px;
+    height: 600px;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+    transition: all 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+    filter: blur(120px);
+    opacity: 0.3;
+    background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+  }
+
+  .ambient.state-alarm {
+    background: radial-gradient(circle, var(--danger-glow) 0%, transparent 70%);
+    opacity: 0.5;
+    animation: ambientPulse 4s ease-in-out infinite;
+  }
+
+  .ambient.state-ok {
+    background: radial-gradient(circle, var(--ok-glow) 0%, transparent 70%);
+    opacity: 0.25;
+  }
+
+  @keyframes ambientPulse {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 0.6; }
+  }
+
+  /* ── Smooth theme transitions for all components ─ */
+  :global(body), :global(.sidebar), :global(.card), :global(.group),
+  :global(.hero-temp), :global(.metric-card), :global(.eq-cell),
+  :global(.stepper), :global(.st-val), :global(.sel), :global(.badge),
+  :global(.sum-chip) {
+    transition: background 0.4s ease, color 0.4s ease, border-color 0.4s ease, box-shadow 0.4s ease;
+  }
+
+  /* ── Loading screen ────────────────────────────── */
   .loading-screen {
     display: flex;
     flex-direction: column;
@@ -122,6 +233,8 @@
     justify-content: center;
     min-height: 100vh;
     gap: 16px;
+    position: relative;
+    z-index: 1;
   }
 
   .loading-spinner {
@@ -139,9 +252,10 @@
 
   .loading-text {
     font-size: 14px;
-    color: var(--fg-muted);
+    color: var(--text-2);
   }
 
+  /* ── Error screen ──────────────────────────────── */
   .error-screen {
     display: flex;
     flex-direction: column;
@@ -149,13 +263,15 @@
     justify-content: center;
     min-height: 100vh;
     gap: 12px;
+    position: relative;
+    z-index: 1;
   }
 
   .error-icon {
     width: 48px;
     height: 48px;
     border-radius: 50%;
-    background: var(--error);
+    background: var(--danger);
     color: white;
     font-size: 24px;
     font-weight: 700;
@@ -171,21 +287,23 @@
 
   .error-msg {
     font-size: 14px;
-    color: var(--fg-muted);
+    color: var(--text-2);
   }
 
   .retry-btn {
     margin-top: 8px;
     padding: 10px 24px;
-    border-radius: 8px;
+    border-radius: var(--radius-xs);
     border: 1px solid var(--accent);
     background: transparent;
     color: var(--accent);
     font-size: 14px;
+    font-family: var(--font-display);
     cursor: pointer;
+    transition: background var(--transition-fast);
   }
 
   .retry-btn:hover {
-    background: var(--accent-bg);
+    background: var(--accent-dim);
   }
 </style>

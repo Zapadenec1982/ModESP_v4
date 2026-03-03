@@ -70,11 +70,15 @@
 <style>
   .slider-wrap {
     padding: 4px 0;
-    border-left: 3px solid transparent;
-    transition: border-color 0.2s;
+    transition: opacity 0.2s ease;
   }
   .slider-wrap.flash-ok {
-    border-left-color: var(--success);
+    animation: sliderFlash 0.4s ease;
+  }
+  @keyframes sliderFlash {
+    0% { opacity: 1; }
+    50% { opacity: 0.6; }
+    100% { opacity: 1; }
   }
   .slider-header {
     display: flex;
@@ -82,10 +86,11 @@
     align-items: baseline;
     margin-bottom: 8px;
   }
-  .label { font-size: var(--text-md); color: var(--fg-muted); }
+  .label { font-size: 13px; color: var(--text-2); }
   .slider-val {
-    font-size: var(--text-2xl);
-    font-weight: var(--fw-bold);
+    font-size: 20px;
+    font-weight: 600;
+    font-family: var(--font-mono);
     color: var(--accent);
     font-variant-numeric: tabular-nums;
     display: flex;
@@ -94,8 +99,8 @@
   }
   .pending-dot {
     width: 8px; height: 8px;
-    border-radius: var(--radius-full);
-    background: var(--warning);
+    border-radius: 50%;
+    background: var(--warn);
     animation: pulse-dot 0.8s infinite;
   }
   @keyframes pulse-dot {
@@ -107,36 +112,46 @@
     -webkit-appearance: none;
     appearance: none;
     width: 100%;
-    height: 10px;
-    border-radius: 5px;
-    background: var(--border);
+    height: 3px;
+    border-radius: 2px;
+    background: var(--surface-3);
     outline: none;
     cursor: pointer;
   }
   input[type=range]::-webkit-slider-thumb {
     -webkit-appearance: none;
-    width: 44px; height: 44px;
-    border-radius: var(--radius-full);
-    background: var(--accent);
-    border: 3px solid var(--card);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 3px var(--accent-glow);
     cursor: pointer;
+    transition: box-shadow 0.15s ease;
+  }
+  input[type=range]::-webkit-slider-thumb:active {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 8px var(--accent-glow);
   }
   input[type=range]::-moz-range-thumb {
-    width: 44px; height: 44px;
-    border-radius: var(--radius-full);
-    background: var(--accent);
-    border: 3px solid var(--card);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: #fff;
+    border: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 3px var(--accent-glow);
     cursor: pointer;
+  }
+  input[type=range]::-moz-range-track {
+    height: 3px;
+    border-radius: 2px;
+    background: var(--surface-3);
+    border: none;
   }
 
   .slider-labels {
     display: flex;
     justify-content: space-between;
-    font-size: var(--text-xs);
-    color: var(--fg-muted);
-    margin-top: 4px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--text-4);
+    margin-top: 6px;
     padding: 0 2px;
   }
 </style>

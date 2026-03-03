@@ -59,37 +59,46 @@
 <style>
   .number-widget {
     padding: 4px 0;
-    border-left: 3px solid transparent;
-    transition: border-color 0.2s;
+    transition: opacity 0.2s ease;
   }
   .number-widget.flash-ok {
-    border-left-color: var(--success);
+    animation: valPulse 0.4s ease;
   }
-  .number-label { font-size: 14px; color: var(--fg-muted); margin-bottom: 8px; }
-  .number-row { display: flex; align-items: center; gap: 6px; }
+  @keyframes valPulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.6; }
+    100% { opacity: 1; }
+  }
+  .number-label { font-size: 13px; color: var(--text-2); margin-bottom: 8px; }
+  .number-row { display: flex; align-items: center; gap: 0; }
   .num-btn {
-    width: 44px; height: 44px; border-radius: 8px;
+    width: 38px; height: 38px;
+    border-radius: var(--radius-xs);
     border: 1px solid var(--border);
-    background: var(--border);
-    color: var(--fg);
+    background: transparent;
+    color: var(--accent);
     font-size: 18px; font-weight: 600;
     cursor: pointer;
     display: flex; align-items: center; justify-content: center;
-    transition: all 0.15s;
+    transition: all 0.15s ease;
     line-height: 1;
+    flex-shrink: 0;
   }
-  .num-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .num-btn:active { transform: scale(0.92); }
+  .num-btn:hover { background: var(--accent-dim); }
+  .num-btn:active { background: var(--accent-glow); transform: scale(0.95); }
   .num-display {
-    width: 80px;
+    min-width: 52px;
     text-align: center;
-    font-size: 16px; font-weight: 600;
+    font-size: 14px; font-weight: 600;
+    font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
-    padding: 6px 8px;
-    background: var(--bg);
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    color: var(--fg);
+    padding: 8px 8px;
+    background: var(--bg-warm);
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    border-left: none;
+    border-right: none;
+    color: var(--text-1);
     -moz-appearance: textfield;
   }
   .num-display::-webkit-inner-spin-button,
@@ -97,11 +106,15 @@
     -webkit-appearance: none;
     margin: 0;
   }
-  .unit { font-size: 12px; color: var(--fg-muted); margin-left: 2px; }
+  .num-display:focus {
+    outline: none;
+    background: var(--surface-2);
+  }
+  .unit { font-size: 11px; color: var(--text-4); margin-left: 8px; }
   .pending-dot {
     width: 8px; height: 8px;
     border-radius: 50%;
-    background: var(--warning, #f59e0b);
+    background: var(--warn);
     animation: pulse-dot 0.8s infinite;
   }
   @keyframes pulse-dot {

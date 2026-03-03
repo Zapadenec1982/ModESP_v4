@@ -46,9 +46,18 @@
     min-height: 40px;
     padding: 4px 0;
   }
-  .label { font-size: 14px; color: var(--fg-muted); }
-  .value { font-size: 16px; font-weight: 600; font-variant-numeric: tabular-nums; transition: background-color 0.4s; border-radius: 4px; padding: 0 4px; }
-  .val-flash { background-color: var(--accent-bg); }
-  .unit { font-size: 12px; color: var(--fg-muted); margin-left: 4px; }
+  .label { font-size: 13px; color: var(--text-2); }
+  .value {
+    font-size: 15px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    color: var(--text-1);
+    transition: background-color 0.4s ease;
+    border-radius: 4px;
+    padding: 2px 6px;
+  }
+  .val-flash { background-color: var(--accent-dim); }
+  .unit { font-size: 11px; color: var(--text-4); margin-left: 4px; }
   .value-group { display: flex; align-items: baseline; }
 </style>

@@ -1,10 +1,10 @@
 /**
- * Deploy script: gzip bundles and copy to data/www/
+ * Deploy script: gzip bundles, copy fonts, deploy to data/www/
  * Usage: npm run deploy (builds + deploys)
  *
  * Uses Node.js zlib instead of CLI gzip (Windows compatibility)
  */
-import { createReadStream, createWriteStream, copyFileSync, existsSync } from 'fs';
+import { createReadStream, createWriteStream, copyFileSync, existsSync, mkdirSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { createGzip } from 'zlib';
@@ -13,6 +13,8 @@ import { pipeline } from 'stream/promises';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dist = join(__dirname, '..', 'dist');
 const www = join(__dirname, '..', '..', 'data', 'www');
+const fontsPublic = join(__dirname, '..', 'public', 'fonts');
+const fontsWww = join(www, 'fonts');
 
 // Gzip bundles using Node.js zlib (cross-platform)
 console.log('Compressing bundles...');
@@ -39,5 +41,16 @@ if (existsSync(indexSrc)) {
 }
 copyFileSync(join(dist, 'bundle.js.gz'), join(www, 'bundle.js.gz'));
 copyFileSync(join(dist, 'bundle.css.gz'), join(www, 'bundle.css.gz'));
+
+// Copy fonts (woff2 — already compressed, no gzip needed)
+if (existsSync(fontsPublic)) {
+  mkdirSync(fontsWww, { recursive: true });
+  const fonts = readdirSync(fontsPublic).filter(f => f.endsWith('.woff2'));
+  for (const f of fonts) {
+    copyFileSync(join(fontsPublic, f), join(fontsWww, f));
+    console.log(`  fonts/${f}`);
+  }
+  console.log(`  ${fonts.length} font file(s) deployed`);
+}
 
 console.log('Done! Files deployed to data/www/');
