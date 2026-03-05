@@ -194,13 +194,13 @@
           <div>
             <div class="diag-metric-label">{$t['prot.starts_h']}</div>
             <div class="diag-metric-value">
-              {$state["protection.compressor_starts_1h"] ?? 0}
+              {$state["protection.compressor_starts_1h"] ?? 0}<small>{$t['prot.unit_per_h']}</small>
             </div>
           </div>
           <div>
             <div class="diag-metric-label">{$t['prot.runtime']}</div>
             <div class="diag-metric-value">
-              {($state["protection.compressor_hours"] ?? 0).toFixed(1)}<small>h</small>
+              {($state["protection.compressor_hours"] ?? 0).toFixed(1)}<small>{$t['prot.unit_h']}</small>
             </div>
           </div>
           <div>
@@ -210,7 +210,7 @@
                 ($state["protection.compressor_run_time"] ?? 0) % 60
               )
                 .toString()
-                .padStart(2, "0")}
+                .padStart(2, "0")}<small>{$t['prot.unit_min']}</small>
             </div>
           </div>
           <div class="duty-wrap">
