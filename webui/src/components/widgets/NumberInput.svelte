@@ -36,28 +36,61 @@
     }
   }
 
-  // Long-press auto-repeat
+  // Long-press auto-repeat with scroll guard
   let repeatTimer = null;
   let repeatInterval = null;
+  let startY = null;
+  let scrollCancelled = false;
+  let initialDelay = null;
+  let pendingDelta = null;
+  let fired = false;
+  const SCROLL_THRESHOLD = 8;
 
-  function startRepeat(delta) {
-    adjust(delta);
-    repeatTimer = setTimeout(() => {
-      let speed = 150;
-      repeatInterval = setInterval(() => {
+  function onPointerDown(e, delta) {
+    startY = e.clientY;
+    scrollCancelled = false;
+    pendingDelta = delta;
+    fired = false;
+    // Delay first action to distinguish tap from scroll
+    initialDelay = setTimeout(() => {
+      if (!scrollCancelled) {
+        fired = true;
         adjust(delta);
-        if (speed > 50) {
-          clearInterval(repeatInterval);
-          speed -= 20;
-          repeatInterval = setInterval(() => adjust(delta), speed);
-        }
-      }, speed);
-    }, 400);
+        repeatTimer = setTimeout(() => {
+          let speed = 150;
+          repeatInterval = setInterval(() => {
+            adjust(delta);
+            if (speed > 50) {
+              clearInterval(repeatInterval);
+              speed -= 20;
+              repeatInterval = setInterval(() => adjust(delta), speed);
+            }
+          }, speed);
+        }, 400);
+      }
+    }, 100);
+  }
+
+  function onPointerMove(e) {
+    if (startY !== null && !scrollCancelled) {
+      if (Math.abs(e.clientY - startY) > SCROLL_THRESHOLD) {
+        scrollCancelled = true;
+        stopRepeat();
+      }
+    }
   }
 
   function stopRepeat() {
+    // Quick tap: if delay hasn't fired yet, do single adjust now
+    if (!fired && !scrollCancelled && pendingDelta !== null) {
+      adjust(pendingDelta);
+    }
+    if (initialDelay) { clearTimeout(initialDelay); initialDelay = null; }
     if (repeatTimer) { clearTimeout(repeatTimer); repeatTimer = null; }
     if (repeatInterval) { clearInterval(repeatInterval); repeatInterval = null; }
+    startY = null;
+    pendingDelta = null;
+    fired = false;
   }
 
   onDestroy(stopRepeat);
@@ -68,7 +101,8 @@
   <div class="stepper" class:flash-ok={$flashOk}>
     <button
       class="st-btn"
-      on:pointerdown={() => startRepeat(-step)}
+      on:pointerdown={(e) => onPointerDown(e, -step)}
+      on:pointermove={onPointerMove}
       on:pointerup={stopRepeat}
       on:pointerleave={stopRepeat}
     >−</button>
@@ -83,7 +117,8 @@
     />
     <button
       class="st-btn"
-      on:pointerdown={() => startRepeat(step)}
+      on:pointerdown={(e) => onPointerDown(e, step)}
+      on:pointermove={onPointerMove}
       on:pointerup={stopRepeat}
       on:pointerleave={stopRepeat}
     >+</button>
