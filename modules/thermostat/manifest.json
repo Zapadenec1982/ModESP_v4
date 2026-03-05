@@ -380,6 +380,10 @@
     "cards": [
       {
         "title": "Температура",
+        "icon": "thermometer",
+        "icon_color": "blue",
+        "subtitle": "Уставка, диференціал, фільтр",
+        "summary_keys": ["thermostat.setpoint", "thermostat.differential"],
         "widgets": [
           {
             "key": "thermostat.temperature",
@@ -401,6 +405,10 @@
       },
       {
         "title": "Стан системи",
+        "icon": "activity",
+        "icon_color": "green",
+        "subtitle": "Компресор, модуль, час",
+        "summary_keys": ["thermostat.state", "equipment.compressor"],
         "widgets": [
           {
             "key": "equipment.compressor",
@@ -430,6 +438,10 @@
       },
       {
         "title": "Вентиляція",
+        "icon": "wind",
+        "icon_color": "cyan",
+        "subtitle": "Режим вентиляторів",
+        "summary_keys": ["thermostat.evap_fan_mode"],
         "group": "settings",
         "collapsible": true,
         "widgets": [
@@ -456,6 +468,10 @@
       },
       {
         "title": "Нічний режим",
+        "icon": "moon",
+        "icon_color": "orange",
+        "subtitle": "Зміщення уставки вночі",
+        "summary_keys": ["thermostat.night_mode"],
         "group": "settings",
         "collapsible": true,
         "widgets": [

@@ -778,6 +778,9 @@ class UIJsonGenerator:
                 page_card["collapsible"] = True
             if "visible_when" in card:
                 page_card["visible_when"] = card["visible_when"]
+            for opt_field in ("icon", "icon_color", "subtitle", "summary_keys"):
+                if opt_field in card:
+                    page_card[opt_field] = card[opt_field]
 
             for w in card.get("widgets", []):
                 widget = self._build_widget(w, manifest)

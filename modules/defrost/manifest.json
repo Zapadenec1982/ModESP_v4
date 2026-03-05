@@ -336,6 +336,10 @@
     "cards": [
       {
         "title": "Стан",
+        "icon": "refresh-cw",
+        "icon_color": "blue",
+        "subtitle": "Фаза, прогрес, статус",
+        "summary_keys": ["defrost.state", "defrost.active"],
         "widgets": [
           {
             "key": "defrost.state",
@@ -370,6 +374,10 @@
       },
       {
         "title": "Налаштування",
+        "icon": "settings",
+        "icon_color": "orange",
+        "subtitle": "Тип, інтервал, тривалість",
+        "summary_keys": ["defrost.type", "defrost.interval"],
         "group": "settings",
         "collapsible": true,
         "widgets": [
@@ -427,6 +435,10 @@
       },
       {
         "title": "Гарячий газ",
+        "icon": "flame",
+        "icon_color": "red",
+        "subtitle": "Фази, стабілізація",
+        "summary_keys": ["defrost.stabilize_time"],
         "group": "settings",
         "collapsible": true,
         "visible_when": {"key": "defrost.type", "eq": 2},

@@ -190,8 +190,8 @@
     font-size: 11px;
     color: var(--text-4);
     margin-left: 2px;
-    position: absolute;
-    right: -22px;
+    min-width: 24px;
+    white-space: nowrap;
   }
 
   .pending-dot {

@@ -56,6 +56,8 @@
     "cards": [
       {
         "title": "Температура",
+        "icon": "trending-up",
+        "icon_color": "blue",
         "widgets": [
           {
             "key": "datalogger.chart",
@@ -68,6 +70,10 @@
       },
       {
         "title": "Статистика",
+        "icon": "info",
+        "icon_color": "cyan",
+        "subtitle": "Записів, подій, flash",
+        "summary_keys": ["datalogger.records_count", "datalogger.events_count"],
         "widgets": [
           {"key": "datalogger.records_count", "widget": "value", "label": "Записів"},
           {"key": "datalogger.events_count",  "widget": "value", "label": "Подій"},
@@ -76,6 +82,10 @@
       },
       {
         "title": "Канали логування",
+        "icon": "layers",
+        "icon_color": "green",
+        "subtitle": "Вибір каналів запису",
+        "summary_keys": ["datalogger.log_evap", "datalogger.log_cond"],
         "collapsible": true,
         "widgets": [
           {"key": "datalogger.log_evap",     "widget": "toggle",
@@ -89,6 +99,10 @@
       },
       {
         "title": "Налаштування",
+        "icon": "settings",
+        "icon_color": "orange",
+        "subtitle": "Увімкнення, інтервал",
+        "summary_keys": ["datalogger.enabled", "datalogger.sample_interval"],
         "collapsible": true,
         "widgets": [
           {"key": "datalogger.enabled",         "widget": "toggle"},

@@ -437,6 +437,10 @@
     "cards": [
       {
         "title": "Статус аварій",
+        "icon": "shield",
+        "icon_color": "green",
+        "subtitle": "Активні аварії",
+        "summary_keys": ["protection.alarm_active", "protection.alarm_code"],
         "widgets": [
           {
             "key": "protection.alarm_active",
@@ -552,6 +556,10 @@
       },
       {
         "title": "Діагностика компресора",
+        "icon": "gauge",
+        "icon_color": "blue",
+        "subtitle": "Запуски, наробіток, duty cycle",
+        "summary_keys": ["protection.compressor_starts_1h", "protection.compressor_duty"],
         "widgets": [
           {
             "key": "protection.compressor_starts_1h",
@@ -592,6 +600,10 @@
       },
       {
         "title": "Налаштування захисту",
+        "icon": "sliders",
+        "icon_color": "cyan",
+        "subtitle": "Межі, затримки",
+        "summary_keys": ["protection.high_limit", "protection.low_limit"],
         "group": "settings",
         "collapsible": true,
         "widgets": [
@@ -628,6 +640,10 @@
       },
       {
         "title": "Захист компресора",
+        "icon": "shield-check",
+        "icon_color": "green",
+        "subtitle": "Мін. час роботи/паузи",
+        "summary_keys": ["thermostat.min_off_time", "thermostat.min_on_time"],
         "group": "settings",
         "collapsible": true,
         "widgets": [
@@ -655,6 +671,10 @@
       },
       {
         "title": "Моніторинг компресора",
+        "icon": "bar-chart",
+        "icon_color": "orange",
+        "subtitle": "Циклічність, безперервна робота",
+        "summary_keys": ["protection.max_starts_hour", "protection.max_continuous_run"],
         "group": "settings",
         "collapsible": true,
         "widgets": [

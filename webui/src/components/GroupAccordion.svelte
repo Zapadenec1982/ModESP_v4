@@ -42,23 +42,9 @@
     }
   }
 
-  // Color CSS var mapping
-  const colorMap = {
-    blue: "var(--accent)",
-    green: "var(--ok)",
-    cyan: "var(--frost)",
-    red: "var(--danger)",
-    orange: "var(--warn)",
-  };
-  $: color = colorMap[iconColor] || "var(--text-3)";
-  $: dimMap = {
-    blue: "var(--accent-dim)",
-    green: "var(--ok-dim)",
-    cyan: "var(--frost-dim)",
-    red: "var(--danger-dim)",
-    orange: "var(--warn-dim)",
-  };
-  $: dimColor = dimMap[iconColor] || "var(--surface-2)";
+  // Unified icon color — всі іконки одного акцентного кольору
+  $: color = "var(--accent)";
+  $: dimColor = "var(--accent-dim)";
 
   // Format summary value for display
   function fmtVal(v) {
