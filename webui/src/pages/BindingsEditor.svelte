@@ -167,9 +167,16 @@
   <div class="center-msg error">{error}</div>
 {:else}
   {#if needsRestart}
-    <div class="restart-banner">
-      {$t['bind.saved']}
-      <button class="restart-btn" on:click={restart}>{$t['bind.restart']}</button>
+    <div class="modal-overlay" on:click|self={() => needsRestart = false}>
+      <div class="modal-dialog">
+        <div class="modal-icon">✓</div>
+        <div class="modal-title">{$t['bind.saved_title']}</div>
+        <div class="modal-text">{$t['bind.saved_msg']}</div>
+        <div class="modal-actions">
+          <button class="modal-btn-restart" on:click={restart}>{$t['bind.restart']}</button>
+          <button class="modal-btn-later" on:click={() => needsRestart = false}>{$t['bind.later']}</button>
+        </div>
+      </div>
     </div>
   {/if}
 
@@ -285,28 +292,81 @@
     }
   }
 
-  .restart-banner {
-    background: rgba(34, 197, 94, 0.15);
-    border: 1px solid var(--success);
-    border-radius: 8px;
-    padding: 12px 16px;
-    margin-bottom: 16px;
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
+    z-index: 200;
+    padding: 24px;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+  .modal-dialog {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px 28px 24px;
+    max-width: 340px;
+    width: 100%;
+    text-align: center;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.3);
+  }
+  .modal-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(34, 197, 94, 0.15);
+    color: var(--ok);
+    font-size: 24px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 16px;
+  }
+  .modal-title {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text-1);
+    margin-bottom: 8px;
+  }
+  .modal-text {
     font-size: 14px;
-    color: var(--success);
+    color: var(--text-3);
+    line-height: 1.5;
+    margin-bottom: 24px;
   }
-  .restart-btn {
-    padding: 6px 16px;
-    border-radius: 6px;
-    border: 1px solid var(--success);
-    background: transparent;
-    color: var(--success);
+  .modal-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .modal-btn-restart {
+    padding: 12px;
+    border-radius: 10px;
+    border: none;
+    background: var(--accent);
+    color: white;
+    font-size: 15px;
+    font-weight: 600;
     cursor: pointer;
-    font-size: 13px;
+    transition: opacity 0.15s;
   }
-  .restart-btn:hover { background: rgba(34, 197, 94, 0.2); }
+  .modal-btn-restart:hover { opacity: 0.9; }
+  .modal-btn-later {
+    padding: 10px;
+    border-radius: 10px;
+    border: none;
+    background: transparent;
+    color: var(--text-3);
+    font-size: 13px;
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+  .modal-btn-later:hover { color: var(--text-1); }
 
   .error-banner {
     background: rgba(239, 68, 68, 0.15);

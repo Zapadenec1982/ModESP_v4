@@ -17,14 +17,32 @@
 
 <style>
   .widget-row {
-    display: flex; align-items: center; justify-content: space-between;
-    min-height: 40px; padding: 4px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 48px;
+    padding: 12px 0;
   }
-  .label { font-size: 14px; color: var(--fg-muted); }
-  .indicator { display: flex; align-items: center; gap: 10px; }
+  .label {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-2);
+  }
+  .indicator {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
   .dot {
-    width: 12px; height: 12px; border-radius: 50%;
-    transition: all 0.3s;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   }
-  .indicator-label { font-size: 14px; font-weight: 500; }
+  .indicator-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-1);
+    letter-spacing: 0.5px;
+  }
 </style>

@@ -1,7 +1,7 @@
 <script>
-  import { onDestroy } from 'svelte';
-  import { setStateKey } from '../../stores/state.js';
-  import { createSettingSender } from '../../lib/settings.js';
+  import { onDestroy } from "svelte";
+  import { setStateKey } from "../../stores/state.js";
+  import { createSettingSender } from "../../lib/settings.js";
 
   export let config;
   export let value;
@@ -9,20 +9,22 @@
   $: min = config.min ?? 0;
   $: max = config.max ?? 100;
   $: step = config.step ?? 1;
-  $: display = value !== undefined && value !== null ? value : '—';
+  $: display = value !== undefined && value !== null ? value : "—";
 
   const sender = createSettingSender(config.key);
   const { pending, flashOk, cleanup } = sender;
   onDestroy(cleanup);
 
   function adjust(delta) {
-    const cur = typeof value === 'number' ? value : 0;
-    const nv = Math.round(Math.max(min, Math.min(max, cur + delta)) * 100) / 100;
+    const cur = typeof value === "number" ? value : 0;
+    const nv =
+      Math.round(Math.max(min, Math.min(max, cur + delta)) * 100) / 100;
     if (config.form_only) {
       setStateKey(config.key, nv);
     } else {
       sender.send(nv);
     }
+    try { navigator.vibrate(10); } catch (e) {}
   }
 
   function onInput(e) {
@@ -33,20 +35,58 @@
       sender.send(nv);
     }
   }
+
+  // Long-press auto-repeat
+  let repeatTimer = null;
+  let repeatInterval = null;
+
+  function startRepeat(delta) {
+    adjust(delta);
+    repeatTimer = setTimeout(() => {
+      let speed = 150;
+      repeatInterval = setInterval(() => {
+        adjust(delta);
+        if (speed > 50) {
+          clearInterval(repeatInterval);
+          speed -= 20;
+          repeatInterval = setInterval(() => adjust(delta), speed);
+        }
+      }, speed);
+    }, 400);
+  }
+
+  function stopRepeat() {
+    if (repeatTimer) { clearTimeout(repeatTimer); repeatTimer = null; }
+    if (repeatInterval) { clearInterval(repeatInterval); repeatInterval = null; }
+  }
+
+  onDestroy(stopRepeat);
 </script>
 
-<div class="number-widget" class:flash-ok={$flashOk}>
-  <div class="number-label">{config.description || config.key}</div>
-  <div class="number-row">
-    <button class="num-btn" on:click={() => adjust(-step)}>−</button>
+<div class="stepper-row">
+  <div class="step-lbl">{config.description || config.key}</div>
+  <div class="stepper" class:flash-ok={$flashOk}>
+    <button
+      class="st-btn"
+      on:pointerdown={() => startRepeat(-step)}
+      on:pointerup={stopRepeat}
+      on:pointerleave={stopRepeat}
+    >−</button>
     <input
       type="number"
-      class="num-display"
-      {min} {max} {step}
+      class="st-val"
+      {min}
+      {max}
+      {step}
       value={display}
       on:change={onInput}
     />
-    <button class="num-btn" on:click={() => adjust(step)}>+</button>
+    <button
+      class="st-btn"
+      on:pointerdown={() => startRepeat(step)}
+      on:pointerup={stopRepeat}
+      on:pointerleave={stopRepeat}
+    >+</button>
     {#if config.unit}
       <span class="unit">{config.unit}</span>
     {/if}
@@ -57,55 +97,123 @@
 </div>
 
 <style>
-  .number-widget {
-    padding: 4px 0;
-    border-left: 3px solid transparent;
-    transition: border-color 0.2s;
+  .stepper-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 0.5px solid var(--border);
   }
-  .number-widget.flash-ok {
-    border-left-color: var(--success);
+
+  .stepper-row:last-child {
+    border-bottom: none;
   }
-  .number-label { font-size: 14px; color: var(--fg-muted); margin-bottom: 8px; }
-  .number-row { display: flex; align-items: center; gap: 6px; }
-  .num-btn {
-    width: 44px; height: 44px; border-radius: 8px;
-    border: 1px solid var(--border);
-    background: var(--border);
-    color: var(--fg);
-    font-size: 18px; font-weight: 600;
+
+  .step-lbl {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-2);
+    flex: 1;
+    min-width: 0;
+  }
+
+  .stepper {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    background: none;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    position: relative;
+  }
+
+  .stepper.flash-ok .st-val {
+    color: var(--ok);
+    transition: color 0.15s;
+  }
+
+  .st-btn {
+    width: 44px;
+    height: 44px;
+    border: none;
+    background: transparent;
+    color: var(--text-4);
+    font-size: 20px;
+    font-weight: 300;
+    border-radius: 8px;
     cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    transition: all 0.15s;
-    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: color 0.15s, background 0.15s;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
-  .num-btn:hover { background: var(--accent); border-color: var(--accent); color: #fff; }
-  .num-btn:active { transform: scale(0.92); }
-  .num-display {
-    width: 80px;
+
+  .st-btn:hover {
+    color: var(--accent);
+    background: var(--surface-2);
+  }
+
+  .st-btn:active {
+    color: var(--accent);
+    transform: scale(0.88);
+  }
+
+  .st-val {
+    width: 52px;
     text-align: center;
-    font-size: 16px; font-weight: 600;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
     font-variant-numeric: tabular-nums;
-    padding: 6px 8px;
-    background: var(--bg);
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    color: var(--fg);
+    font-family: var(--font-mono);
+    color: var(--text-1);
+    background: transparent;
+    border: none;
     -moz-appearance: textfield;
   }
-  .num-display::-webkit-inner-spin-button,
-  .num-display::-webkit-outer-spin-button {
+
+  .st-val:focus {
+    outline: none;
+    color: var(--accent);
+  }
+
+  .st-val::-webkit-inner-spin-button,
+  .st-val::-webkit-outer-spin-button {
     -webkit-appearance: none;
     margin: 0;
   }
-  .unit { font-size: 12px; color: var(--fg-muted); margin-left: 2px; }
+
+  .unit {
+    font-size: 11px;
+    color: var(--text-4);
+    margin-left: 2px;
+    position: absolute;
+    right: -22px;
+  }
+
   .pending-dot {
-    width: 8px; height: 8px;
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
-    background: var(--warning, #f59e0b);
+    background: var(--warn);
     animation: pulse-dot 0.8s infinite;
   }
+
   @keyframes pulse-dot {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
+    0%,
+    100% {
+      opacity: 1;
+      box-shadow: 0 0 6px var(--warn-dim);
+    }
+    50% {
+      opacity: 0.4;
+      box-shadow: none;
+    }
   }
 </style>

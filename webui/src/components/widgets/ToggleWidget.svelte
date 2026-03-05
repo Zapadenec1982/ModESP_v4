@@ -1,7 +1,7 @@
 <script>
-  import { onDestroy } from 'svelte';
-  import { setStateKey } from '../../stores/state.js';
-  import { createSettingSender } from '../../lib/settings.js';
+  import { onDestroy } from "svelte";
+  import { setStateKey } from "../../stores/state.js";
+  import { createSettingSender } from "../../lib/settings.js";
 
   export let config;
   export let value;
@@ -31,32 +31,65 @@
 
 <style>
   .widget-row {
-    display: flex; align-items: center; justify-content: space-between;
-    min-height: 44px; padding: 4px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 0.5px solid var(--border);
     transition: opacity 0.2s;
   }
-  .widget-row.is-pending { opacity: 0.6; }
-  .label { font-size: 14px; color: var(--fg-muted); }
+  .widget-row:last-child {
+    border-bottom: none;
+  }
+  .widget-row.is-pending {
+    opacity: 0.6;
+  }
+  .label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-2);
+    flex: 1;
+    min-width: 0;
+  }
   .toggle {
-    width: 48px; height: 26px;
-    border-radius: 13px;
+    width: 56px;
+    height: 32px;
+    border-radius: 16px;
     border: none;
-    background: var(--border);
+    background: var(--surface-3);
     cursor: pointer;
     position: relative;
-    transition: background 0.2s;
+    transition:
+      background 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 0.3s;
     padding: 0;
+    flex-shrink: 0;
+    box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.2);
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
-  .toggle:disabled { cursor: wait; }
-  .toggle.on { background: var(--success); }
+  .toggle:disabled {
+    cursor: wait;
+  }
+  .toggle.on {
+    background: var(--ok);
+    box-shadow:
+      inset 0 2px 6px rgba(0, 0, 0, 0.1),
+      0 0 12px var(--ok-glow);
+  }
   .toggle-thumb {
     position: absolute;
-    top: 3px; left: 3px;
-    width: 20px; height: 20px;
+    top: 3px;
+    left: 3px;
+    width: 26px;
+    height: 26px;
     border-radius: 50%;
-    background: #fff;
-    transition: transform 0.2s;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    background: var(--text-3);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   }
-  .toggle.on .toggle-thumb { transform: translateX(22px); }
+  .toggle.on .toggle-thumb {
+    transform: translateX(24px);
+    background: #fff;
+  }
 </style>
