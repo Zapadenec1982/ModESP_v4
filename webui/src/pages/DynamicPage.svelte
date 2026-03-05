@@ -229,7 +229,8 @@
       </div>
     {/if}
     {#each page.cards as card, i}
-      {#if isVisible(card.visible_when, $state)}
+      {@const isAlarmCard = isProtection && card.widgets?.some(w => w.key === 'protection.alarm_active')}
+      {#if !isAlarmCard && isVisible(card.visible_when, $state)}
         {@const isReadonly = card.widgets.every(w => !w.writable)}
         <div in:fly={{ y: 15, duration: 250, delay: i * 50 }}>
           <GroupAccordion
