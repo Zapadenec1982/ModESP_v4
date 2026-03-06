@@ -91,6 +91,9 @@ if(WIN32)
         WIN32_LEAN_AND_MEAN
         _CRT_SECURE_NO_WARNINGS
     )
+    # Static link runtime libs — eliminates MSYS2 DLL dependencies
+    # (libstdc++, libgcc, libwinpthread, libmpc etc.)
+    target_link_options(test_runner PRIVATE -static)
 endif()
 
 # ── Link with system threading library (for std::mutex in freertos_mock.h) ──

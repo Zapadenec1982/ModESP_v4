@@ -94,7 +94,9 @@ static void pr_setup_normal(modesp::SharedState& state,
     state.set("equipment.air_temp",   air_temp);
     state.set("equipment.sensor1_ok", sensor1_ok);
     state.set("equipment.sensor2_ok", sensor2_ok);
+    state.set("equipment.has_evap_temp", true);   // sensor2 підключений в тестах
     state.set("equipment.door_open",  door_open);
+    state.set("equipment.has_door_contact", true); // door підключений в тестах
     state.set("equipment.compressor", compressor);
     state.set("defrost.active",       defrost);
     state.set("defrost.phase",        modesp::StringValue("idle"));

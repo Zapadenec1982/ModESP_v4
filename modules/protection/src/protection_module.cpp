@@ -173,7 +173,13 @@ void ProtectionModule::on_update(uint32_t dt_ms) {
     update_high_temp(air_temp, sensor1_ok, suppress_high, dt_ms);
     update_low_temp(air_temp, sensor1_ok, dt_ms);
     update_sensor_alarm(sensor1_, sensor1_ok, "SENSOR1 (ERR1)");
-    update_sensor_alarm(sensor2_, sensor2_ok, "SENSOR2 (ERR2)");
+    // sensor2 (evap_temp) — тільки якщо датчик підключений в bindings
+    if (read_bool("equipment.has_evap_temp")) {
+        update_sensor_alarm(sensor2_, sensor2_ok, "SENSOR2 (ERR2)");
+    } else if (sensor2_.active) {
+        // Якщо датчик відключили — скинути хибний алярм
+        sensor2_.active = false;
+    }
     if (has_feature("door_protection")) {
         update_door_alarm(door_open, dt_ms);
     }
