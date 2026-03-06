@@ -874,6 +874,7 @@ class UIJsonGenerator:
             "cards": [
                 {
                     "title": "WiFi",
+                    "icon": "wifi",
                     "widgets": [
                         {"key": "wifi.ssid", "widget": "value",
                          "description": "Мережа"},
@@ -885,6 +886,7 @@ class UIJsonGenerator:
                 },
                 {
                     "title": "Налаштування WiFi",
+                    "icon": "settings",
                     "group": "settings",
                     "collapsible": True,
                     "widgets": [
@@ -903,6 +905,7 @@ class UIJsonGenerator:
                 },
                 {
                     "title": "Точка доступу",
+                    "icon": "wifi",
                     "group": "settings",
                     "collapsible": True,
                     "widgets": [
@@ -922,6 +925,7 @@ class UIJsonGenerator:
                 },
                 {
                     "title": "MQTT",
+                    "icon": "link",
                     "widgets": [
                         {"key": "mqtt.connected", "widget": "indicator",
                          "description": "Підключення",
@@ -935,8 +939,10 @@ class UIJsonGenerator:
                 },
                 {
                     "title": "Налаштування MQTT",
+                    "icon": "settings",
                     "group": "settings",
                     "collapsible": True,
+                    "wide": True,
                     "widgets": [
                         {"key": "mqtt.broker", "widget": "text_input",
                          "editable": True, "description": "Адреса брокера",
@@ -976,6 +982,7 @@ class UIJsonGenerator:
             "cards": [
                 {
                     "title": "Інформація",
+                    "icon": "info",
                     "widgets": [
                         {"key": "system.uptime", "widget": "value",
                          "unit": "s", "description": "Час роботи"},
@@ -989,6 +996,7 @@ class UIJsonGenerator:
                 },
                 {
                     "title": "Прошивка",
+                    "icon": "cpu",
                     "widgets": [
                         {"key": "_ota.version", "widget": "value",
                          "description": "Версія"},
@@ -1004,6 +1012,7 @@ class UIJsonGenerator:
                 },
                 {
                     "title": "Налаштування часу",
+                    "icon": "clock",
                     "group": "settings",
                     "collapsible": True,
                     "widgets": [
@@ -1022,6 +1031,7 @@ class UIJsonGenerator:
                 },
                 {
                     "title": "Безпека",
+                    "icon": "shield",
                     "collapsible": True,
                     "widgets": [
                         {"key": "_action.auth_save", "widget": "auth_save",
@@ -1030,6 +1040,7 @@ class UIJsonGenerator:
                 },
                 {
                     "title": "Дії",
+                    "icon": "sliders",
                     "collapsible": True,
                     "widgets": [
                         {"key": "_action.grid", "widget": "actions_grid",
