@@ -339,17 +339,12 @@
         "icon": "refresh-cw",
         "icon_color": "blue",
         "subtitle": "Фаза, прогрес, статус",
-        "summary_keys": ["defrost.state", "defrost.active"],
+        "summary_keys": ["defrost.phase", "defrost.active"],
         "wide": true,
         "widgets": [
           {
-            "key": "defrost.state",
-            "widget": "status_text"
-          },
-          {
             "key": "defrost.phase",
-            "widget": "status_text",
-            "label": "Фаза"
+            "widget": "status_text"
           },
           {
             "key": "defrost.phase_timer",
