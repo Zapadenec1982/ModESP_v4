@@ -39,6 +39,27 @@
   $: activeAlarms = alarmDefs.filter(a => $state[a.key]);
   $: checksCount = page ? page.cards.reduce((n, c) => n + c.widgets.length, 0) : 0;
 
+  // Адаптивний розмір карток: короткі парами, довгі на повну ширину
+  const FULL_WIDTH_THRESHOLD = 7;
+
+  $: filteredCards = page ? page.cards
+    .map((card, origIdx) => ({
+      card,
+      origIdx,
+      isAlarmCard: isProtection && card.widgets?.some(w => w.key === 'protection.alarm_active'),
+      isDiagCard: isProtection && card.widgets?.some(w => w.key === 'protection.compressor_starts_1h'),
+      visible: isVisible(card.visible_when, $state),
+      widgetCount: card.widgets.filter(w => isVisible(w.visible_when, $state)).length,
+    }))
+    .filter(c => !c.isAlarmCard && !c.isDiagCard && c.visible)
+    .sort((a, b) => {
+      // Короткі картки першими (парами), довгі після них (повна ширина)
+      const aFull = a.widgetCount > FULL_WIDTH_THRESHOLD ? 1 : 0;
+      const bFull = b.widgetCount > FULL_WIDTH_THRESHOLD ? 1 : 0;
+      return aFull - bFull;
+    })
+    : [];
+
   // Hold-to-confirm reset
   let holdTimer = null;
   let holdProgress = 0;
@@ -138,7 +159,7 @@
         {/each}
 
         <!-- Hold-to-confirm reset button -->
-        <div class="reset-wrap" style="grid-column: 1 / -1">
+        <div class="reset-wrap">
           <button
             class="al-btn"
             on:pointerdown={startHold}
@@ -215,7 +236,7 @@
           </div>
           <div class="duty-wrap">
             <div class="duty-labels">
-              <span>Duty Cycle</span>
+              <span>{$t['prot.duty_cycle']}</span>
               <span>{($state["protection.compressor_duty"] ?? 0).toFixed(1)}%</span>
             </div>
             <div class="duty-bar">
@@ -228,29 +249,26 @@
         </div>
       </div>
     {/if}
-    {#each page.cards as card, i}
-      {@const isAlarmCard = isProtection && card.widgets?.some(w => w.key === 'protection.alarm_active')}
-      {@const isDiagCard = isProtection && card.widgets?.some(w => w.key === 'protection.compressor_starts_1h')}
-      {#if !isAlarmCard && !isDiagCard && isVisible(card.visible_when, $state)}
-        {@const isReadonly = card.widgets.every(w => !w.writable)}
-        <div in:fly={{ y: 15, duration: 250, delay: i * 50 }}>
-          <GroupAccordion
-            title={card.title}
-            icon={card.icon || ""}
-            iconColor={card.icon_color || ""}
-            subtitle={card.subtitle || ""}
-            summaryKeys={card.summary_keys || []}
-            collapsible={card.collapsible || false}
-            defaultOpen={isReadonly || i === 0}
-          >
-            {#each card.widgets as widget}
-              {#if isVisible(widget.visible_when, $state)}
-                <WidgetRenderer {widget} value={$state[widget.key]} />
-              {/if}
-            {/each}
-          </GroupAccordion>
-        </div>
-      {/if}
+    {#each filteredCards as { card, origIdx, widgetCount }, i}
+      {@const isReadonly = card.widgets.every(w => !w.writable)}
+      {@const isFullWidth = card.wide || widgetCount > FULL_WIDTH_THRESHOLD}
+      <div class:card-full={isFullWidth} in:fly={{ y: 15, duration: 250, delay: i * 50 }}>
+        <GroupAccordion
+          title={card.title}
+          icon={card.icon || ""}
+          iconColor={card.icon_color || ""}
+          subtitle={card.subtitle || ""}
+          summaryKeys={card.summary_keys || []}
+          collapsible={card.collapsible || false}
+          defaultOpen={isReadonly || i === 0}
+        >
+          {#each card.widgets as widget}
+            {#if isVisible(widget.visible_when, $state)}
+              <WidgetRenderer {widget} value={$state[widget.key]} />
+            {/if}
+          {/each}
+        </GroupAccordion>
+      </div>
     {/each}
   </div>
 {:else}
@@ -266,10 +284,34 @@
 
   @media (min-width: 1025px) {
     .page-grid {
+      column-count: 2;
+      column-gap: 16px;
+      max-width: 1100px;
+    }
+
+    /* Картки не розриваються між колонками */
+    .page-grid > :global(*) {
+      break-inside: avoid;
+    }
+
+    /* Hero/діагностика/аларми — на повну ширину */
+    .protect-status,
+    .alarm-detail,
+    .diag-card,
+    .reset-wrap {
+      column-span: all;
+    }
+
+    /* Довгі картки (>7 виджетів) — на повну ширину */
+    .card-full {
+      column-span: all;
+    }
+
+    /* Виджети всередині full-width карток — у 2 колонки */
+    .card-full :global(.grp-body) {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 16px;
-      max-width: 1100px;
+      gap: 0 24px;
     }
   }
 
@@ -296,7 +338,6 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    grid-column: 1 / -1; /* stretch across grid */
   }
 
   .protect-ok {
@@ -398,7 +439,6 @@
     border: 1px solid var(--danger-border);
     border-radius: var(--radius);
     padding: 16px;
-    grid-column: 1 / -1;
   }
   .alarm-detail-header {
     display: flex;
@@ -495,7 +535,6 @@
     border-radius: var(--radius);
     padding: 24px;
     margin-bottom: var(--sp-4);
-    grid-column: 1 / -1;
   }
   .diag-header {
     display: flex;

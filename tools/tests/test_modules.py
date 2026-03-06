@@ -597,7 +597,7 @@ class TestUIJsonFullProject:
         assert "Статус аварій" in card_titles
         assert "Діагностика компресора" in card_titles
         assert "Налаштування захисту" in card_titles
-        assert "Моніторинг компресора" in card_titles
+        assert "Компресор" in card_titles
         # Alarm widgets на сторінці protection
         status_card = next(c for c in prot_page["cards"] if c["title"] == "Статус аварій")
         status_keys = [w["key"] for w in status_card["widgets"]]

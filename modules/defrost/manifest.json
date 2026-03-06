@@ -340,6 +340,7 @@
         "icon_color": "blue",
         "subtitle": "Фаза, прогрес, статус",
         "summary_keys": ["defrost.state", "defrost.active"],
+        "wide": true,
         "widgets": [
           {
             "key": "defrost.state",

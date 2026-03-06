@@ -639,11 +639,11 @@
         ]
       },
       {
-        "title": "Захист компресора",
-        "icon": "shield-check",
-        "icon_color": "green",
-        "subtitle": "Мін. час роботи/паузи",
-        "summary_keys": ["thermostat.min_off_time", "thermostat.min_on_time"],
+        "title": "Компресор",
+        "icon": "settings",
+        "icon_color": "orange",
+        "subtitle": "Таймінги, циклічність, моніторинг",
+        "summary_keys": ["thermostat.min_off_time", "protection.max_starts_hour"],
         "group": "settings",
         "collapsible": true,
         "widgets": [
@@ -666,18 +666,7 @@
           {
             "key": "thermostat.safety_run_off",
             "widget": "number_input"
-          }
-        ]
-      },
-      {
-        "title": "Моніторинг компресора",
-        "icon": "bar-chart",
-        "icon_color": "orange",
-        "subtitle": "Циклічність, безперервна робота",
-        "summary_keys": ["protection.max_starts_hour", "protection.max_continuous_run"],
-        "group": "settings",
-        "collapsible": true,
-        "widgets": [
+          },
           {
             "key": "protection.min_compressor_run",
             "widget": "number_input"

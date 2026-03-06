@@ -81,13 +81,17 @@
         ]
       },
       {
-        "title": "Канали логування",
-        "icon": "layers",
-        "icon_color": "green",
-        "subtitle": "Вибір каналів запису",
-        "summary_keys": ["datalogger.log_evap", "datalogger.log_cond"],
+        "title": "Налаштування",
+        "icon": "settings",
+        "icon_color": "orange",
+        "subtitle": "Увімкнення, канали, інтервал",
+        "summary_keys": ["datalogger.enabled", "datalogger.sample_interval"],
         "collapsible": true,
+        "wide": true,
         "widgets": [
+          {"key": "datalogger.enabled",         "widget": "toggle"},
+          {"key": "datalogger.sample_interval",  "widget": "number_input"},
+          {"key": "datalogger.retention_hours",  "widget": "number_input"},
           {"key": "datalogger.log_evap",     "widget": "toggle",
            "visible_when": {"key": "equipment.has_evap_temp", "eq": true}},
           {"key": "datalogger.log_cond",     "widget": "toggle",
@@ -95,19 +99,6 @@
           {"key": "datalogger.log_setpoint", "widget": "toggle"},
           {"key": "datalogger.log_humidity", "widget": "toggle",
            "visible_when": {"key": "equipment.has_humidity", "eq": true}}
-        ]
-      },
-      {
-        "title": "Налаштування",
-        "icon": "settings",
-        "icon_color": "orange",
-        "subtitle": "Увімкнення, інтервал",
-        "summary_keys": ["datalogger.enabled", "datalogger.sample_interval"],
-        "collapsible": true,
-        "widgets": [
-          {"key": "datalogger.enabled",         "widget": "toggle"},
-          {"key": "datalogger.retention_hours",  "widget": "number_input"},
-          {"key": "datalogger.sample_interval",  "widget": "number_input"}
         ]
       }
     ]

@@ -379,37 +379,17 @@
     "order": 1,
     "cards": [
       {
-        "title": "Температура",
-        "icon": "thermometer",
-        "icon_color": "blue",
-        "subtitle": "Уставка, диференціал, фільтр",
-        "summary_keys": ["thermostat.setpoint", "thermostat.differential"],
+        "title": "Стан",
+        "icon": "activity",
+        "icon_color": "green",
+        "subtitle": "Температура, компресор, таймери",
+        "summary_keys": ["thermostat.temperature", "thermostat.state"],
+        "wide": true,
         "widgets": [
           {
             "key": "thermostat.temperature",
             "widget": "value"
           },
-          {
-            "key": "thermostat.setpoint",
-            "widget": "slider"
-          },
-          {
-            "key": "thermostat.differential",
-            "widget": "number_input"
-          },
-          {
-            "key": "equipment.filter_coeff",
-            "widget": "number_input"
-          }
-        ]
-      },
-      {
-        "title": "Стан системи",
-        "icon": "activity",
-        "icon_color": "green",
-        "subtitle": "Компресор, модуль, час",
-        "summary_keys": ["thermostat.state", "equipment.compressor"],
-        "widgets": [
           {
             "key": "equipment.compressor",
             "widget": "indicator",
@@ -433,6 +413,30 @@
             "widget": "value",
             "label": "Час простою",
             "format": "duration"
+          }
+        ]
+      },
+      {
+        "title": "Налаштування температури",
+        "icon": "thermometer",
+        "icon_color": "blue",
+        "subtitle": "Уставка, диференціал, фільтр",
+        "summary_keys": ["thermostat.setpoint", "thermostat.differential"],
+        "wide": true,
+        "group": "settings",
+        "collapsible": true,
+        "widgets": [
+          {
+            "key": "thermostat.setpoint",
+            "widget": "slider"
+          },
+          {
+            "key": "thermostat.differential",
+            "widget": "number_input"
+          },
+          {
+            "key": "equipment.filter_coeff",
+            "widget": "number_input"
           }
         ]
       },
