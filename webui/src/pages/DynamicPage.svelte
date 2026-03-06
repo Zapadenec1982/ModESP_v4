@@ -260,7 +260,7 @@
           subtitle={card.subtitle || ""}
           summaryKeys={card.summary_keys || []}
           collapsible={card.collapsible || false}
-          defaultOpen={isReadonly || i === 0}
+          defaultOpen={card.defaultOpen !== undefined ? card.defaultOpen : (isReadonly || i === 0)}
         >
           {#each card.widgets as widget}
             {#if isVisible(widget.visible_when, $state)}

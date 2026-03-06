@@ -864,7 +864,7 @@ class UIJsonGenerator:
         }
 
     def _network_page(self):
-        """Network page: WiFi status/settings + MQTT status/settings."""
+        """Network page: combined status + WiFi/AP/MQTT settings."""
         return {
             "id": "network",
             "title": "Мережа",
@@ -873,8 +873,10 @@ class UIJsonGenerator:
             "system": True,
             "cards": [
                 {
-                    "title": "WiFi",
-                    "icon": "wifi",
+                    "title": "Стан мережі",
+                    "icon": "activity",
+                    "subtitle": "WiFi та MQTT",
+                    "wide": True,
                     "widgets": [
                         {"key": "wifi.ssid", "widget": "value",
                          "description": "Мережа"},
@@ -882,11 +884,19 @@ class UIJsonGenerator:
                          "description": "IP адреса"},
                         {"key": "wifi.rssi", "widget": "value",
                          "unit": "dBm", "description": "Сигнал"},
+                        {"key": "mqtt.connected", "widget": "indicator",
+                         "description": "MQTT",
+                         "on_label": "Підключено", "off_label": "Відключено",
+                         "on_color": "#22c55e", "off_color": "#64748b"},
+                        {"key": "mqtt.status", "widget": "status_text",
+                         "description": "Стан MQTT"},
+                        {"key": "mqtt.broker", "widget": "value",
+                         "description": "Брокер"},
                     ],
                 },
                 {
-                    "title": "Налаштування WiFi",
-                    "icon": "settings",
+                    "title": "WiFi",
+                    "icon": "wifi",
                     "group": "settings",
                     "collapsible": True,
                     "widgets": [
@@ -908,6 +918,7 @@ class UIJsonGenerator:
                     "icon": "wifi",
                     "group": "settings",
                     "collapsible": True,
+                    "defaultOpen": False,
                     "widgets": [
                         {"key": "wifi.ap_ssid", "widget": "text_input",
                          "editable": True, "description": "SSID точки доступу",
@@ -926,20 +937,6 @@ class UIJsonGenerator:
                 {
                     "title": "MQTT",
                     "icon": "link",
-                    "widgets": [
-                        {"key": "mqtt.connected", "widget": "indicator",
-                         "description": "Підключення",
-                         "on_label": "Підключено", "off_label": "Відключено",
-                         "on_color": "#22c55e", "off_color": "#64748b"},
-                        {"key": "mqtt.status", "widget": "status_text",
-                         "description": "Стан"},
-                        {"key": "mqtt.broker", "widget": "value",
-                         "description": "Брокер"},
-                    ],
-                },
-                {
-                    "title": "Налаштування MQTT",
-                    "icon": "settings",
                     "group": "settings",
                     "collapsible": True,
                     "wide": True,
@@ -972,7 +969,7 @@ class UIJsonGenerator:
         }
 
     def _system_page(self):
-        """System page: info, firmware, time settings, actions."""
+        """System page: info, firmware, settings (time+auth), service actions."""
         return {
             "id": "system",
             "title": "Система",
@@ -1011,8 +1008,9 @@ class UIJsonGenerator:
                     ],
                 },
                 {
-                    "title": "Налаштування часу",
-                    "icon": "clock",
+                    "title": "Налаштування",
+                    "icon": "settings",
+                    "subtitle": "Час та безпека",
                     "group": "settings",
                     "collapsible": True,
                     "widgets": [
@@ -1027,21 +1025,13 @@ class UIJsonGenerator:
                         {"key": "_action.time_save", "widget": "time_save",
                          "label": "Зберегти",
                          "api_endpoint": "/api/time"},
-                    ],
-                },
-                {
-                    "title": "Безпека",
-                    "icon": "shield",
-                    "collapsible": True,
-                    "widgets": [
                         {"key": "_action.auth_save", "widget": "auth_save",
-                         "description": "Налаштування аутентифікації"},
+                         "description": "Аутентифікація"},
                     ],
                 },
                 {
-                    "title": "Дії",
+                    "title": "Сервіс",
                     "icon": "sliders",
-                    "collapsible": True,
                     "widgets": [
                         {"key": "_action.grid", "widget": "actions_grid",
                          "actions": [
