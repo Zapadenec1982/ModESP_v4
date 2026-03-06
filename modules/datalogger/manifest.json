@@ -89,9 +89,9 @@
         "collapsible": true,
         "wide": true,
         "widgets": [
-          {"key": "datalogger.enabled",         "widget": "toggle"},
           {"key": "datalogger.sample_interval",  "widget": "number_input"},
           {"key": "datalogger.retention_hours",  "widget": "number_input"},
+          {"key": "datalogger.enabled",         "widget": "toggle"},
           {"key": "datalogger.log_evap",     "widget": "toggle",
            "visible_when": {"key": "equipment.has_evap_temp", "eq": true}},
           {"key": "datalogger.log_cond",     "widget": "toggle",
