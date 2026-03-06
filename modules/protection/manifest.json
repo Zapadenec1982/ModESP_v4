@@ -606,6 +606,7 @@
         "summary_keys": ["protection.high_limit", "protection.low_limit"],
         "group": "settings",
         "collapsible": true,
+        "wide": true,
         "widgets": [
           {
             "key": "protection.high_limit",
