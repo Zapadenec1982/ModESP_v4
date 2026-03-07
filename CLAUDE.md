@@ -354,6 +354,19 @@ ModESP_v4/
 - STA mode: підключення до існуючого роутера (credentials з NVS)
 - AP fallback: ModESP-XXXX (якщо STA не вдалося)
 - IP: залежить від режиму (STA = DHCP, AP = 192.168.4.1)
+- **Country code UA:** channels 1-13 (виправлення для Xiaomi/TP-Link роутерів)
+- **STA Watchdog:** авторестарт якщо STA disconnect сумарно > 10 хв (WIFI_MAX_DISCONNECT_MS=600s)
+- **RSSI periodic update:** кожні 10 сек → SharedState
+
+### MQTT Advanced (Phase 18 partial)
+- **HA Auto-Discovery:** публікація MQTT Discovery topics для Home Assistant
+- **TLS support:** автоматичне `mqtts://` при порту 8883 або явний mqtts:// prefix
+- **LWT:** "offline" статус при розриві (retain)
+- **Exponential backoff:** 5s → 300s (5 хв) з подвоєнням при повторних невдачах
+- **Tenant prefix:** `modesp/v1/{tenant}/{device_id}` або `modesp/v1/pending/{device_id}`
+- **Alarm republish:** retain + QoS1 кожні 5 хвилин (ALARM_REPUBLISH_INTERVAL_MS=300000)
+- **Delta-publish cache:** кеш 16 останніх значень — публікує лише змінені
+- **Heartbeat:** щохвилинна публікація device ID / firmware version / uptime
 
 ### Heap Optimization
 - **WS heap guard:** 16KB (full state) / 8KB (delta/ping) мінімум перед malloc
@@ -432,6 +445,10 @@ feat(module): короткий опис
 | `next_prompt.md` | Промпт для наступної сесії | В кінці поточної сесії |
 
 ## Changelog
+- 2026-03-08 — Phase 18 partial (WiFi+MQTT Hardening): country code UA, STA watchdog, RSSI update;
+  HA Auto-Discovery, TLS, LWT, exponential backoff, tenant prefix, alarm republish, delta-cache, heartbeat.
+  Документаційна ревізія R1: docs/07_equipment.md (Phase 17), docs/08_webui.md (Premium R1),
+  docs/11_protection.md (persist 14→15), README.md (метрики 53→61 STATE_META, 37→48 pub, 52→60 sub).
 - 2026-03-07 — WebUI Premium Redesign R1: premium dark theme bento-card dashboard, card icons (shield/flame/thermometer/database), responsive accordions (GroupAccordion, desktop open / mobile collapsed), System & Network pages restructure, widget grouping, duplicate card removal, uptime HH:MM:SS. Bundle: 63KB JS + 13KB CSS gz. i18n: ~120 keys per language. 32 Svelte компоненти.
 - 2026-03-02 — Phase 17 Phase 1: Compressor Safety in Protection Module. 5 new alarm monitors (short cycle,
   rapid cycle, continuous run, pulldown failure, rate-of-change). CompressorTracker (ring buffer 30 starts,
