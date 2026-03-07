@@ -11,6 +11,9 @@
 
   export let pageId;
 
+  // Responsive: desktop = no accordions, mobile = all collapsed
+  const isMobile = typeof window !== 'undefined' && window.matchMedia("(max-width: 767px)").matches;
+
   $: page = $pages.find((p) => p.id === pageId);
 
   // Protection state specific
@@ -259,8 +262,8 @@
           iconColor={card.icon_color || ""}
           subtitle={card.subtitle || ""}
           summaryKeys={card.summary_keys || []}
-          collapsible={card.collapsible || false}
-          defaultOpen={card.defaultOpen !== undefined ? card.defaultOpen : (isReadonly || i === 0)}
+          collapsible={isMobile}
+          defaultOpen={false}
         >
           {#each card.widgets as widget}
             {#if isVisible(widget.visible_when, $state)}
