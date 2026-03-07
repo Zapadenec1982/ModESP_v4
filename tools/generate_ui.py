@@ -986,7 +986,7 @@ class UIJsonGenerator:
                         # 2-col grid: L=runtime, R=firmware
                         # Row 1
                         {"key": "system.uptime", "widget": "value",
-                         "unit": "s", "description": "Час роботи"},
+                         "format": "duration", "description": "Час роботи"},
                         {"key": "_ota.version", "widget": "value",
                          "description": "Версія прошивки"},
                         # Row 2
