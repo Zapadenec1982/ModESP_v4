@@ -1,1073 +1,1163 @@
 /**
- * ModESP v4 — User Manual Generator
- * Generates a Ukrainian user manual for the refrigeration controller
+ * ModESP v4 — User Manual Generator (v2 — for field technicians)
  * Output: docs/ModESP_v4_user_manual_ua.docx
  */
 const {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
   Header, Footer, AlignmentType, HeadingLevel, BorderStyle, WidthType,
-  ShadingType, VerticalAlign, PageNumber, PageBreak, LevelFormat,
-  TableOfContents, ExternalHyperlink
+  ShadingType, PageNumber, PageBreak, LevelFormat, TableOfContents,
 } = require('docx');
 const fs = require('fs');
 const path = require('path');
 
-// ── Colours ──────────────────────────────────────────────────────────────────
+// ── Colours ───────────────────────────────────────────────────────────────────
 const C = {
-  accent:    '1E3A5F',   // dark navy (headings)
-  accent2:   '2563EB',   // blue (H2)
-  accent3:   '0F766E',   // teal (H3)
-  tableHead: 'D0E4F7',   // light blue (table header)
-  tableAlt:  'F0F7FF',   // very light blue (alt rows)
-  warn:      'FEF3C7',   // amber (note boxes)
-  warnBord:  'F59E0B',
+  navy:      '1E3A5F',
+  blue:      '2563EB',
+  teal:      '0F766E',
+  tableHead: 'DBEAFE',
+  tableAlt:  'F0F7FF',
+  warn:      'FEF3C7',
+  warnBord:  'D97706',
   info:      'EFF6FF',
   infoBord:  '3B82F6',
-  red:       'FEE2E2',
-  redBord:   'EF4444',
-  mutedLine: 'CBD5E1',
+  danger:    'FEE2E2',
+  dangerBord:'DC2626',
+  tip:       'F0FDF4',
+  tipBord:   '16A34A',
+  muted:     'CBD5E1',
 };
 
-// ── Borders helper ────────────────────────────────────────────────────────────
-function border(color = C.mutedLine, size = 6) {
-  return { style: BorderStyle.SINGLE, size, color };
-}
-function cellBorders(color = C.mutedLine) {
-  const b = border(color, 4);
-  return { top: b, bottom: b, left: b, right: b };
-}
+// ── Borders ───────────────────────────────────────────────────────────────────
+const bdr = (color = C.muted, size = 4) => ({ style: BorderStyle.SINGLE, size, color });
+const cellBdr = (c = C.muted) => { const b = bdr(c,4); return {top:b,bottom:b,left:b,right:b}; };
 
-// ── Text helpers ──────────────────────────────────────────────────────────────
-function h1(text) {
-  return new Paragraph({
-    heading: HeadingLevel.HEADING_1,
-    children: [new TextRun({ text, font: 'Arial', size: 36, bold: true, color: C.accent })],
-    spacing: { before: 480, after: 200 },
-    border: { bottom: border(C.accent, 12) },
-  });
-}
+// ── Typography helpers ────────────────────────────────────────────────────────
+const h1 = text => new Paragraph({
+  heading: HeadingLevel.HEADING_1,
+  children: [new TextRun({ text, font:'Arial', size:36, bold:true, color:C.navy })],
+  spacing: { before:480, after:200 },
+  border: { bottom: bdr(C.navy, 12) },
+});
+const h2 = text => new Paragraph({
+  heading: HeadingLevel.HEADING_2,
+  children: [new TextRun({ text, font:'Arial', size:28, bold:true, color:C.blue })],
+  spacing: { before:360, after:140 },
+});
+const h3 = text => new Paragraph({
+  heading: HeadingLevel.HEADING_3,
+  children: [new TextRun({ text, font:'Arial', size:24, bold:true, color:C.teal })],
+  spacing: { before:240, after:100 },
+});
+const p = (text, opts={}) => new Paragraph({
+  children: [new TextRun({ text, font:'Arial', size:22, ...opts })],
+  spacing: { after:120 },
+});
+const pRuns = runs => new Paragraph({ children: runs, spacing:{after:120} });
+const b = text => new TextRun({ text, font:'Arial', size:22, bold:true });
+const i = text => new TextRun({ text, font:'Arial', size:22, italics:true, color:'64748B' });
+const bullet = (text, lvl=0) => new Paragraph({
+  numbering: { reference:'bullets', level:lvl },
+  children: [new TextRun({ text, font:'Arial', size:22 })],
+  spacing: { after:80 },
+});
+const bulletBold = (label, text) => new Paragraph({
+  numbering: { reference:'bullets', level:0 },
+  children: [
+    new TextRun({ text: label+' ', font:'Arial', size:22, bold:true }),
+    new TextRun({ text, font:'Arial', size:22 }),
+  ],
+  spacing: { after:100 },
+});
+const num = (text, lvl=0) => new Paragraph({
+  numbering: { reference:'numbers', level:lvl },
+  children: [new TextRun({ text, font:'Arial', size:22 })],
+  spacing: { after:100 },
+});
+const numBold = (label, text) => new Paragraph({
+  numbering: { reference:'numbers', level:0 },
+  children: [
+    new TextRun({ text: label+' ', font:'Arial', size:22, bold:true }),
+    new TextRun({ text, font:'Arial', size:22 }),
+  ],
+  spacing: { after:100 },
+});
+const sp = (pts=120) => new Paragraph({ children:[new TextRun('')], spacing:{after:pts} });
+const pb = () => new Paragraph({ children:[new PageBreak()] });
 
-function h2(text) {
-  return new Paragraph({
-    heading: HeadingLevel.HEADING_2,
-    children: [new TextRun({ text, font: 'Arial', size: 28, bold: true, color: C.accent2 })],
-    spacing: { before: 360, after: 160 },
-  });
-}
-
-function h3(text) {
-  return new Paragraph({
-    heading: HeadingLevel.HEADING_3,
-    children: [new TextRun({ text, font: 'Arial', size: 24, bold: true, color: C.accent3 })],
-    spacing: { before: 240, after: 120 },
-  });
-}
-
-function para(text, opts = {}) {
-  return new Paragraph({
-    children: [new TextRun({ text, font: 'Arial', size: 22, ...opts })],
-    spacing: { after: 120 },
-  });
-}
-
-function bold(text) {
-  return new TextRun({ text, font: 'Arial', size: 22, bold: true });
-}
-
-function paraRuns(runs) {
-  return new Paragraph({
-    children: runs,
-    spacing: { after: 120 },
-  });
-}
-
-function bullet(text, level = 0) {
-  return new Paragraph({
-    numbering: { reference: 'bullets', level },
-    children: [new TextRun({ text, font: 'Arial', size: 22 })],
-    spacing: { after: 80 },
-  });
-}
-
-function numbered(text, level = 0) {
-  return new Paragraph({
-    numbering: { reference: 'numbers', level },
-    children: [new TextRun({ text, font: 'Arial', size: 22 })],
-    spacing: { after: 100 },
-  });
-}
-
-function pageBreak() {
-  return new Paragraph({ children: [new PageBreak()] });
-}
-
-function spacer(pts = 120) {
-  return new Paragraph({ children: [new TextRun('')], spacing: { after: pts } });
-}
-
-// ── Note box (shaded paragraph) ───────────────────────────────────────────────
-function noteBox(label, text, fillColor = C.info, borderColor = C.infoBord) {
-  return new Table({
-    width: { size: 9026, type: WidthType.DXA },
-    columnWidths: [9026],
-    borders: {
-      top: border(borderColor, 8), bottom: border(borderColor, 8),
-      left: border(borderColor, 16), right: border(borderColor, 4),
-    },
-    rows: [new TableRow({ children: [new TableCell({
-      borders: {
-        top: border(borderColor, 8), bottom: border(borderColor, 8),
-        left: border(borderColor, 16), right: border(borderColor, 4),
-      },
-      shading: { fill: fillColor, type: ShadingType.CLEAR },
-      margins: { top: 80, bottom: 80, left: 160, right: 160 },
-      width: { size: 9026, type: WidthType.DXA },
-      children: [new Paragraph({
-        children: [
-          new TextRun({ text: label + ' ', font: 'Arial', size: 22, bold: true }),
-          new TextRun({ text, font: 'Arial', size: 22 }),
-        ],
-        spacing: { after: 0 },
-      })],
-    })]})],
-  });
-}
+// ── Callout box ───────────────────────────────────────────────────────────────
+const box = (icon, label, text, fill, brdColor) => new Table({
+  width: { size:9026, type:WidthType.DXA },
+  columnWidths: [9026],
+  rows: [new TableRow({ children: [new TableCell({
+    borders: { top:bdr(brdColor,8), bottom:bdr(brdColor,8), left:bdr(brdColor,20), right:bdr(brdColor,4) },
+    shading: { fill, type:ShadingType.CLEAR },
+    margins: { top:100, bottom:100, left:180, right:160 },
+    width: { size:9026, type:WidthType.DXA },
+    children: [new Paragraph({
+      children: [
+        new TextRun({ text: icon+' '+label+' ', font:'Arial', size:22, bold:true, color:brdColor }),
+        new TextRun({ text, font:'Arial', size:22 }),
+      ],
+      spacing: { after:0 },
+    })],
+  })]})],
+});
+const warn    = (label, text) => box('⚠', label, text, C.warn,   C.warnBord);
+const info    = (label, text) => box('ℹ', label, text, C.info,   C.infoBord);
+const danger  = (label, text) => box('✖', label, text, C.danger, C.dangerBord);
+const tip     = (label, text) => box('✓', label, text, C.tip,    C.tipBord);
 
 // ── Table builder ─────────────────────────────────────────────────────────────
-function buildTable(headers, rows, colWidths) {
-  const totalWidth = colWidths.reduce((s, w) => s + w, 0);
-  const makeCell = (text, isHeader, colIdx) => new TableCell({
-    borders: cellBorders(),
-    shading: isHeader
-      ? { fill: C.tableHead, type: ShadingType.CLEAR }
-      : (rows.indexOf(rows.find(r => r === rows[rows.indexOf(rows.find(r => r[colIdx] === text))])) % 2 === 1
-          ? { fill: C.tableAlt, type: ShadingType.CLEAR }
-          : { fill: 'FFFFFF', type: ShadingType.CLEAR }),
-    margins: { top: 80, bottom: 80, left: 120, right: 120 },
-    width: { size: colWidths[colIdx], type: WidthType.DXA },
+const tbl = (headers, rows, widths) => {
+  const total = widths.reduce((s,w)=>s+w,0);
+  const mkCell = (text, isHdr, ri) => new TableCell({
+    borders: cellBdr(),
+    shading: isHdr
+      ? { fill:C.tableHead, type:ShadingType.CLEAR }
+      : ri%2===0 ? { fill:'FFFFFF', type:ShadingType.CLEAR } : { fill:C.tableAlt, type:ShadingType.CLEAR },
+    margins: { top:80, bottom:80, left:120, right:120 },
     children: [new Paragraph({
-      children: [new TextRun({
-        text: String(text),
-        font: 'Arial',
-        size: isHeader ? 20 : 20,
-        bold: isHeader,
-      })],
-      spacing: { after: 0 },
+      children: [new TextRun({ text:String(text), font:'Arial', size:20, bold:isHdr })],
+      spacing: { after:0 },
     })],
   });
-
-  const headerRow = new TableRow({
-    tableHeader: true,
-    children: headers.map((h, i) => makeCell(h, true, i)),
-  });
-
-  const dataRows = rows.map((row, ri) => new TableRow({
-    children: row.map((cell, ci) => new TableCell({
-      borders: cellBorders(),
-      shading: ri % 2 === 0
-        ? { fill: 'FFFFFF', type: ShadingType.CLEAR }
-        : { fill: C.tableAlt, type: ShadingType.CLEAR },
-      margins: { top: 70, bottom: 70, left: 120, right: 120 },
-      width: { size: colWidths[ci], type: WidthType.DXA },
-      children: [new Paragraph({
-        children: [new TextRun({ text: String(cell), font: 'Arial', size: 20 })],
-        spacing: { after: 0 },
-      })],
-    })),
-  }));
-
   return new Table({
-    width: { size: totalWidth, type: WidthType.DXA },
-    columnWidths: colWidths,
-    rows: [headerRow, ...dataRows],
+    width: { size:total, type:WidthType.DXA },
+    columnWidths: widths,
+    rows: [
+      new TableRow({ tableHeader:true, children: headers.map((h,i)=>mkCell(h,true,0)) }),
+      ...rows.map((row,ri)=> new TableRow({ children: row.map((c,ci)=> new TableCell({
+        borders: cellBdr(),
+        shading: ri%2===0 ? { fill:'FFFFFF', type:ShadingType.CLEAR } : { fill:C.tableAlt, type:ShadingType.CLEAR },
+        margins: { top:70, bottom:70, left:120, right:120 },
+        width: { size:widths[ci], type:WidthType.DXA },
+        children: [new Paragraph({
+          children: [new TextRun({ text:String(c), font:'Arial', size:20 })],
+          spacing: { after:0 },
+        })],
+      }))})),
+    ],
   });
-}
+};
 
-// ═══════════════════════════════════════════════════════════════════════════════
-//  CONTENT
-// ═══════════════════════════════════════════════════════════════════════════════
+// ── Parameter description block ───────────────────────────────────────────────
+// Renders a nicely formatted param block with name, default, range, and explanation
+const paramBlock = (name, defaultVal, range, explanation) => new Table({
+  width: { size:9026, type:WidthType.DXA },
+  columnWidths: [9026],
+  rows: [new TableRow({ children:[new TableCell({
+    borders: { top:bdr(C.muted,4), bottom:bdr(C.muted,4), left:bdr(C.blue,16), right:bdr(C.muted,4) },
+    shading: { fill:'F8FAFC', type:ShadingType.CLEAR },
+    margins: { top:80, bottom:80, left:180, right:160 },
+    width: { size:9026, type:WidthType.DXA },
+    children: [
+      new Paragraph({
+        children: [new TextRun({ text:name, font:'Arial', size:22, bold:true, color:C.navy })],
+        spacing: { after:40 },
+      }),
+      new Paragraph({
+        children: [
+          new TextRun({ text:'За замовчуванням: ', font:'Arial', size:20, bold:true, color:'475569' }),
+          new TextRun({ text:defaultVal+'   ', font:'Arial', size:20, color:'475569' }),
+          new TextRun({ text:'Діапазон: ', font:'Arial', size:20, bold:true, color:'475569' }),
+          new TextRun({ text:range, font:'Arial', size:20, color:'475569' }),
+        ],
+        spacing: { after:60 },
+      }),
+      new Paragraph({
+        children: [new TextRun({ text:explanation, font:'Arial', size:21, italics:false })],
+        spacing: { after:0 },
+      }),
+    ],
+  })]})],
+});
 
+// =============================================================================
+//  DOCUMENT CONTENT
+// =============================================================================
 const content = [];
 
 // ── TITLE PAGE ────────────────────────────────────────────────────────────────
 content.push(
-  spacer(1440),
+  sp(1440),
   new Paragraph({
     alignment: AlignmentType.CENTER,
-    children: [new TextRun({ text: 'ModESP v4', font: 'Arial', size: 72, bold: true, color: C.accent })],
-    spacing: { after: 240 },
+    children: [new TextRun({ text:'ModESP v4', font:'Arial', size:80, bold:true, color:C.navy })],
+    spacing: { after:160 },
   }),
   new Paragraph({
     alignment: AlignmentType.CENTER,
-    children: [new TextRun({ text: 'Інструкція користувача', font: 'Arial', size: 40, color: '475569' })],
-    spacing: { after: 160 },
+    children: [new TextRun({ text:'Контролер холодильного обладнання', font:'Arial', size:36, color:'334155' })],
+    spacing: { after:80 },
   }),
   new Paragraph({
     alignment: AlignmentType.CENTER,
-    children: [new TextRun({ text: 'Промисловий контролер холодильного обладнання', font: 'Arial', size: 28, color: '64748B', italics: true })],
-    spacing: { after: 600 },
+    children: [new TextRun({ text:'Інструкція з монтажу та налаштування', font:'Arial', size:32, color:'64748B', italics:true })],
+    spacing: { after:480 },
   }),
   new Table({
-    width: { size: 5000, type: WidthType.DXA },
-    columnWidths: [5000],
+    width:{ size:6000, type:WidthType.DXA }, columnWidths:[6000],
     alignment: AlignmentType.CENTER,
-    rows: [new TableRow({ children: [new TableCell({
-      shading: { fill: 'EFF6FF', type: ShadingType.CLEAR },
-      borders: { top: border(C.accent2, 8), bottom: border(C.accent2, 8), left: border(C.accent2, 8), right: border(C.accent2, 8) },
-      margins: { top: 120, bottom: 120, left: 200, right: 200 },
-      width: { size: 5000, type: WidthType.DXA },
-      children: [
-        new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Версія документа: 1.0', font: 'Arial', size: 22, color: '475569' })], spacing: { after: 60 } }),
-        new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Дата: 2026-03-08', font: 'Arial', size: 22, color: '475569' })], spacing: { after: 60 } }),
-        new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: 'Платформа: ESP32 / ESP-IDF v5.5', font: 'Arial', size: 22, color: '475569' })], spacing: { after: 0 } }),
+    rows:[new TableRow({children:[new TableCell({
+      shading:{ fill:'EFF6FF', type:ShadingType.CLEAR },
+      borders:{ top:bdr(C.blue,8), bottom:bdr(C.blue,8), left:bdr(C.blue,8), right:bdr(C.blue,8) },
+      margins:{ top:140, bottom:140, left:240, right:240 },
+      width:{ size:6000, type:WidthType.DXA },
+      children:[
+        new Paragraph({ alignment:AlignmentType.CENTER, children:[new TextRun({ text:'Для монтажників та сервісних інженерів', font:'Arial', size:22, bold:true, color:C.navy })], spacing:{after:80} }),
+        new Paragraph({ alignment:AlignmentType.CENTER, children:[new TextRun({ text:'Версія документа: 2.0  |  Дата: 2026-03-08', font:'Arial', size:20, color:'64748B' })], spacing:{after:0} }),
       ],
     })]})],
   }),
-  pageBreak(),
+  pb(),
 );
 
 // ── TABLE OF CONTENTS ─────────────────────────────────────────────────────────
 content.push(
   h1('Зміст'),
-  new TableOfContents('Зміст', { hyperlink: true, headingStyleRange: '1-3', stylesWithLevels: [] }),
-  pageBreak(),
+  new TableOfContents('Зміст', { hyperlink:true, headingStyleRange:'1-3' }),
+  pb(),
 );
 
-// ── CHAPTER 1: OVERVIEW ───────────────────────────────────────────────────────
+// =============================================================================
+// 1. ПРИЗНАЧЕННЯ КОНТРОЛЕРА
+// =============================================================================
 content.push(
-  h1('1. Загальний огляд'),
-  para('ModESP v4 — відкрита прошивка для промислових контролерів холодильного обладнання на базі ESP32. Вона замінює дорогі пропрієтарні контролери (Danfoss, Dixell) доступним рішенням із сучасною архітектурою та зручним веб-інтерфейсом.'),
-  spacer(80),
+  h1('1. Призначення контролера'),
 
-  h2('1.1. Основні можливості'),
-  bullet('Автоматичне охолодження — термостат з асиметричним диференціалом, захистом компресора'),
-  bullet('Розморозка — 3 типи (природна, електрична, гарячий газ), 7-фазна машина станів'),
-  bullet('Захист обладнання — 10 незалежних моніторів аварій, CompressorTracker'),
-  bullet('DataLogger — 6-канальне логування температур на LittleFS, SVG-графік, CSV-експорт'),
-  bullet('Веб-інтерфейс — бентo-дашборд, адаптивний дизайн, темна/світла тема, UA/EN'),
-  bullet('WiFi — режим STA (підключення до роутера), AP-точка доступу (ModESP-XXXX)'),
-  bullet('MQTT — публікація стану, отримання команд, Home Assistant Auto-Discovery, TLS'),
-  bullet('OTA — оновлення прошивки через веб-інтерфейс без кабелю'),
-  spacer(80),
+  p('ModESP v4 — це сучасний електронний контролер для управління холодильним обладнанням. Він замінює застарілі механічні та застарілі електронні регулятори (типу Danfoss ERC, Dixell XR) і забезпечує точне управління температурою, автоматичну розморозку та захист компресора.'),
+  sp(80),
+  p('Контролер підходить для холодильних камер (від +15°C до -40°C), морозильних вітрин, холодильних агрегатів з будь-яким типом розморозки. Налаштування виконується через зручний веб-інтерфейс зі смартфона або ноутбука — без спеціального обладнання та кабелів.'),
+  sp(80),
+  p('Усі налаштування зберігаються в постійній пам\'яті та не втрачаються при вимкненні живлення. Контролер дозволяє підключитись до WiFi-мережі та передавати дані в систему диспетчеризації або Home Assistant через MQTT.'),
+  sp(80),
 
-  h2('1.2. Технічні характеристики'),
-  buildTable(
-    ['Параметр', 'Значення'],
-    [
-      ['Мікроконтролер', 'ESP32-WROOM-32'],
-      ['Flash пам\'ять', '4 MB (NVS + LittleFS + прошивка)'],
-      ['Фреймворк', 'ESP-IDF v5.5'],
-      ['Веб-інтерфейс', 'Svelte 4 (76 KB gz)'],
-      ['Напруга живлення', '5V USB або 5–12V (залежить від плати)'],
-      ['Плати', 'ESP32-DevKit (GPIO) або KC868-A6 (I2C PCF8574)'],
-      ['Вільна RAM після boot', '>176 KB / 240 KB'],
-    ],
-    [3000, 6026],
-  ),
-  spacer(80),
+  h2('1.1. Що вміє контролер'),
+  bulletBold('Охолодження:', 'підтримує температуру з точністю ±0.5°C, асиметричний гістерезис, захист від частих включень компресора'),
+  bulletBold('Розморозка:', '3 типи (природна / електричний тен / гарячий газ), 4 методи запуску, 7-фазний цикл, ручне керування'),
+  bulletBold('Захист компресора:', '10 незалежних моніторів аварій: температурні, датчикові, циклові — з налаштуванням порогів'),
+  bulletBold('Нічний режим:', 'автоматичне підвищення уставки вночі для економії — за розкладом або через зовнішній контакт'),
+  bulletBold('Логування:', 'запис температур та подій у пам\'ять, графік за 7 днів, експорт CSV'),
+  bulletBold('Дистанційне керування:', 'веб-інтерфейс, MQTT, інтеграція з Home Assistant'),
+  sp(80),
 
-  h2('1.3. Плати-носії'),
-  para('Прошивка підтримує дві конфігурації обладнання:'),
-  spacer(40),
-  buildTable(
-    ['Плата', 'Реле', 'Входи', 'Особливість'],
-    [
-      ['ESP32-DevKit', '4× GPIO', '2× GPIO + 2× ADC', 'Пряме підключення до GPIO'],
-      ['KC868-A6', '6× I2C PCF8574', '6× I2C PCF8574', 'Промисловий корпус, DIN-рейка'],
-    ],
-    [2500, 1500, 2000, 3026],
-  ),
-  pageBreak(),
+  h2('1.2. Що потрібно для початку роботи'),
+  bullet('Контролер ModESP v4 (ESP32-WROOM-32 або KC868-A6)'),
+  bullet('Датчик температури камери: DS18B20 (цифровий, OneWire) або NTC-термістор'),
+  bullet('Смартфон або ноутбук з браузером (Chrome, Firefox, Safari)'),
+  bullet('WiFi-роутер у зоні досяжності (або робота без WiFi — через точку доступу)'),
+  sp(80),
+
+  warn('Перед підключенням:', 'Зніміть живлення з усього обладнання перед підключенням датчиків та реле. Підключення під напругою може пошкодити контролер або спричинити коротке замикання.'),
+  pb(),
 );
 
-// ── CHAPTER 2: FIRST START ────────────────────────────────────────────────────
+// =============================================================================
+// 2. ПЕРШИЙ ЗАПУСК ТА ПІДКЛЮЧЕННЯ
+// =============================================================================
 content.push(
-  h1('2. Перший запуск'),
+  h1('2. Перший запуск та підключення'),
 
-  h2('2.1. Підключення обладнання'),
-  para('Перед увімкненням контролера підключіть:'),
-  numbered('Датчик температури камери (DS18B20 або NTC) до відповідного входу'),
-  numbered('Реле компресора до виходу "Compressor"'),
-  numbered('За необхідності: датчик випарника, реле відтайки, вентилятори'),
-  numbered('Подайте живлення на контролер'),
-  spacer(80),
+  h2('2.1. Що відбувається при першому увімкненні'),
+  p('При першому увімкненні (або після скидання налаштувань) контролер не знає про вашу WiFi-мережу. Тому він автоматично створює власну точку доступу — власну WiFi-мережу з назвою ModESP-XXXX (де XXXX — унікальні символи вашого пристрою). Через цю мережу ви підключаєтесь і налаштовуєте контролер.'),
+  sp(80),
 
-  noteBox('ВАЖЛИВО:', 'Не підключайте та не відключайте датчики при увімкненому контролері. Завжди знімайте живлення перед зміною підключень.', C.warn, C.warnBord),
-  spacer(120),
+  h2('2.2. Підключення до веб-інтерфейсу через точку доступу'),
+  num('Увімкніть контролер. Зачекайте 5–10 секунд — він завантажується.'),
+  num('На смартфоні або ноутбуку відкрийте список WiFi-мереж.'),
+  num('Знайдіть мережу з назвою ModESP-XXXX та підключіться до неї.'),
+  num('Пароль для підключення: 12345678 (стандартний заводський).'),
+  num('Відкрийте браузер та перейдіть за адресою: http://192.168.4.1'),
+  num('Веб-інтерфейс контролера відкриється в браузері.'),
+  sp(80),
 
-  h2('2.2. Підключення до WiFi'),
-  para('При першому запуску або якщо збережена WiFi-мережа недоступна, контролер автоматично створює точку доступу:'),
-  spacer(40),
-  buildTable(
-    ['Параметр', 'Значення'],
-    [
-      ['Ім\'я мережі (SSID)', 'ModESP-XXXX (де XXXX — частина MAC-адреси)'],
-      ['Пароль', '12345678 (за замовчуванням)'],
-      ['IP-адреса', '192.168.4.1'],
-    ],
-    [3000, 6026],
-  ),
-  spacer(80),
+  info('Порада:', 'Якщо браузер не відкриває http://192.168.4.1 — перевірте, що ви підключені саме до мережі ModESP-XXXX, а не до домашньої мережі. Деякі смартфони автоматично повертаються до домашньої мережі.'),
+  sp(120),
 
-  para('Кроки підключення:'),
-  numbered('Підключіть смартфон або ноутбук до мережі "ModESP-XXXX"'),
-  numbered('Відкрийте браузер та перейдіть на http://192.168.4.1'),
-  numbered('В меню «Мережа» → «WiFi» введіть SSID та пароль вашої домашньої мережі'),
-  numbered('Натисніть «Зберегти» — контролер перезапуститься та підключиться до вашої мережі'),
-  numbered('Знайдіть IP-адресу контролера в адміністративній панелі роутера'),
-  spacer(80),
+  h2('2.3. Налаштування підключення до домашньої WiFi-мережі'),
+  p('Щоб мати постійний доступ до контролера в домашній мережі (і для роботи MQTT), підключіть його до вашого роутера:'),
+  sp(60),
+  num('У веб-інтерфейсі перейдіть до розділу «Мережа» (іконка WiFi у бічному меню).'),
+  num('У полі SSID введіть назву вашої WiFi-мережі (точно, з урахуванням регістру).'),
+  num('У полі «Пароль» введіть пароль мережі.'),
+  num('Натисніть кнопку «Зберегти». Контролер перезавантажиться.'),
+  num('Після перезавантаження контролер підключиться до вашої мережі. Знайдіть його IP-адресу в адмін-панелі роутера (зазвичай http://192.168.1.1 або http://192.168.0.1) — шукайте пристрій з іменем «modesp» або «ESP32».'),
+  num('Відкрийте браузер та перейдіть за знайденою IP-адресою.'),
+  sp(80),
 
-  noteBox('Порада:', 'Якщо підключення до домашньої мережі не відбулось протягом 30 секунд, контролер знову створить точку доступу ModESP-XXXX для нового налаштування.', C.info, C.infoBord),
-  spacer(120),
+  warn('Якщо підключення не відбулось:', 'Якщо контролер не зміг підключитись до вказаної мережі, він через 30 секунд знову створить точку доступу ModESP-XXXX. Підключіться до неї та перевірте правильність назви та пароля WiFi.'),
+  sp(120),
 
-  h2('2.3. Прив\'язка обладнання (Bindings)'),
-  para('Після підключення до WiFi необхідно вказати контролеру, яке обладнання підключено та до яких виходів/входів. Це робиться у розділі «Прив\'язки»:'),
-  numbered('Відкрийте веб-інтерфейс → меню «Обладнання»'),
-  numbered('Для кожного типу обладнання оберіть відповідний драйвер та вихід/вхід'),
-  numbered('Якщо використовується датчик DS18B20 — натисніть «Сканувати шину» для автоматичного виявлення'),
-  numbered('Натисніть «Зберегти та перезапустити» — контролер застосує нові прив\'язки'),
-  spacer(80),
-
-  noteBox('Примітка:', 'Після збереження в «Обладнання» контролер автоматично визначить доступні функції. Наприклад, якщо підключено реле відтайки — стануть доступними електрична розморозка та розморозка гарячим газом.', C.info, C.infoBord),
-  pageBreak(),
+  h2('2.4. Робота без WiFi'),
+  p('Контролер повністю функціонує без підключення до WiFi. У цьому режимі:'),
+  bullet('Точка доступу ModESP-XXXX завжди активна'),
+  bullet('Підключіться до неї для налаштування та моніторингу'),
+  bullet('MQTT та Home Assistant не працюватимуть (потрібна мережа)'),
+  bullet('Всі інші функції (охолодження, розморозка, захист, логування) працюють нормально'),
+  pb(),
 );
 
-// ── CHAPTER 3: WEB UI ─────────────────────────────────────────────────────────
+// =============================================================================
+// 3. ПІДКЛЮЧЕННЯ ОБЛАДНАННЯ (РОЗДІЛ «ОБЛАДНАННЯ»)
+// =============================================================================
 content.push(
-  h1('3. Веб-інтерфейс'),
+  h1('3. Підключення обладнання'),
 
-  h2('3.1. Структура інтерфейсу'),
-  para('Веб-інтерфейс відкривається у будь-якому сучасному браузері за IP-адресою контролера. Він складається з:'),
-  bullet('Бічна панель (Desktop) або нижні вкладки (Mobile) — навігація між розділами'),
-  bullet('Заголовок — назва пристрою, стан підключення, перемикачі теми та мови'),
-  bullet('Банер аварії — червоний банер зверху при активній аварії'),
-  spacer(80),
+  p('Після першого входу в веб-інтерфейс необхідно вказати контролеру, яке обладнання підключено та до яких фізичних виходів/входів. Це робиться у розділі «Обладнання» (іконка ланцюга в меню).'),
+  sp(60),
 
-  h2('3.2. Розділи меню'),
-  buildTable(
-    ['Розділ', 'Іконка', 'Вміст'],
+  h2('3.1. Що таке «прив\'язки» (Bindings)'),
+  p('Контролер підтримує різні конфігурації обладнання: різні датчики, реле на різних виходах. Прив\'язки — це таблиця відповідності між роллю (наприклад, «датчик камери») та фізичним пристроєм (наприклад, «DS18B20 на виході OUT1»). Без правильних прив\'язок контролер не знатиме, де підключений кожен датчик та реле.'),
+  sp(80),
+
+  h2('3.2. Ролі обладнання'),
+  p('Кожен елемент обладнання має свою роль у системі:'),
+  sp(60),
+  tbl(
+    ['Роль', 'Що це', 'Обов\'язкова?'],
     [
-      ['Dashboard', 'Будинок', 'Огляд стану: температура, компресор, захист, вентилятори'],
-      ['Холодильна камера', 'Сніжинка', 'Термостат: уставка, диференціал, вентиляція, нічний режим'],
-      ['Розморозка', 'Полум\'я', 'Налаштування та ручне керування розморозкою'],
-      ['Захист', 'Щит', 'Аварії, CompressorTracker, параметри захисту'],
-      ['Логи', 'Активність', 'Графік температур, журнал подій, CSV-експорт'],
-      ['Обладнання', 'Ланцюг', 'Призначення драйверів та виходів/входів (Bindings)'],
-      ['Мережа', 'WiFi', 'WiFi, MQTT-брокер налаштування'],
-      ['Система', 'Мікросхема', 'OTA-оновлення, час/NTP, скидання до заводських'],
+      ['air_temp', 'Датчик температури камери — головний датчик', 'Так'],
+      ['compressor', 'Реле компресора', 'Так'],
+      ['evap_temp', 'Датчик температури випарника', 'Рекомендовано'],
+      ['evap_fan', 'Реле вентилятора випарника', 'Ні'],
+      ['cond_fan', 'Реле вентилятора конденсатора', 'Ні'],
+      ['defrost_relay', 'Реле відтайки (тен або клапан ГГ)', 'Для розморозки типу 1 або 2'],
+      ['cond_temp', 'Датчик температури конденсатора', 'Ні'],
+      ['door_contact', 'Контакт датчика дверей', 'Ні'],
+      ['night_input', 'Зовнішній контакт нічного режиму', 'Ні'],
     ],
-    [2000, 1500, 5526],
+    [2200, 4500, 2326],
   ),
-  spacer(80),
+  sp(80),
 
-  h2('3.3. Dashboard'),
-  para('Головний екран відображає поточний стан системи у форматі bento-карток:'),
-  spacer(40),
-  bullet('Головна картка температури — велика поточна температура камери, уставка-повзунок, бейджі ОХОЛОДЖЕННЯ / РОЗМОРОЗКА / НІЧ'),
-  bullet('Рядок метрик — температура випарника та конденсатора (якщо підключені)'),
-  bullet('Захист — статус захисту (зелений = норма, червоний = аварія), код активної аварії'),
-  bullet('Сітка обладнання — стан компресора, реле відтайки, вентиляторів із кольоровими бейджами'),
-  spacer(80),
+  h2('3.3. Як призначити прив\'язки — покроково'),
+  num('Відкрийте розділ «Обладнання» в меню.'),
+  num('Ви побачите таблицю з двома секціями: «Датчики» та «Виконавчі пристрої».'),
+  num('Для кожного рядка оберіть зі списку відповідний драйвер (тип пристрою) та вихід/вхід.'),
+  num('Якщо використовується датчик DS18B20 (цифровий, OneWire), натисніть кнопку «Сканувати шину» — контролер знайде всі підключені датчики та покаже їх адреси.'),
+  num('Призначте знайдені датчики відповідним ролям (air_temp, evap_temp тощо).'),
+  num('Натисніть «Зберегти та перезапустити».'),
+  sp(80),
 
-  h2('3.4. Збереження налаштувань'),
-  para('Всі зміни в налаштуваннях зберігаються автоматично після введення нового значення. Перезапуск не потрібен (крім прив\'язок обладнання та WiFi-налаштувань).'),
-  spacer(80),
+  info('Результат збереження:', 'Після перезавантаження контролер автоматично визначить, яке обладнання доступне. Наприклад: якщо призначено defrost_relay — у розділі «Розморозка» з\'являться типи «Електрична» та «Гарячий газ». Якщо призначено evap_temp — з\'явиться можливість завершення розморозки по температурі.'),
+  sp(120),
 
-  h2('3.5. Адаптивний дизайн'),
-  para('Інтерфейс адаптований для роботи як на комп\'ютері, так і на смартфоні:'),
-  bullet('Desktop (≥768px): бічна панель, налаштування відкриті у вигляді груп'),
-  bullet('Mobile (<768px): нижня навігація, групи налаштувань згорнуті (розкриваються натисканням)'),
-  pageBreak(),
+  h2('3.4. Типи датчиків'),
+  tbl(
+    ['Тип датчика', 'Як підключати', 'Особливості'],
+    [
+      ['DS18B20 (OneWire)', 'Data → вхід OneWire, +3.3V або +5V, GND', 'Цифровий, висока точність ±0.5°C, можна підключити кілька на одну шину'],
+      ['NTC термістор', 'Між аналоговим входом та GND (дільник напруги)', 'Потребує правильного підбору B-коефіцієнта (вказується в налаштуваннях драйвера)'],
+    ],
+    [2200, 3500, 3326],
+  ),
+  sp(80),
+
+  warn('Увага DS18B20:', 'При скануванні шини кілька датчиків виглядають однаково. Щоб визначити який датчик де — підключайте їх по одному, скануйте та призначайте роль, потім підключайте наступний.'),
+  pb(),
 );
 
-// ── CHAPTER 4: THERMOSTAT ─────────────────────────────────────────────────────
+// =============================================================================
+// 4. НАЛАШТУВАННЯ ТЕРМОСТАТА
+// =============================================================================
 content.push(
-  h1('4. Налаштування термостата'),
+  h1('4. Налаштування термостата (розділ «Холодильна камера»)'),
 
-  h2('4.1. Принцип роботи'),
-  para('Термостат реалізує охолодження з асиметричним диференціалом:'),
-  bullet('Компресор ВМИКАЄТЬСЯ коли температура камери ≥ Уставка + Диференціал'),
-  bullet('Компресор ВИМИКАЄТЬСЯ коли температура камери ≤ Уставка'),
-  spacer(80),
+  p('Розділ «Холодильна камера» (іконка сніжинки) містить всі налаштування для регулювання температури. Тут ви встановлюєте бажану температуру, захист компресора від частих включень та режими вентиляторів.'),
+  sp(80),
 
-  para('Приклад: Уставка = -18°C, Диференціал = 2°C'),
-  bullet('Компресор вмикається при T ≥ -16°C'),
-  bullet('Компресор вимикається при T ≤ -18°C'),
-  bullet('Робочий діапазон: від -18°C до -16°C'),
-  spacer(80),
+  h2('4.1. Як працює термостат'),
+  p('Термостат ModESP v4 використовує асиметричний гістерезис — це принципова відмінність від класичних контролерів з симетричним диференціалом:'),
+  sp(60),
+  bullet('Компресор ВМИКАЄТЬСЯ, коли температура досягає: Уставка + Диференціал'),
+  bullet('Компресор ВИМИКАЄТЬСЯ, коли температура знижується до: Уставка'),
+  sp(80),
+  p('Тобто компресор завжди вимикається точно на уставці, а вмикається — коли температура виросла на величину диференціала вище уставки.'),
+  sp(80),
+  tbl(
+    ['Приклад', 'Уставка', 'Диференціал', 'Вмикання', 'Вимикання'],
+    [
+      ['Холодильна камера', '-18°C', '2°C', 'при -16°C', 'при -18°C'],
+      ['Холодильна вітрина', '+2°C', '3°C', 'при +5°C', 'при +2°C'],
+      ['Морозильна камера', '-22°C', '4°C', 'при -18°C', 'при -22°C'],
+    ],
+    [2600, 1500, 2000, 1600, 1326],
+  ),
+  sp(80),
 
   h2('4.2. Основні параметри'),
-  buildTable(
-    ['Параметр', 'За замовч.', 'Діапазон', 'Опис'],
-    [
-      ['Уставка температури', '4.0°C', '-50…+50°C', 'Цільова температура камери'],
-      ['Диференціал', '2.0°C', '0.5…10°C', 'Гістерезис вмикання компресора'],
-      ['Мін. пауза компресора', '3 хв', '3…10 хв', 'Мінімальний час вимкнення між циклами'],
-      ['Мін. час роботи', '2 хв', '2…10 хв', 'Мінімальний час роботи за цикл'],
-      ['Затримка після boot', '1 хв', '0…5 хв', 'Пауза після подачі живлення'],
-    ],
-    [2500, 1500, 2000, 3026],
-  ),
-  spacer(80),
+  sp(40),
 
-  noteBox('Захист компресора:', 'Навіть якщо уставки "мін. пауза" та "мін. час роботи" встановлено на мінімум, Equipment Manager апаратно захищає компресор: мінімальна пауза реле — 180 секунд, мінімальний час роботи реле — 120 секунд.', C.warn, C.warnBord),
-  spacer(120),
-
-  h2('4.3. Режими вентилятора випарника'),
-  buildTable(
-    ['Режим', 'Назва', 'Логіка роботи'],
-    [
-      ['0', 'Постійно', 'Вентилятор завжди увімкнений'],
-      ['1', 'З компресором (за замовч.)', 'Вентилятор увімкнений тільки коли працює компресор'],
-      ['2', 'За температурою випарника', 'Вентилятор вимикається при перевищенні "T зупинки", вмикається при зниженні на гістерезис. Потребує датчик випарника.'],
-    ],
-    [1000, 2500, 5526],
+  paramBlock(
+    'Уставка температури',
+    '4.0°C', '-50°C … +50°C (крок 0.5°C)',
+    'Цільова температура камери. Компресор вимикається, коли досягає цього значення. Встановлюйте згідно вимог до продуктів або технологічного процесу.'
   ),
-  spacer(80),
+  sp(80),
+  paramBlock(
+    'Диференціал',
+    '2.0°C', '0.5°C … 10°C (крок 0.1°C)',
+    'Гістерезис вмикання компресора. Якщо встановити занадто малий диференціал (наприклад 0.5°C) — компресор буде часто вмикатись і вимикатись, що значно скорочує його ресурс. Рекомендований діапазон для промислового обладнання: 2–4°C.'
+  ),
+  sp(80),
+  paramBlock(
+    'Мін. пауза компресора',
+    '3 хв', '3 … 10 хв',
+    'Мінімальний час вимкнення компресора між циклами. Після зупинки компресор НЕ вмикатиметься, навіть якщо температура досягла порогу вмикання. Це захист від підвищеного пускового струму при частих запусках. Для більшості компресорів достатньо 3 хв.'
+  ),
+  sp(80),
+  paramBlock(
+    'Мін. час роботи компресора',
+    '2 хв', '2 … 10 хв',
+    'Мінімальний час безперервної роботи компресора. Якщо температура впала до уставки раніше — компресор все одно допрацює до цього часу. Запобігає надто коротким циклам при великому холодопостачанні відносно теплового навантаження.'
+  ),
+  sp(80),
+  paramBlock(
+    'Затримка після подачі живлення',
+    '1 хв', '0 … 5 хв',
+    'Пауза перед першим запуском компресора після увімкнення контролера. Потрібна для вирівнювання тиску в системі після відключення. Для більшості компресорів достатньо 1–3 хв.'
+  ),
+  sp(80),
+
+  warn('Захист на рівні реле:', 'Окрім програмних обмежень, контролер апаратно забезпечує мінімальну паузу реле компресора 180 секунд та мінімальний час роботи 120 секунд. Це захист, який не можна вимкнути — він діє завжди.'),
+  sp(120),
+
+  h2('4.3. Налаштування вентилятора випарника'),
+  p('Параметр «Режим вентилятора випарника» визначає, коли працює вентилятор:'),
+  sp(60),
+  tbl(
+    ['Режим', 'Назва', 'Коли використовувати'],
+    [
+      ['0 — Постійно', 'Вентилятор увімкнений завжди', 'Для рівномірного розподілу температури. Використовується рідко — зайве навантаження.'],
+      ['1 — З компресором', 'Вентилятор увімкнений тільки коли працює компресор', 'Найпоширеніший режим для промислових холодильних камер.'],
+      ['2 — За T випарника', 'Вентилятор вимикається при високій T випарника', 'Для камер, де важливо не здувати лід з товарів під час зупинки компресора. Потребує датчик випарника.'],
+    ],
+    [1800, 2000, 5226],
+  ),
+  sp(80),
+  p('Якщо обрано режим 2, з\'являться додаткові параметри:'),
+  bullet('Температура зупинки вент. (за замовч. -25°C) — вентилятор ВИМИКАЄТЬСЯ при T випарника > цього порогу'),
+  bullet('Гістерезис (за замовч. 2°C) — вентилятор ВМИКАЄТЬСЯ при T випарника < (поріг − гістерезис)'),
+  sp(80),
 
   h2('4.4. Вентилятор конденсатора'),
-  para('Вентилятор конденсатора вмикається одночасно з компресором, а вимикається із затримкою (параметр "Затримка вимк. конд. вент.", за замовч. 30 с). Затримка необхідна для відведення залишкового тепла.'),
-  spacer(80),
+  p('Вентилятор конденсатора вмикається одночасно з компресором. Але після зупинки компресора — затримується на кілька секунд для відведення залишкового тепла від конденсатора. Цей час налаштовується параметром «Затримка вимк. вент. конденсатора» (за замовч. 30 с). Якщо вентилятор конденсатора не підключений або не прив\'язаний у розділі «Обладнання» — цей параметр не відображається.'),
+  sp(80),
 
-  h2('4.5. Нічний режим'),
-  para('Нічний режим підвищує уставку температури вночі (наприклад, у неробочий час) для економії електроенергії:'),
-  spacer(40),
-  buildTable(
-    ['Режим', 'Опис'],
+  h2('4.5. Нічний режим (Night Setback)'),
+  p('Нічний режим автоматично підвищує уставку температури в нічний час — коли теплове навантаження менше (двері не відкриваються, людей немає). Це дає економію електроенергії без шкоди для продуктів.'),
+  sp(60),
+  p('Параметр «Нічне зміщення» визначає, на скільки градусів підвищується уставка (за замовч. +3°C). Тобто якщо денна уставка -18°C, вночі контролер буде підтримувати -15°C.'),
+  sp(80),
+  tbl(
+    ['Режим активації', 'Опис', 'Що потрібно'],
     [
-      ['0 — Вимкнено', 'Нічний режим не активується'],
-      ['1 — За розкладом', 'Активується між "Година початку" та "Година кінця" (NTP обов\'язковий)'],
-      ['2 — Через DI', 'Активується зовнішнім дискретним входом (потрібна прив\'язка night_input)'],
-      ['3 — Вручну', 'Вмикається/вимикається вручну через веб-інтерфейс або MQTT'],
+      ['0 — Вимкнено', 'Нічний режим не використовується', '—'],
+      ['1 — За розкладом', 'Вмикається між заданими годинами (наприклад, з 22:00 до 06:00)', 'Налаштований NTP (інтернет-час)'],
+      ['2 — Через зовнішній контакт', 'Вмикається коли замкнений зовнішній дискретний вхід', 'Прив\'язаний night_input у «Обладнання»'],
+      ['3 — Вручну', 'Вмикається кнопкою в веб-інтерфейсі або командою MQTT', '—'],
     ],
-    [2500, 6526],
+    [2600, 3200, 3226],
   ),
-  spacer(80),
+  sp(80),
 
-  para('Параметр "Зміщення уставки вночі" (за замовч. 3°C) визначає, на скільки градусів підвищується уставка в нічному режимі.'),
-  spacer(80),
-
-  h2('4.6. Відображення під час розморозки'),
-  para('Під час активної розморозки температура в камері може тимчасово підвищуватись. Параметр "Відображення під час розморозки" визначає, що показувати:'),
-  buildTable(
-    ['Режим', 'Опис'],
+  h2('4.6. Відображення температури під час розморозки'),
+  p('Під час розморозки температура в камері тимчасово зростає. Параметр «Відображення під час розморозки» вказує, що показувати на дашборді:'),
+  tbl(
+    ['Варіант', 'Що показується', 'Коли використовувати'],
     [
-      ['0 — Реальна T', 'Показує фактичну температуру камери'],
-      ['1 — Заморожена T (за замовч.)', 'Показує температуру, зафіксовану перед початком розморозки'],
-      ['2 — Символ -d-', 'Показує символ розморозки (як у контролерах Danfoss)'],
+      ['0 — Реальна T', 'Фактична поточна температура', 'Якщо потрібен точний моніторинг навіть під час розморозки'],
+      ['1 — Заморожена T', 'Температура на момент початку розморозки', 'Зручно для персоналу — не лякає зростанням T (рекомендовано)'],
+      ['2 — Символ «-d-»', 'Замість температури показує «-d-»', 'Сумісно з поведінкою контролерів Danfoss'],
     ],
-    [2800, 6226],
+    [2200, 3000, 3826],
   ),
-  spacer(80),
+  sp(80),
 
-  h2('4.7. Safety Run (аварійна робота)'),
-  para('Якщо датчик камери несправний (обрив або коротке замикання), термостат переходить у режим циклічної роботи для збереження продуктів:'),
-  bullet('Компресор УВІМКНЕНИЙ протягом "Час ON" хвилин (за замовч. 20 хв)'),
-  bullet('Компресор ВИМКНЕНИЙ протягом "Час OFF" хвилин (за замовч. 10 хв)'),
-  bullet('Цикл повторюється до відновлення датчика'),
-  pageBreak(),
+  h2('4.7. Аварійна робота при несправному датчику (Safety Run)'),
+  p('Якщо датчик камери (air_temp) вийшов з ладу або відключився — контролер не може регулювати температуру. Щоб зберегти продукти, активується режим Safety Run: компресор працює циклічно без зворотного зв\'язку.'),
+  sp(60),
+  bullet('Час роботи ON (за замовч. 20 хв) — компресор увімкнений'),
+  bullet('Час паузи OFF (за замовч. 10 хв) — компресор вимкнений'),
+  bullet('Цикл повторюється автоматично до відновлення датчика'),
+  sp(60),
+  p('Підберіть значення ON/OFF виходячи з об\'єму камери та холодопродуктивності агрегату. Для великих камер збільшуйте час ON.'),
+  pb(),
 );
 
-// ── CHAPTER 5: DEFROST ────────────────────────────────────────────────────────
+// =============================================================================
+// 5. НАЛАШТУВАННЯ РОЗМОРОЗКИ
+// =============================================================================
 content.push(
-  h1('5. Налаштування розморозки'),
+  h1('5. Налаштування розморозки (розділ «Розморозка»)'),
 
-  h2('5.1. Типи розморозки'),
-  buildTable(
-    ['Тип', 'Назва', 'Принцип', 'Необхідне обладнання'],
+  p('Розділ «Розморозка» (іконка полум\'я) містить всі параметри циклу відтайки. Тут ви обираєте тип розморозки, її розклад, тривалість та умови завершення.'),
+  sp(80),
+
+  h2('5.1. Три типи розморозки'),
+  tbl(
+    ['Тип', 'Принцип роботи', 'Переваги', 'Обмеження'],
     [
-      ['0', 'Природна (за замовч.)', 'Компресор зупиняється, лід тане від тепла камери', 'Тільки компресор'],
-      ['1', 'Електрична (тен)', 'Нагрівальний тен розморожує випарник', 'Реле відтайки + тен'],
-      ['2', 'Гарячий газ', 'Гарячий фреон подається на випарник через клапан', 'Реле відтайки + клапан + компресор'],
+      ['0 — Природна\n(зупинка компресора)', 'Компресор зупиняється, лід тане від тепла камери. Реле відтайки не потрібне.', 'Просто, не потрібне додаткове обладнання', 'Повільно (30–60 хв), підвищення T в камері, тільки для позитивних температур'],
+      ['1 — Електрична\n(нагрівальний тен)', 'Компресор зупиняється, реле відтайки вмикає тен. Тен нагріває випарник.', 'Швидко (15–30 хв), надійно, добре для низькотемпературних камер', 'Потрібне реле відтайки та тен на випарнику'],
+      ['2 — Гарячий газ', 'Гарячий фреон з компресора через реверсивний клапан подається на випарник', 'Найшвидша, без зупинки компресора, мінімальне підвищення T в камері', 'Складна обв\'язка, потрібні реле та відповідна схема'],
     ],
-    [600, 2000, 3000, 3426],
+    [1800, 2800, 2000, 2426],
   ),
-  spacer(80),
+  sp(80),
 
-  noteBox('Примітка:', 'Електрична розморозка та розморозка гарячим газом доступні тільки якщо підключено реле відтайки (defrost_relay). Якщо реле не прив\'язане — доступна лише природна розморозка.', C.info, C.infoBord),
-  spacer(120),
+  info('Автовибір типу:', 'Якщо реле відтайки (defrost_relay) не призначене у розділі «Обладнання» — типи 1 та 2 будуть заблоковані. Доступна лише природна розморозка (тип 0).'),
+  sp(120),
 
-  h2('5.2. Методи ініціації розморозки'),
-  buildTable(
-    ['Метод', 'Опис'],
+  h2('5.2. Методи запуску розморозки'),
+  tbl(
+    ['Метод', 'Опис', 'Рекомендація'],
     [
-      ['0 — За таймером (за замовч.)', 'Запуск через кожні N годин (налаштовується параметром "Інтервал")'],
-      ['1 — За температурою', 'Запуск коли T випарника < "Поріг demand" (потрібен датчик випарника)'],
-      ['2 — Комбінований', 'Перший з: таймер АБО температура (потрібен датчик випарника)'],
-      ['3 — Вимкнено', 'Тільки ручний запуск через веб-інтерфейс або MQTT'],
+      ['0 — За таймером', 'Запуск через кожні N годин (реальний час або час роботи компресора)', 'Стандарт для більшості об\'єктів'],
+      ['1 — За температурою випарника', 'Запуск коли T випарника нижче заданого порогу (сильне обмерзання)', 'Для камер з нерівномірним навантаженням'],
+      ['2 — Комбінований', 'Перший з: таймер АБО температура — залежно від того, що настане раніше', 'Найгнучкіший варіант'],
+      ['3 — Вимкнено', 'Автоматичних запусків немає. Тільки ручний запуск через веб-інтерфейс', 'Для особливих об\'єктів або тестування'],
     ],
-    [2800, 6226],
+    [2200, 3500, 3326],
   ),
-  spacer(80),
+  sp(80),
 
-  h2('5.3. Ручне керування розморозкою'),
-  para('На сторінці «Розморозка» → картка «Стан» доступні кнопки ручного керування:'),
-  bullet('Кнопка "Запустити розморозку" — негайно запускає цикл розморозки'),
-  bullet('Кнопка "Зупинити розморозку" — негайно перериває активний цикл'),
-  spacer(80),
+  h2('5.3. Режим лічильника інтервалу'),
+  p('Параметр «Лічильник інтервалу» визначає, який час відраховується між розморозками:'),
+  bullet('Реальний час — таймер тікає завжди, незалежно від стану компресора. Наприклад, кожні 8 годин за календарем.'),
+  bullet('Час роботи компресора — таймер тікає тільки коли компресор працює. Зручно для камер з нерівномірним навантаженням — розморозка відбувається після накопичення певного наробітку.'),
+  sp(80),
 
-  noteBox('Важливо:', 'При ручній зупинці розморозка завершується одразу, без проходження фаз дренажу та охолодження після розморозки (DRIP/FAD). Використовуйте ручну зупинку тільки у разі потреби.', C.warn, C.warnBord),
-  spacer(120),
+  h2('5.4. Параметри розморозки — детально'),
+  sp(40),
 
-  h2('5.4. Основні параметри розморозки'),
-  buildTable(
-    ['Параметр', 'За замовч.', 'Діапазон', 'Опис'],
+  paramBlock(
+    'Інтервал між розморозками',
+    '8 год', '1 … 99 год',
+    'Як часто запускати розморозку. Для більшості торговельних холодильних камер достатньо 2–4 розморозки на добу (кожні 6–12 год). При сильному обмерзанні (відкриті двері, велика вологість) — зменшуйте інтервал.'
+  ),
+  sp(80),
+  paramBlock(
+    'Максимальна тривалість',
+    '30 хв', '5 … 120 хв',
+    'Безпечне обмеження тривалості активної фази розморозки. Якщо за цей час температура випарника не досягла порогу завершення — розморозка все одно зупиниться. Встановлюйте з запасом 30–50% відносно нормальної тривалості. Якщо розморозки постійно завершуються по таймеру — перевірте нагрівач або датчик.'
+  ),
+  sp(80),
+  paramBlock(
+    'Температура завершення (T кінця)',
+    '+8.0°C', '-5°C … +30°C',
+    'Температура випарника, при досягненні якої активна фаза розморозки вважається завершеною (лід розтанув). Потребує датчик випарника. Для електричної розморозки зазвичай +5…+10°C. Якщо встановити занадто низьку — лід може не розтанути повністю.'
+  ),
+  sp(80),
+  paramBlock(
+    'Час дренажу (DRIP)',
+    '2 хв', '0 … 10 хв',
+    'Час після завершення нагріву, коли все обладнання вимкнене — вода стікає з випарника у лоток. Якщо дренаж поганий — збільшіть до 3–5 хв. Якщо системи дренажу немає — можна встановити 0.'
+  ),
+  sp(80),
+  paramBlock(
+    'Затримка вентилятора (FAD — Fan After Defrost)',
+    '2 хв', '0 … 10 хв',
+    'Після закінчення дренажу компресор і вентилятор конденсатора вмикаються для охолодження випарника, але вентилятор випарника ще НЕ вмикається. Це запобігає розносу залишкової вологи по камері. Вентилятор випарника вмикається або після закінчення цього часу, або коли T випарника знизиться до параметра «T завершення FAD».'
+  ),
+  sp(80),
+  paramBlock(
+    'Температура завершення FAD',
+    '-5.0°C', '-40°C … +10°C',
+    'Якщо T випарника знизилась до цього значення — FAD-фаза завершується достроково і вентилятор випарника вмикається. Захищає від запуску вентилятора з ще теплим випарником.'
+  ),
+  sp(80),
+
+  h2('5.5. Параметри для розморозки гарячим газом (Тип 2)'),
+  p('Ці параметри з\'являються лише при виборі типу 2. Вони керують підготовчими фазами циклу:'),
+  sp(60),
+  paramBlock(
+    'Час стабілізації тиску',
+    '1 хв', '0 … 10 хв',
+    'Перед відкриттям клапана гарячого газу компресор та конденсаторний вентилятор працюють деякий час для стабілізації тиску в системі. Це запобігає гідравлічному удару при відкритті клапана.'
+  ),
+  sp(80),
+  paramBlock(
+    'Затримка клапана',
+    '3 с', '1 … 30 с',
+    'Короткий час між моментом готовності та відкриттям клапана ГГ. Зазвичай достатньо 2–5 секунд.'
+  ),
+  sp(80),
+  paramBlock(
+    'Час вирівнювання тиску (EQUALIZE)',
+    '2 хв', '0 … 10 хв',
+    'Після закриття клапана — пауза для вирівнювання тиску в системі перед наступним запуском у нормальний режим. Занадто коротка пауза може призвести до підвищеного навантаження на компресор при пуску.'
+  ),
+  sp(80),
+
+  h2('5.6. Ручне керування розморозкою'),
+  p('На сторінці «Розморозка» у картці «Стан» є перемикач для ручного керування:'),
+  bullet('Увімкнути — запускає розморозку негайно, незалежно від таймера'),
+  bullet('Вимкнути — зупиняє активну розморозку негайно (без проходження фаз дренажу та FAD)'),
+  sp(60),
+  p('Ручний запуск зручний для перевірки роботи системи або позачергового циклу при сильному обмерзанні. Рахунок інтервального таймера після ручного запуску скидається.'),
+  sp(80),
+
+  h2('5.7. Моніторинг стану розморозки'),
+  p('Картка «Стан» показує:'),
+  tbl(
+    ['Показник', 'Що означає'],
     [
-      ['Інтервал', '8 год', '1…99 год', 'Час між розморозками'],
-      ['Режим лічильника', 'Реальний час', '—', '"Реальний час" або "Час роботи компресора"'],
-      ['Макс. тривалість', '30 хв', '5…120 хв', 'Безпекове обмеження тривалості активної фази'],
-      ['T завершення', '8.0°C', '-5…30°C', 'Температура випарника для завершення (потрібен датчик)'],
-      ['Час дренажу', '2 хв', '0…10 хв', 'Час стікання води після розморозки'],
-      ['Затримка вент.', '2 хв', '0…10 хв', 'Час охолодження випарника перед вмиканням вентилятора'],
-      ['T охолодження FAD', '-5.0°C', '-40…10°C', 'T випарника для завершення фази охолодження'],
+      ['Фаза', 'Поточний стан: idle / active / drip / fad / stabilize / valve_open / equalize'],
+      ['Таймер фази', 'Скільки часу минуло з початку поточної фази'],
+      ['Таймер до наступної', 'Скільки часу залишилось до наступної планової розморозки'],
+      ['Кількість відтайок', 'Загальна кількість виконаних розморозок (з моменту запуску)'],
     ],
-    [2500, 1500, 1800, 3226],
+    [2600, 6426],
   ),
-  spacer(80),
+  sp(80),
 
-  h2('5.5. Параметри розморозки гарячим газом (Тип 2)'),
-  buildTable(
-    ['Параметр', 'За замовч.', 'Опис'],
-    [
-      ['Час стабілізації', '1 хв', 'Час роботи компресора перед відкриттям клапана'],
-      ['Затримка клапана', '3 с', 'Затримка між вмиканням компресора та відкриттям клапана'],
-      ['Час вирівнювання тиску', '2 хв', 'Пауза після закриття клапана для вирівнювання тиску'],
-    ],
-    [2800, 1500, 4726],
-  ),
-  spacer(80),
-
-  h2('5.6. Стан обладнання по фазах'),
-  para('Природна та електрична розморозка (Тип 0 та 1):'),
-  buildTable(
-    ['Фаза', 'Компресор', 'Реле відтайки', 'Вент. вип.', 'Вент. конд.'],
-    [
-      ['ACTIVE (нагрів)', 'OFF', 'OFF / ON*', 'OFF', 'OFF'],
-      ['DRIP (дренаж)', 'OFF', 'OFF', 'OFF', 'OFF'],
-      ['FAD (охолодження)', 'ON', 'OFF', 'OFF', 'ON'],
-    ],
-    [1800, 1800, 2000, 1800, 1626],
-  ),
-  para('*Тип 0 — OFF; Тип 1 — ON (тен).'),
-  spacer(80),
-  para('Розморозка гарячим газом (Тип 2):'),
-  buildTable(
-    ['Фаза', 'Компресор', 'Реле відтайки', 'Вент. вип.', 'Вент. конд.'],
-    [
-      ['STABILIZE', 'ON', 'OFF', 'OFF', 'ON'],
-      ['VALVE_OPEN', 'ON', 'ON', 'OFF', 'ON'],
-      ['ACTIVE (нагрів)', 'ON', 'ON', 'OFF', 'OFF'],
-      ['EQUALIZE', 'OFF', 'OFF', 'OFF', 'OFF'],
-      ['DRIP (дренаж)', 'OFF', 'OFF', 'OFF', 'OFF'],
-      ['FAD (охолодження)', 'ON', 'OFF', 'OFF', 'ON'],
-    ],
-    [1800, 1800, 2000, 1800, 1626],
-  ),
-  pageBreak(),
+  warn('Послідовні завершення по таймеру:', 'Якщо розморозка 3 рази поспіль завершилась по таймеру (а не по T випарника) — це сигнал можливої несправності: вийшов з ладу нагрівальний тен, несправний датчик випарника, або встановлено занадто малий «Макс. тривалість». Перевірте систему.'),
+  pb(),
 );
 
-// ── CHAPTER 6: PROTECTION ─────────────────────────────────────────────────────
+// =============================================================================
+// 6. СИСТЕМА ЗАХИСТУ ТА АВАРІЇ
+// =============================================================================
 content.push(
-  h1('6. Система захисту та аварій'),
+  h1('6. Система захисту та аварії (розділ «Захист»)'),
 
-  h2('6.1. Огляд'),
-  para('Protection — незалежна система моніторингу, яка відстежує стан обладнання та генерує аварійні сигнали. Поточна версія резервує можливість блокування обладнання (protection.lockout), але не зупиняє його автоматично — лише сигналізує.'),
-  spacer(80),
+  p('Розділ «Захист» (іконка щита) містить 10 незалежних моніторів аварій. Кожен монітор відстежує свій параметр і при відхиленні генерує аварійний сигнал. На дашборді при активній аварії з\'являється червоний банер з кодом аварії.'),
+  sp(80),
 
-  h2('6.2. Аварії температури'),
-  buildTable(
-    ['Аварія', 'Код', 'Умова', 'Затримка', 'Авто-скидання'],
-    [
-      ['Висока температура (HAL)', 'high_temp', 'T_камери ≥ HAL-межа', 'Налаштовується (30 хв)', 'Так (при T < межі)'],
-      ['Низька температура (LAL)', 'low_temp', 'T_камери ≤ LAL-межа', 'Налаштовується (30 хв)', 'Так (при T > межі)'],
-    ],
-    [2500, 1400, 2200, 2000, 1926],
+  h2('6.1. Температурні аварії'),
+  sp(60),
+  paramBlock(
+    'Аварія «Висока температура» (HAL — High Alarm Limit) — код: high_temp',
+    'Межа: +12.0°C, затримка: 30 хв', 'Межа: -50…+99°C; затримка: 0…120 хв',
+    'Спрацьовує, коли температура камери перевищує встановлену межу протягом заданого часу. Затримка потрібна, щоб короткочасне відкриття дверей не викликало помилкову аварію. Аварія автоматично знімається, коли температура повертається в норму. ВАЖЛИВО: під час розморозки та деякий час після неї ця аварія заблокована.'
   ),
-  spacer(80),
-
-  noteBox('Блокування під час розморозки:', 'Аварія "Висока температура" автоматично блокується під час активної розморозки та протягом "Блокування після розморозки" хвилин після її завершення. Це запобігає помилковим спрацьовуванням.', C.info, C.infoBord),
-  spacer(120),
-
-  h2('6.3. Аварії датчиків та дверей'),
-  buildTable(
-    ['Аварія', 'Код', 'Умова', 'Авто-скидання'],
-    [
-      ['Обрив датчика камери', 'err1', 'Датчик не відповідає / поза діапазоном', 'Так (при відновленні)'],
-      ['Обрив датчика випарника', 'err2', 'Датчик не відповідає / поза діапазоном', 'Так (при відновленні)'],
-      ['Двері відкриті', 'door', 'Дискретний вхід дверей активний > N хвилин', 'Так (при закритті)'],
-    ],
-    [2500, 1200, 2800, 2526],
+  sp(80),
+  paramBlock(
+    'Аварія «Низька температура» (LAL — Low Alarm Limit) — код: low_temp',
+    'Межа: -35.0°C, затримка: 30 хв', 'Межа: -99…+50°C; затримка: 0…120 хв',
+    'Спрацьовує, коли температура занадто низька. Може вказувати на несправність термостата або дуже сильне охолодження. Ця аварія NOT блокується під час розморозки — захист від переохолодження завжди активний.'
   ),
-  spacer(80),
+  sp(80),
 
-  h2('6.4. Аварії компресора (CompressorTracker)'),
-  buildTable(
-    ['Аварія', 'Код', 'Умова'],
+  h2('6.2. Аварії датчиків та дверей'),
+  tbl(
+    ['Аварія', 'Код', 'Причина', 'Що робити'],
     [
-      ['Короткі цикли', 'short_cycle', '3 послідовних цикли коротших за "Мін. цикл" секунд'],
-      ['Часті запуски', 'rapid_cycle', 'Більше N запусків за останню годину'],
-      ['Безперервна робота', 'continuous_run', 'Компресор працює > N годин без зупинки'],
-      ['Збій зниження T', 'pulldown', 'Після N хв роботи температура не знизилась на потрібну величину'],
-      ['Швидке зростання T', 'rate_rise', 'EWMA швидкості росту T > порогу протягом N хвилин'],
+      ['Несправність датчика камери', 'err1', 'Обрив, коротке замикання або значення поза діапазоном', 'Перевірте підключення та стан датчика. Контролер перейде у режим Safety Run.'],
+      ['Несправність датчика випарника', 'err2', 'Те саме для датчика evap_temp', 'Перевірте підключення. Розморозка перейде в завершення по таймеру.'],
+      ['Двері відкриті', 'door', 'Контакт дверей замкнений довше заданого часу', 'Перевірте двері та стан кінцевика. Збільшіть затримку, якщо персонал часто залишає двері відкритими.'],
     ],
-    [2500, 1600, 4926],
+    [2600, 1200, 2800, 2426],
   ),
-  spacer(80),
+  sp(80),
 
-  h2('6.5. Пріоритет аварій'),
-  para('Якщо кілька аварій активні одночасно, відображається код з найвищим пріоритетом:'),
-  spacer(40),
-  paraRuns([new TextRun({ text: 'err1 > rate_rise > high_temp > pulldown > short_cycle > rapid_cycle > low_temp > continuous_run > err2 > door', font: 'Courier New', size: 20, color: C.accent })]),
-  spacer(80),
+  h2('6.3. Аварії компресора — докладно'),
+  p('Ці аварії відстежують режим роботи компресора. Вони допомагають виявити несправності на ранній стадії — до того, як станеться дорогостоячий збій.'),
+  sp(80),
 
-  h2('6.6. Параметри захисту температури'),
-  buildTable(
-    ['Параметр', 'За замовч.', 'Діапазон', 'Опис'],
+  paramBlock(
+    'Короткі цикли — код: short_cycle',
+    'Мін. цикл: 120 с', '30 … 600 с',
+    'Якщо 3 цикли поспіль компресор працював менше ніж «Мін. цикл» секунд — спрацьовує ця аварія. Короткі цикли (менше 2 хв) сильно зношують компресор. Причини: занадто малий диференціал термостата, несправний контактор, проблеми з тиском. Збільшіть мін. пауза та мін. час роботи у налаштуваннях термостата.'
+  ),
+  sp(80),
+  paramBlock(
+    'Часті запуски — код: rapid_cycle',
+    'Макс. запусків: 12 за год', '4 … 30 запусків/год',
+    'Контролер підраховує кількість запусків компресора за останню годину. Якщо їх більше за допустиме — аварія. Норма для промислового компресора: 8–12 запусків/год. Якщо більше — перевірте діаметр шпильок, тиск всмоктування, теплоізоляцію.'
+  ),
+  sp(80),
+  paramBlock(
+    'Безперервна робота — код: continuous_run',
+    'Макс.: 360 хв', '60 … 720 хв',
+    'Якщо компресор безперервно працює довше заданого часу — аварія. Це може вказувати на недостатню холодопродуктивність, несправність регулятора тиску, або порушення герметичності. Аварія знімається автоматично при вимкненні компресора.'
+  ),
+  sp(80),
+  paramBlock(
+    'Збій зниження температури (Pulldown) — код: pulldown',
+    'Таймаут: 60 хв, мін. зниження: 2.0°C', 'Таймаут: 15…240 хв; зниження: 0.5…10°C',
+    'Після запуску компресора контролер очікує, що за «Таймаут» хвилин температура знизиться не менш ніж на «Мін. зниження». Якщо цього не сталось — аварія. Ознака слабкого холодопостачання, витоку фреону або несправності клапана.'
+  ),
+  sp(80),
+  paramBlock(
+    'Швидке зростання температури — код: rate_rise',
+    'Макс. швидкість: 0.5°C/хв, тривалість: 5 хв', 'Швидкість: 0.1…2.0°C/хв; тривалість: 1…30 хв',
+    'Якщо температура в камері зростає швидше заданої швидкості протягом заданого часу ПРИ ПРАЦЮЮЧОМУ КОМПРЕСОРІ — аварія. Це найпоширеніша ознака несправності системи охолодження: клапан не закривається, компресор не справляється, або втрата холодоносія. Ця аварія блокується під час розморозки та деякий час після неї.'
+  ),
+  sp(80),
+
+  h2('6.4. Пріоритет відображення аварій'),
+  p('Якщо одночасно активні кілька аварій — на дашборді показується найважливіша. Пріоритет від найвищого до найнижчого:'),
+  sp(40),
+  new Paragraph({
+    children: [new TextRun({ text:'err1 → rate_rise → high_temp → pulldown → short_cycle → rapid_cycle → low_temp → continuous_run → err2 → door', font:'Courier New', size:20, color:C.navy })],
+    spacing: { after:120, before:80 },
+  }),
+  sp(40),
+  p('Тобто несправність датчика камери (err1) — найкритичніша. Аварія дверей — найменш критична.'),
+  sp(80),
+
+  h2('6.5. Ручне та автоматичне скидання аварій'),
+  p('Параметр «Ручне скидання аварій»:'),
+  bullet('Вимкнено (за замовч.) — аварія знімається автоматично, коли умова зникає. Зручно для повністю автоматизованих об\'єктів без постійного персоналу.'),
+  bullet('Увімкнено — аварія залишається активною, навіть якщо умова зникла. Скинути можна лише кнопкою «Скинути всі аварії» або командою MQTT. Використовуйте, якщо потрібна документація кожного аварійного випадку.'),
+  sp(80),
+
+  h2('6.6. Блокування після розморозки'),
+  p('Температурні аварії (high_temp та rate_rise) автоматично блокуються під час активної розморозки та ще деякий час після неї. Параметр «Блокування після розморозки» (за замовч. 30 хв) визначає, скільки хвилин діє цей захист після завершення відтайки.'),
+  sp(60),
+  p('Якщо у вас виникає аварія «Висока температура» одразу після розморозки — збільшіть цей параметр до 45–60 хвилин.'),
+  sp(80),
+
+  h2('6.7. Показники роботи компресора (CompressorTracker)'),
+  p('У розділі «Захист» також відображається діагностика компресора в реальному часі:'),
+  tbl(
+    ['Показник', 'Що означає', 'Нормальне значення'],
     [
-      ['HAL-межа (висока T)', '12.0°C', '-50…99°C', 'Поріг аварії високої температури'],
-      ['LAL-межа (низька T)', '-35.0°C', '-99…50°C', 'Поріг аварії низької температури'],
-      ['Затримка HAL', '30 хв', '0…120 хв', 'Затримка перед спрацьовуванням аварії HAL'],
-      ['Затримка LAL', '30 хв', '0…120 хв', 'Затримка перед спрацьовуванням аварії LAL'],
-      ['Затримка дверей', '5 хв', '0…60 хв', 'Затримка аварії відкритих дверей'],
-      ['Ручне скидання', 'Вимкнено', 'true/false', 'Якщо увімкнено — аварії потребують ручного скидання'],
-      ['Блокування після розморозки', '30 хв', '0…120 хв', 'Час блокування HAL після розморозки'],
+      ['Запусків за годину', 'Кількість включень компресора за останню годину', 'Зазвичай 4–12'],
+      ['Duty cycle (%)', 'Відсоток часу роботи компресора за останню годину', 'Залежить від навантаження, зазвичай 40–80%'],
+      ['Час поточної роботи', 'Скільки хвилин компресор безперервно увімкнений зараз', 'Від 2 до кількох годин'],
+      ['Попередній цикл ON', 'Тривалість попереднього циклу роботи', 'Має бути > мін. часу роботи'],
+      ['Попередній цикл OFF', 'Тривалість попередньої паузи', 'Має бути > мін. паузи'],
+      ['Мотогодини', 'Кумулятивна напрацювання компресора', 'Записується, не скидається'],
     ],
-    [2800, 1500, 1800, 2926],
+    [2800, 3200, 3026],
   ),
-  spacer(80),
-
-  h2('6.7. Параметри захисту компресора'),
-  buildTable(
-    ['Параметр', 'За замовч.', 'Діапазон', 'Опис'],
-    [
-      ['Мін. цикл роботи', '120 с', '30…600 с', 'Мінімальна допустима тривалість циклу ON'],
-      ['Макс. запусків/год', '12', '4…30', 'Максимальна кількість запусків за годину'],
-      ['Макс. безперервна робота', '360 хв', '60…720 хв', 'Максимальна безперервна робота компресора'],
-      ['Таймаут зниження T', '60 хв', '15…240 хв', 'Час після запуску для оцінки ефективності'],
-      ['Мін. зниження T', '2.0°C', '0.5…10°C', 'Необхідне зниження температури за таймаут'],
-      ['Макс. швидкість зростання T', '0.5°C/хв', '0.1…2.0°C/хв', 'Поріг rate-of-change аварії'],
-      ['Тривалість rate alarm', '5 хв', '1…30 хв', 'Час перевищення rate для спрацьовування аварії'],
-    ],
-    [2800, 1500, 1800, 2926],
-  ),
-  spacer(80),
-
-  h2('6.8. Скидання аварій'),
-  para('Якщо "Ручне скидання" = Вимкнено (за замовч.): аварії скидаються автоматично при поверненні до норми.'),
-  para('Якщо "Ручне скидання" = Увімкнено: аварії залишаються активними поки не буде натиснута кнопка "Скинути всі аварії" у веб-інтерфейсі або не отримана команда через MQTT.'),
-  pageBreak(),
+  pb(),
 );
 
-// ── CHAPTER 7: DATALOGGER ─────────────────────────────────────────────────────
+// =============================================================================
+// 7. РОЗДІЛ «ЛОГИ» — ЖУРНАЛ ТА ГРАФІКИ
+// =============================================================================
 content.push(
-  h1('7. DataLogger — логування та графіки'),
+  h1('7. Журнал та графіки (розділ «Логи»)'),
 
-  h2('7.1. Огляд'),
-  para('Розділ «Логи» записує до 6 каналів температури на вбудовану flash-пам\'ять (LittleFS) та веде журнал подій. Дані доступні через веб-інтерфейс у вигляді інтерактивного SVG-графіку або для завантаження як CSV-файл.'),
-  spacer(80),
+  p('Розділ «Логи» (іконка активності) записує температури та події у вбудовану пам\'ять контролера та дозволяє переглянути їх у вигляді графіку або завантажити для аналізу.'),
+  sp(80),
 
-  h2('7.2. Канали логування'),
-  buildTable(
-    ['Канал', 'Джерело', 'Увімкнення'],
+  h2('7.1. Що записується автоматично'),
+  p('Контролер безперервно веде два журнали:'),
+  sp(60),
+  bulletBold('Температури:', 'кожні 10 хвилин (налаштовується) фіксуються значення до 6 каналів: камера, випарник, конденсатор, уставка. Зберігається до 7 днів.'),
+  bulletBold('Події:', 'кожна важлива зміна записується миттєво: компресор увімкнено/вимкнено, розморозка почалась/завершилась, аварія виникла/знята, двері відкрито/закрито, живлення подано.'),
+  sp(80),
+
+  h2('7.2. Читання графіка'),
+  p('Графік відображає температури у часі у вигляді ліній. На фоні графіка кольоровими зонами позначені:'),
+  bullet('Синя зона — компресор увімкнений (охолодження)'),
+  bullet('Помаранчева зона — активна розморозка'),
+  sp(80),
+  p('Як керувати графіком:'),
+  num('Оберіть часовий діапазон: 24 год або 48 год (кнопки над графіком).'),
+  num('Увімкніть/вимкніть канали прапорцями під графіком (температура камери, випарника, уставка тощо).'),
+  num('Наведіть курсор на будь-яку точку — з\'явиться підказка з точним значенням та часом.'),
+  sp(80),
+  p('Що шукати на графіку при діагностиці:'),
+  tbl(
+    ['Симптом на графіку', 'Можлива причина'],
     [
-      ['Температура камери (air)', 'Датчик камери', 'Завжди (якщо DataLogger увімкнений)'],
-      ['Температура випарника (evap)', 'Датчик випарника', 'Параметр "Логувати evap"'],
-      ['Температура конденсатора (cond)', 'Датчик конденсатора', 'Параметр "Логувати cond"'],
-      ['Уставка (setpoint)', 'Параметр термостата', 'Параметр "Логувати setpoint"'],
-      ['Вологість (humidity)', 'Майбутнє розширення', 'Параметр "Логувати humidity"'],
+      ['Температура не знижується після ввімкнення компресора', 'Витік фреону, заблокований клапан, несправний компресор'],
+      ['Температура різко росте в певний час', 'Відкриття дверей, тепловий викид, вимкнення живлення'],
+      ['Розморозки занадто довгі (широкі помаранчеві зони)', 'Несправний тен, погана термоізоляція, засмічений дренаж'],
+      ['Компресор майже не вимикається (суцільна синя зона)', 'Недостатня холодопродуктивність, велике теплове навантаження'],
+      ['Різкі стрибки температури', 'Несправний датчик або погане теплообмінне контактування'],
     ],
-    [2500, 2500, 4026],
+    [4000, 5026],
   ),
-  spacer(80),
+  sp(80),
 
   h2('7.3. Журнал подій'),
-  para('Система автоматично записує ключові події:'),
-  bullet('Компресор увімкнено/вимкнено'),
-  bullet('Розморозка почалась/завершилась'),
-  bullet('Аварія висока T / низька T / знята аварія'),
-  bullet('Двері відкрито/закрито'),
-  bullet('Живлення подано (power_on)'),
-  spacer(80),
+  p('Під графіком знаходиться розгортаємий розділ «Події» — список останніх подій з часовими мітками. Корисний для розслідування аварій:'),
+  bullet('Коли точно виникла аварія?'),
+  bullet('Чи був компресор ввімкнений у цей момент?'),
+  bullet('Чи передувало аварії відкриття дверей?'),
+  bullet('Скільки часу тривала розморозка?'),
+  sp(80),
 
-  h2('7.4. Параметри DataLogger'),
-  buildTable(
+  h2('7.4. Налаштування логування'),
+  tbl(
     ['Параметр', 'За замовч.', 'Опис'],
     [
-      ['Увімкнено', 'Так', 'Глобальне вмикання/вимикання логування'],
-      ['Зберігання (год)', '168 год (7 днів)', 'Скільки годин зберігати дані'],
-      ['Інтервал вибірки', '600 с (10 хв)', 'Частота записів температури'],
+      ['Увімкнено', 'Так', 'Глобальне вмикання/вимикання. Вимкнення логування не видаляє наявні дані.'],
+      ['Термін зберігання', '168 год (7 днів)', 'Старіші записи видаляються автоматично. Зменшіть, якщо не вистачає пам\'яті.'],
+      ['Інтервал запису', '600 с (10 хв)', 'Як часто записувати температури. Значення 300 с (5 хв) дає більш детальний графік але займає вдвічі більше пам\'яті.'],
+      ['Логувати випарник', 'Так', 'Записувати температуру випарника (потрібен датчик evap_temp).'],
+      ['Логувати конденсатор', 'Так', 'Записувати температуру конденсатора (потрібен датчик cond_temp).'],
+      ['Логувати уставку', 'Так', 'Записувати значення уставки. Корисно при використанні нічного режиму.'],
     ],
-    [2800, 1800, 4426],
+    [2600, 1800, 4626],
   ),
-  spacer(80),
+  sp(80),
 
-  h2('7.5. Робота з графіком'),
-  para('Графік відкривається у розділі «Логи»:'),
-  numbered('Оберіть часовий діапазон (24 год, 48 год або більше)'),
-  numbered('Перемикайте видимість каналів прапорцями під графіком'),
-  numbered('Наведіть курсор на лінію для перегляду значення у конкретний момент часу'),
-  numbered('Зони компресора (синій) та розморозки (помаранчевий) показані на фоні графіку'),
-  spacer(80),
-
-  h2('7.6. Експорт CSV'),
-  para('Кнопка "Завантажити CSV" формує файл безпосередньо у браузері (без навантаження на ESP32). Файл містить стовпці: timestamp, temperature_air, temperature_evap, setpoint, та окремий розділ events.'),
-  pageBreak(),
+  h2('7.5. Експорт CSV'),
+  p('Кнопка «Завантажити CSV» формує та завантажує файл прямо у браузері. Файл можна відкрити у Microsoft Excel або Google Sheets для аналізу. Формат: стовпці timestamp, температури, окремий розділ з переліком подій.'),
+  sp(60),
+  p('Рекомендується завантажувати CSV перед тривалим обслуговуванням або при виникненні спірних ситуацій (рекламацій).'),
+  pb(),
 );
 
-// ── CHAPTER 8: NETWORK ────────────────────────────────────────────────────────
+// =============================================================================
+// 8. МЕРЕЖА ТА MQTT
+// =============================================================================
 content.push(
-  h1('8. Мережеві налаштування'),
+  h1('8. Мережеві налаштування (розділ «Мережа»)'),
 
-  h2('8.1. WiFi'),
-  para('Розділ Мережа → WiFi дозволяє налаштувати підключення до домашньої або офісної мережі:'),
-  buildTable(
-    ['Поле', 'Опис'],
+  h2('8.1. WiFi — підключення до мережі'),
+  p('Після першого налаштування (розділ 2) параметри WiFi можна змінити у будь-який час:'),
+  num('Перейдіть до розділу «Мережа».'),
+  num('У секції «WiFi» вкажіть нову назву мережі та пароль.'),
+  num('Натисніть «Зберегти». Контролер перезавантажиться і підключиться до нової мережі.'),
+  sp(80),
+
+  info('WiFi Watchdog:', 'Якщо підключення до WiFi перервалось і не відновилось протягом 10 хвилин — контролер автоматично перезавантажується для відновлення з\'єднання. Всі параметри та журнали зберігаються.'),
+  sp(120),
+
+  h2('8.2. MQTT — для системи диспетчеризації'),
+  p('MQTT — це протокол для передачі даних між пристроями. Якщо у вас є система диспетчеризації (Home Assistant, SCADA, Node-RED) — підключіть контролер через MQTT для дистанційного моніторингу та керування.'),
+  sp(80),
+  tbl(
+    ['Поле', 'Приклад', 'Пояснення'],
     [
-      ['SSID', 'Ім\'я WiFi-мережі для підключення'],
-      ['Пароль', 'Пароль WiFi-мережі (відображається зірочками)'],
+      ['Адреса брокера', 'mqtt://192.168.1.50', 'IP-адреса або ім\'я вашого MQTT-сервера (брокера). Для TLS — mqtts://...'],
+      ['Порт', '1883', 'Стандартний порт MQTT. Для TLS: 8883.'],
+      ['Tenant', 'mystore', 'Назва групи об\'єктів (довільний текст). Дозволяє об\'єднати кілька контролерів.'],
+      ['Device ID', 'fridge_01', 'Унікальне ім\'я цього контролера. Використовується в назвах топіків.'],
+      ['Ім\'я користувача', 'modesp_user', 'Логін для брокера (якщо потрібна аутентифікація).'],
+      ['Пароль', '***', 'Пароль для брокера.'],
     ],
-    [2000, 7026],
+    [2000, 2500, 4526],
   ),
-  spacer(80),
-  para('Після збереження контролер перезапуститься та спробує підключитись до вказаної мережі. Якщо підключення невдале — знову буде активована точка доступу ModESP-XXXX.'),
-  spacer(80),
+  sp(80),
 
-  noteBox('WiFi Watchdog:', 'Якщо підключення до WiFi переривається більше ніж на 10 хвилин, контролер автоматично перезавантажується для відновлення з\'єднання. Налаштування країни (UA) забезпечує підтримку каналів 1-13 для роутерів Xiaomi, TP-Link тощо.', C.info, C.infoBord),
-  spacer(120),
-
-  h2('8.2. MQTT'),
-  para('MQTT дозволяє інтегрувати контролер із системами автоматизації (Home Assistant, Node-RED тощо):'),
-  buildTable(
-    ['Поле', 'Приклад', 'Опис'],
+  h2('8.3. Структура MQTT-топіків'),
+  p('Всі дані публікуються та приймаються за таким шаблоном:'),
+  sp(40),
+  new Paragraph({
+    children: [new TextRun({ text:'modesp/v1/{tenant}/{device_id}/{параметр}', font:'Courier New', size:20, color:C.navy })],
+    spacing: { after:100, before:80 },
+  }),
+  sp(40),
+  p('Приклад для tenant=«mystore», device_id=«fridge_01»:'),
+  tbl(
+    ['Топік', 'Значення', 'Напрямок'],
     [
-      ['Брокер', 'mqtt://192.168.1.100', 'Адреса MQTT-брокера (mqtt:// або mqtts:// для TLS)'],
-      ['Порт', '1883 (або 8883 для TLS)', 'TCP-порт брокера'],
-      ['Tenant', 'home', 'Група пристроїв для організації топіків'],
-      ['Device ID', 'fridge1', 'Унікальний ідентифікатор цього контролера'],
-      ['Ім\'я користувача', '(необов\'язково)', 'Авторизація на брокері'],
-      ['Пароль', '(необов\'язково)', 'Пароль авторизації на брокері'],
+      ['modesp/v1/mystore/fridge_01/thermostat/temperature', 'Поточна T камери', 'Контролер → брокер'],
+      ['modesp/v1/mystore/fridge_01/protection/alarm_active', 'true/false', 'Контролер → брокер'],
+      ['modesp/v1/mystore/fridge_01/thermostat/setpoint', 'Нове значення', 'Брокер → контролер'],
+      ['modesp/v1/mystore/fridge_01/defrost/manual_start', 'true', 'Брокер → контролер (запуск)'],
     ],
-    [1800, 2200, 5026],
+    [4000, 2000, 3026],
   ),
-  spacer(80),
+  sp(80),
 
-  h2('8.3. Структура MQTT топіків'),
-  para('Топіки формуються за шаблоном:'),
-  spacer(40),
-  paraRuns([new TextRun({ text: 'modesp/v1/{tenant}/{device_id}/{module}/{key}', font: 'Courier New', size: 20, color: C.accent })]),
-  spacer(80),
-  para('Приклад з tenant="home", device_id="fridge1":'),
-  bullet('modesp/v1/home/fridge1/thermostat/temperature — поточна температура'),
-  bullet('modesp/v1/home/fridge1/protection/alarm_active — статус аварії'),
-  bullet('modesp/v1/home/fridge1/thermostat/setpoint — команда зміни уставки (subscribe)'),
-  spacer(80),
-
-  h2('8.4. Home Assistant Auto-Discovery'),
-  para('При увімкненому MQTT контролер автоматично публікує конфігурацію для Home Assistant у топіки:'),
-  paraRuns([new TextRun({ text: 'homeassistant/sensor/{device_id}/...', font: 'Courier New', size: 20, color: C.accent })]),
-  spacer(80),
-  para('Пристрій автоматично з\'являється у Home Assistant як набір сенсорів та перемикачів без ручного налаштування.'),
-  spacer(80),
-
-  h2('8.5. TLS (шифроване з\'єднання)'),
-  para('Для безпечного підключення до MQTT-брокера:'),
-  bullet('Вкажіть адресу брокера у форматі: mqtts://your-broker.example.com'),
-  bullet('Або використайте порт 8883 — контролер автоматично активує TLS'),
-  pageBreak(),
+  h2('8.4. Інтеграція з Home Assistant'),
+  p('Контролер автоматично реєструє себе в Home Assistant при підключенні MQTT. Вручну нічого налаштовувати не потрібно — у Home Assistant з\'явиться пристрій «ModESP v4» з усіма сенсорами та перемикачами:'),
+  bullet('Сенсори температури (камера, випарник, конденсатор)'),
+  bullet('Стан компресора, стан розморозки'),
+  bullet('Активні аварії та їх коди'),
+  bullet('Перемикач нічного режиму'),
+  bullet('Кнопка ручного запуску розморозки'),
+  pb(),
 );
 
-// ── CHAPTER 9: SYSTEM ─────────────────────────────────────────────────────────
+// =============================================================================
+// 9. ОБСЛУГОВУВАННЯ
+// =============================================================================
 content.push(
-  h1('9. Системні налаштування'),
+  h1('9. Обслуговування (розділ «Система»)'),
 
-  h2('9.1. Час та NTP'),
-  para('Розділ Система → Час дозволяє налаштувати синхронізацію часу:'),
-  buildTable(
-    ['Поле', 'За замовч.', 'Опис'],
-    [
-      ['NTP-сервер', 'pool.ntp.org', 'Сервер синхронізації часу'],
-      ['Часовий пояс', 'UTC', 'Часовий пояс для відображення часу та розкладів'],
-    ],
-    [2500, 2000, 4526],
-  ),
-  spacer(80),
-  para('Після встановлення NTP стає доступним режим нічного режиму "За розкладом" у налаштуваннях термостата.'),
-  spacer(80),
+  h2('9.1. Налаштування часу та NTP'),
+  p('Для правильної роботи нічного режиму «за розкладом» та коректних часових міток у журналі — налаштуйте синхронізацію часу:'),
+  num('Перейдіть до розділу «Система».'),
+  num('У секції «Час» введіть адресу NTP-сервера (за замовч. pool.ntp.org — стандартний публічний сервер).'),
+  num('Оберіть часовий пояс зі списку (наприклад, «Europe/Kyiv»).'),
+  num('Натисніть «Зберегти». Контролер синхронізується при наступному підключенні до інтернету.'),
+  sp(80),
 
-  h2('9.2. OTA-оновлення прошивки'),
-  para('Розділ Система → Прошивка дозволяє оновити прошивку без кабелю:'),
-  numbered('Завантажте файл прошивки (.bin) з GitHub або від розробника'),
-  numbered('У веб-інтерфейсі Система → Прошивка → кнопка "Вибрати файл"'),
-  numbered('Оберіть файл .bin та натисніть "Завантажити"'),
-  numbered('Зачекайте завершення завантаження (прогрес-бар)'),
-  numbered('Контролер автоматично перезавантажиться з новою прошивкою'),
-  spacer(80),
+  info('Без NTP:', 'Якщо контролер не підключений до інтернету — час скидається при кожному перезавантаженні. Часові мітки в журналі будуть рахуватись від 0 (не від реального часу). Нічний режим «за розкладом» не працюватиме.'),
+  sp(120),
 
-  noteBox('Rollback:', 'ESP32 підтримує механізм відкату: якщо нова прошивка не запустилась коректно, при наступному перезавантаженні автоматично відновлюється попередня версія.', C.info, C.infoBord),
-  spacer(120),
+  h2('9.2. Оновлення прошивки (OTA)'),
+  p('OTA (Over-The-Air) — оновлення програмного забезпечення контролера через веб-інтерфейс без демонтажу та кабелів. Рекомендується встановлювати оновлення для отримання виправлень помилок та нових функцій.'),
+  sp(80),
+  num('Отримайте файл нової прошивки (.bin) від постачальника або з репозиторію проекту.'),
+  num('Перейдіть до розділу «Система» → «Прошивка».'),
+  num('Натисніть «Вибрати файл» та оберіть файл .bin.'),
+  num('Натисніть «Завантажити». Почнеться завантаження — прогрес-бар покаже хід.'),
+  num('Не вимикайте живлення та не закривайте браузер під час завантаження!'),
+  num('Після завантаження контролер автоматично перезавантажиться з новою прошивкою.'),
+  num('Після перезавантаження перевірте, що веб-інтерфейс відкривається нормально.'),
+  sp(80),
 
-  h2('9.3. Перезапуск'),
-  para('Кнопка "Перезапустити" у розділі Система перезавантажує контролер. Всі збережені налаштування зберігаються.'),
-  spacer(80),
+  warn('Не вимикайте живлення:', 'Вимкнення під час запису нової прошивки може пошкодити контролер. Якщо таке сталось — при наступному включенні ESP32 спробує відновити попередню прошивку (Rollback). Якщо Rollback не спрацював — необхідне підключення через USB.'),
+  sp(120),
+
+  h2('9.3. Перезапуск контролера'),
+  p('Кнопка «Перезапустити» у розділі «Система» перезавантажує контролер. Всі налаштування, дані журналу та прив\'язки обладнання зберігаються. Перезапуск займає 5–10 секунд.'),
+  sp(80),
+  p('Перезапуск потрібний після:'),
+  bullet('Збереження прив\'язок обладнання (виконується автоматично)'),
+  bullet('Збереження WiFi-налаштувань (виконується автоматично)'),
+  bullet('Якщо контролер поводиться нестандартно'),
+  sp(80),
 
   h2('9.4. Скидання до заводських налаштувань'),
-  para('Кнопка "Заводські налаштування" повністю очищає всі збережені параметри (WiFi, налаштування термостата, прив\'язки обладнання) та перезавантажує контролер.'),
-  spacer(80),
-
-  noteBox('УВАГА:', 'Скидання до заводських налаштувань незворотне. Всі налаштування будуть втрачені, включаючи WiFi-дані. Після скидання контролер знову запуститься в режимі точки доступу.', C.warn, C.warnBord),
-  pageBreak(),
+  p('Повністю очищає всі збережені параметри: WiFi, налаштування термостата, розморозки, захисту, прив\'язки обладнання, журнал. Контролер повертається до стану «з коробки» та запускає точку доступу ModESP-XXXX.'),
+  sp(60),
+  danger('НЕЗВОРОТНА ОПЕРАЦІЯ!', 'Всі налаштування будуть видалені безповоротно. Перед скиданням запишіть або зробіть скриншоти всіх важливих параметрів. Відновити дані після скидання НЕМОЖЛИВО.'),
+  sp(80),
+  p('Коли може знадобитись скидання:'),
+  bullet('Передача контролера на інший об\'єкт'),
+  bullet('Зміна конфігурації обладнання'),
+  bullet('Контролер не реагує та не підключається'),
+  pb(),
 );
 
-// ── CHAPTER 10: HTTP API ──────────────────────────────────────────────────────
+// =============================================================================
+// 10. ТИПОВІ ПРОБЛЕМИ ТА ВИРІШЕННЯ
+// =============================================================================
 content.push(
-  h1('10. HTTP API (для розробників)'),
-  para('Контролер надає REST API на порту 80 для інтеграції з зовнішніми системами:'),
-  spacer(80),
-  buildTable(
-    ['Endpoint', 'Метод', 'Опис'],
+  h1('10. Типові проблеми та їх вирішення'),
+
+  h2('10.1. Контролер не підключається до WiFi'),
+  p('Симптом: після збереження WiFi-налаштувань контролер знову з\'являється як точка доступу ModESP-XXXX.'),
+  sp(40),
+  tbl(
+    ['Можлива причина', 'Що зробити'],
     [
-      ['/api/state', 'GET', 'Повний стан системи у форматі JSON'],
-      ['/api/settings', 'POST', 'Зміна параметрів (writable ключі, з валідацією)'],
-      ['/api/ui', 'GET', 'UI-схема (згенерована з маніфестів)'],
-      ['/api/wifi', 'POST', 'Збереження WiFi-налаштувань'],
-      ['/api/mqtt', 'GET/POST', 'Читання/запис MQTT-конфігурації'],
-      ['/api/bindings', 'GET/POST', 'Читання/запис прив\'язок обладнання'],
-      ['/api/log', 'GET', 'DataLogger: потоковий JSON (?hours=24)'],
-      ['/api/log/summary', 'GET', 'DataLogger: статистика записів'],
-      ['/api/ota', 'POST', 'Завантаження нової прошивки (.bin)'],
-      ['/api/restart', 'POST', 'Перезавантаження ESP32'],
-      ['/api/factory-reset', 'POST', 'Скидання до заводських налаштувань'],
-      ['/api/time', 'GET/POST', 'Час та NTP-налаштування'],
-      ['/api/onewire/scan', 'GET', 'Сканування шини OneWire (DS18B20)'],
-      ['/ws', 'WebSocket', 'Real-time трансляція змін стану (до 3 клієнтів)'],
+      ['Неправильний пароль', 'Перевірте пароль — він чутливий до регістру. Введіть ще раз.'],
+      ['Неправильна назва мережі (SSID)', 'Скопіюйте точну назву мережі, включаючи пробіли та спецсимволи.'],
+      ['Слабкий сигнал WiFi', 'Наблизьте роутер або встановіть підсилювач сигналу.'],
+      ['Роутер фільтрує MAC-адреси', 'Додайте MAC-адресу контролера (видна в інфо про точку доступу) до дозволених.'],
+      ['Канал WiFi > 11', 'Деякі роутери Xiaomi/TP-Link використовують канал 12–13. Змініть на канал 1–11 в налаштуваннях роутера.'],
     ],
-    [2500, 1200, 5326],
+    [3000, 6026],
   ),
-  spacer(80),
-  para('WebSocket трансляція відправляє тільки змінені ключі (delta broadcast) кожні 1.5 секунди, що забезпечує ефективну роботу в реальному часі.'),
-  pageBreak(),
+  sp(80),
+
+  h2('10.2. Температура відображається невірно або «ERROR»'),
+  tbl(
+    ['Симптом', 'Причина', 'Вирішення'],
+    [
+      ['Відображається «ERROR» або «---»', 'Обрив датчика або неправильне підключення', 'Перевірте з\'єднання. Для DS18B20: перевірте підтягувальний резистор 4.7 кОм між Data та VCC.'],
+      ['Температура не змінюється', 'Датчик «завис», поганий контакт', 'Перезапустіть контролер. Перевірте якість пайки.'],
+      ['Температура значно відрізняється від реальної', 'Для NTC: неправильний B-коефіцієнт', 'Відкрийте налаштування NTC-драйвера в «Обладнання» та введіть правильний B-коефіцієнт з datasheet датчика.'],
+      ['Два датчики DS18B20 переплутані', 'Неправильне призначення адрес', 'У «Обладнання» поміняйте призначення датчиків місцями.'],
+    ],
+    [2400, 2500, 4126],
+  ),
+  sp(80),
+
+  h2('10.3. Компресор не вмикається'),
+  tbl(
+    ['Симптом', 'Причина', 'Вирішення'],
+    [
+      ['Стан «startup» надто довго', 'Активна затримка після живлення', 'Зачекайте (за замовч. 1 хв). Можна зменшити «Затримка після boot».'],
+      ['Стан «idle», але T вища за поріг', 'Активна мін. пауза компресора', 'Зачекайте (3 хв за замовч.). Перевірте параметр «Мін. пауза».'],
+      ['Стан «idle», але розморозка активна', 'Пріоритет розморозки над термостатом', 'Норма. Термостат відновить роботу після завершення розморозки.'],
+      ['Стан «cooling», але реле не спрацьовує', 'Неправильне прив\'язки реле', 'Перевірте у «Обладнання» чи призначено compressor правильному виходу.'],
+    ],
+    [2500, 2800, 3726],
+  ),
+  sp(80),
+
+  h2('10.4. Розморозка не запускається або не завершується'),
+  tbl(
+    ['Симптом', 'Причина', 'Вирішення'],
+    [
+      ['Розморозка не запускається автоматично', 'Метод ініціації «Вимкнено» або великий інтервал', 'Перевірте параметри «Ініціація» та «Інтервал» у розділі «Розморозка».'],
+      ['Розморозка завершується занадто швидко', 'Температура випарника вже вища за T кінця', 'Це нормально — оптимізація: якщо лід відсутній, розморозка пропускається.'],
+      ['Розморозка постійно завершується по таймеру (не по T)', 'Несправний тен або датчик випарника', 'Перевірте тен. Перевірте датчик evap_temp. Збільшіть «Макс. тривалість».'],
+      ['Тип «Електрична» або «Гарячий газ» недоступні', 'Не призначено реле відтайки', 'У «Обладнання» призначте defrost_relay відповідному виходу.'],
+    ],
+    [2800, 2800, 3426],
+  ),
+  sp(80),
+
+  h2('10.5. Аварія «Висока температура» одразу після розморозки'),
+  p('Це відбувається, коли параметр «Блокування після розморозки» замалий. Після нагріву випарника температура в камері тимчасово зростає — це нормально. Вирішення:'),
+  num('Перейдіть до розділу «Захист».'),
+  num('Збільшіть «Блокування після розморозки» до 45–60 хвилин.'),
+  num('Натисніть «Зберегти».'),
+  sp(80),
+
+  h2('10.6. Часто спрацьовує аварія «Короткі цикли»'),
+  p('Можливі причини та вирішення:'),
+  bullet('Занадто малий диференціал термостата → збільшіть до 2–4°C'),
+  bullet('Занадто мала «Мін. пауза компресора» → збільшіть до 3–5 хв'),
+  bullet('Занадто малий «Мін. цикл роботи» у захисті → збільшіть до 180–300 с'),
+  bullet('Несправний контактор або реле → перевірте електричну схему'),
+  sp(80),
+
+  h2('10.7. Веб-інтерфейс не відкривається'),
+  num('Переконайтесь, що ваш пристрій підключений до тієї ж WiFi-мережі, що й контролер.'),
+  num('Спробуйте ввести IP-адресу вручну (знайдіть у роутері).'),
+  num('Використовуйте http:// (не https://).'),
+  num('Спробуйте інший браузер (Chrome або Firefox рекомендовано).'),
+  num('Якщо контролер недоступний → підключіться до точки доступу ModESP-XXXX (адреса 192.168.4.1).'),
+  sp(80),
+
+  h2('10.8. Після перезавантаження налаштування збились'),
+  p('Контролер зберігає налаштування з затримкою 5 секунд після зміни. Якщо живлення вимкнули протягом цих 5 секунд — остання зміна може не зберегтись. Зачекайте 10 секунд після зміни параметрів перед вимкненням.'),
+  pb(),
 );
 
-// ── CHAPTER 11: TROUBLESHOOTING ───────────────────────────────────────────────
+// =============================================================================
+// APPENDIX: PARAMETER REFERENCE
+// =============================================================================
 content.push(
-  h1('11. Усунення несправностей'),
+  h1('Додаток А: Довідник параметрів'),
+  p('Для зручності пошуку всі налаштовувані параметри зведені в одну таблицю.'),
+  sp(80),
 
-  h2('11.1. Контролер не підключається до WiFi'),
-  bullet('Переконайтесь, що SSID та пароль введені правильно (регістр має значення)'),
-  bullet('Переконайтесь, що сигнал WiFi достатньо сильний біля контролера'),
-  bullet('Якщо роутер Xiaomi або TP-Link — переконайтесь, що він не блокує канали 1-13 (контролер налаштований для UA)'),
-  bullet('Перевірте, що роутер не фільтрує MAC-адреси'),
-  spacer(80),
-
-  h2('11.2. Аварія "Висока температура" одразу після розморозки'),
-  bullet('Це нормально для перших кількох хвилин після розморозки'),
-  bullet('Збільшіть параметр "Блокування після розморозки" (в розділі Захист) до 30-60 хвилин'),
-  spacer(80),
-
-  h2('11.3. Часті аварії "Короткі цикли"'),
-  bullet('Перевірте, що реле компресора не перемикається через зовнішні фактори'),
-  bullet('Збільшіть параметр "Мін. час паузи компресора" у налаштуваннях термостата'),
-  bullet('Збільшіть параметр "Мін. цикл роботи" у налаштуваннях захисту'),
-  spacer(80),
-
-  h2('11.4. Розморозка не завершується по температурі'),
-  bullet('Перевірте підключення датчика випарника (evap_temp)'),
-  bullet('Перевірте прив\'язку датчика у розділі «Обладнання»'),
-  bullet('Параметр "Завершення" повинен бути "За температурою" (якщо датчик підключений)'),
-  bullet('Якщо датчик справний але розморозка завершується по таймеру > 3 рази поспіль — перевірте нагрівач/клапан'),
-  spacer(80),
-
-  h2('11.5. Веб-інтерфейс не відкривається'),
-  bullet('Перевірте IP-адресу контролера в адмін-панелі роутера'),
-  bullet('Переконайтесь, що ваш пристрій у тій же мережі, що й контролер'),
-  bullet('Спробуйте відкрити http://[IP-адреса]/ (не https)'),
-  bullet('Якщо не вдається знайти контролер — підключіться до точки доступу ModESP-XXXX'),
-  spacer(80),
-
-  h2('11.6. Конфігурація збилась після перезавантаження'),
-  para('Всі налаштування (уставка, диференціал, параметри захисту тощо) автоматично зберігаються у NVS (Non-Volatile Storage) з затримкою 5 секунд після зміни. Якщо контролер перезавантажився протягом цих 5 секунд — останні зміни можуть не зберегтись. Зачекайте 10 секунд після зміни параметрів перед перезавантаженням.'),
-  pageBreak(),
-);
-
-// ── APPENDIX: PARAMETER TABLE ─────────────────────────────────────────────────
-content.push(
-  h1('Додаток А: Таблиця параметрів'),
-
-  h2('A.1. Термостат'),
-  buildTable(
-    ['Параметр', 'За замовч.', 'Мін.', 'Макс.', 'Крок', 'Одиниця'],
+  h2('А.1. Термостат'),
+  tbl(
+    ['Параметр', 'За замовч.', 'Мін.', 'Макс.', 'Од.'],
     [
-      ['Уставка (setpoint)', '4.0', '-50', '50', '0.5', '°C'],
-      ['Диференціал', '2.0', '0.5', '10.0', '0.1', '°C'],
-      ['Мін. пауза компресора', '3', '3', '10', '1', 'хв'],
-      ['Мін. час роботи', '2', '2', '10', '1', 'хв'],
-      ['Затримка після boot', '1', '0', '5', '1', 'хв'],
-      ['Режим вент. випарника', '1 (З комп.)', '0', '2', '—', '—'],
-      ['T зупинки вент.', '-25.0', '-40', '10', '0.5', '°C'],
-      ['Гістерезис зупинки вент.', '2.0', '0.5', '5.0', '0.5', '°C'],
-      ['Затримка вент. конденсатора', '30', '0', '120', '1', 'с'],
-      ['Safety Run ON', '20', '1', '60', '1', 'хв'],
-      ['Safety Run OFF', '10', '1', '60', '1', 'хв'],
-      ['Нічний режим', '0 (вимкн.)', '0', '3', '—', '—'],
-      ['Нічне зміщення', '3.0', '0', '10.0', '0.5', '°C'],
-      ['Година початку ночі', '22', '0', '23', '1', 'год'],
-      ['Година кінця ночі', '6', '0', '23', '1', 'год'],
-      ['Відображення під час розм.', '1 (заморож.)', '0', '2', '—', '—'],
+      ['Уставка температури', '4.0', '-50', '+50', '°C'],
+      ['Диференціал', '2.0', '0.5', '10.0', '°C'],
+      ['Мін. пауза компресора', '3', '3', '10', 'хв'],
+      ['Мін. час роботи компресора', '2', '2', '10', 'хв'],
+      ['Затримка після подачі живлення', '1', '0', '5', 'хв'],
+      ['Safety Run — час роботи ON', '20', '1', '60', 'хв'],
+      ['Safety Run — час паузи OFF', '10', '1', '60', 'хв'],
+      ['Режим вентилятора випарника', '1', '0', '2', '—'],
+      ['T зупинки вентилятора (режим 2)', '-25.0', '-40', '+10', '°C'],
+      ['Гістерезис T зупинки', '2.0', '0.5', '5.0', '°C'],
+      ['Затримка вимк. вент. конденсатора', '30', '0', '120', 'с'],
+      ['Нічний режим', '0 (вимкн.)', '0', '3', '—'],
+      ['Нічне зміщення уставки', '3.0', '0', '10.0', '°C'],
+      ['Година початку нічного режиму', '22', '0', '23', 'год'],
+      ['Година закінчення нічного режиму', '6', '0', '23', 'год'],
+      ['Відображення під час розморозки', '1 (заморож.)', '0', '2', '—'],
     ],
-    [2800, 1500, 900, 900, 900, 1026],
+    [3400, 1600, 900, 900, 1226],
   ),
-  spacer(80),
+  sp(80),
 
-  h2('A.2. Розморозка'),
-  buildTable(
-    ['Параметр', 'За замовч.', 'Мін.', 'Макс.', 'Крок', 'Одиниця'],
+  h2('А.2. Розморозка'),
+  tbl(
+    ['Параметр', 'За замовч.', 'Мін.', 'Макс.', 'Од.'],
     [
-      ['Тип відтайки', '0 (природна)', '0', '2', '—', '—'],
-      ['Інтервал', '8', '1', '99', '1', 'год'],
-      ['Режим лічильника', '1 (реальний)', '—', '—', '—', '—'],
-      ['Ініціація', '0 (таймер)', '0', '3', '—', '—'],
-      ['Завершення', '0 (за T)', '0', '1', '—', '—'],
-      ['T завершення', '8.0', '-5', '30', '0.5', '°C'],
-      ['Макс. тривалість', '30', '5', '120', '1', 'хв'],
-      ['Поріг demand T', '-25.0', '-40', '0', '0.5', '°C'],
-      ['Час дренажу', '2', '0', '10', '1', 'хв'],
-      ['Час FAD (затримка вент.)', '2', '0', '10', '1', 'хв'],
-      ['T завершення FAD', '-5.0', '-40', '10', '0.5', '°C'],
-      ['Час стабілізації ГГ', '1', '0', '10', '1', 'хв'],
-      ['Затримка клапана ГГ', '3', '1', '30', '1', 'с'],
-      ['Час вирівнювання ГГ', '2', '0', '10', '1', 'хв'],
+      ['Тип відтайки', '0 (природна)', '0', '2', '—'],
+      ['Метод ініціації', '0 (таймер)', '0', '3', '—'],
+      ['Завершення активної фази', '0 (за T)', '0', '1', '—'],
+      ['Лічильник інтервалу', '1 (реальний)', '—', '—', '—'],
+      ['Інтервал між розморозками', '8', '1', '99', 'год'],
+      ['Температура завершення (T кінця)', '8.0', '-5', '+30', '°C'],
+      ['Максимальна тривалість', '30', '5', '120', 'хв'],
+      ['Поріг запуску за T випарника', '-25.0', '-40', '0', '°C'],
+      ['Час дренажу (DRIP)', '2', '0', '10', 'хв'],
+      ['Затримка вентилятора (FAD)', '2', '0', '10', 'хв'],
+      ['T завершення FAD', '-5.0', '-40', '+10', '°C'],
+      ['Час стабілізації ГГ', '1', '0', '10', 'хв'],
+      ['Затримка клапана ГГ', '3', '1', '30', 'с'],
+      ['Час вирівнювання тиску ГГ', '2', '0', '10', 'хв'],
     ],
-    [2800, 1500, 900, 900, 900, 1026],
+    [3400, 1600, 900, 900, 1226],
   ),
-  spacer(80),
+  sp(80),
 
-  h2('A.3. Захист — температура'),
-  buildTable(
-    ['Параметр', 'За замовч.', 'Мін.', 'Макс.', 'Крок', 'Одиниця'],
+  h2('А.3. Захист — температурні межі'),
+  tbl(
+    ['Параметр', 'За замовч.', 'Мін.', 'Макс.', 'Од.'],
     [
-      ['HAL-межа (висока T)', '12.0', '-50', '99', '0.5', '°C'],
-      ['LAL-межа (низька T)', '-35.0', '-99', '50', '0.5', '°C'],
-      ['Затримка HAL', '30', '0', '120', '1', 'хв'],
-      ['Затримка LAL', '30', '0', '120', '1', 'хв'],
-      ['Затримка дверей', '5', '0', '60', '1', 'хв'],
-      ['Ручне скидання', 'false', '—', '—', '—', 'bool'],
-      ['Блокування після розм.', '30', '0', '120', '5', 'хв'],
+      ['Межа HAL (висока T)', '+12.0', '-50', '+99', '°C'],
+      ['Межа LAL (низька T)', '-35.0', '-99', '+50', '°C'],
+      ['Затримка аварії HAL', '30', '0', '120', 'хв'],
+      ['Затримка аварії LAL', '30', '0', '120', 'хв'],
+      ['Затримка аварії дверей', '5', '0', '60', 'хв'],
+      ['Блокування HAL після розморозки', '30', '0', '120', 'хв'],
+      ['Ручне скидання аварій', 'false', '—', '—', 'bool'],
     ],
-    [2800, 1500, 900, 900, 900, 1026],
+    [3400, 1600, 900, 900, 1226],
   ),
-  spacer(80),
+  sp(80),
 
-  h2('A.4. Захист — компресор'),
-  buildTable(
-    ['Параметр', 'За замовч.', 'Мін.', 'Макс.', 'Крок', 'Одиниця'],
+  h2('А.4. Захист — компресор'),
+  tbl(
+    ['Параметр', 'За замовч.', 'Мін.', 'Макс.', 'Од.'],
     [
-      ['Мін. цикл роботи', '120', '30', '600', '10', 'с'],
-      ['Макс. запусків/год', '12', '4', '30', '1', 'разів'],
-      ['Макс. безперервна робота', '360', '60', '720', '30', 'хв'],
-      ['Таймаут зниження T', '60', '15', '240', '5', 'хв'],
-      ['Мін. зниження T', '2.0', '0.5', '10.0', '0.5', '°C'],
-      ['Макс. швидкість зростання T', '0.5', '0.1', '2.0', '0.1', '°C/хв'],
-      ['Тривалість rate alarm', '5', '1', '30', '1', 'хв'],
+      ['Мін. тривалість циклу (short cycle)', '120', '30', '600', 'с'],
+      ['Макс. запусків за годину', '12', '4', '30', 'разів'],
+      ['Макс. безперервна робота', '360', '60', '720', 'хв'],
+      ['Таймаут Pulldown', '60', '15', '240', 'хв'],
+      ['Мін. зниження T (Pulldown)', '2.0', '0.5', '10.0', '°C'],
+      ['Макс. швидкість зростання T', '0.5', '0.1', '2.0', '°C/хв'],
+      ['Тривалість rate_rise до аварії', '5', '1', '30', 'хв'],
     ],
-    [2800, 1500, 900, 900, 900, 1026],
+    [3400, 1600, 900, 900, 1226],
   ),
 );
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// =============================================================================
 //  DOCUMENT ASSEMBLY
-// ═══════════════════════════════════════════════════════════════════════════════
-
+// =============================================================================
 const doc = new Document({
   numbering: {
     config: [
-      {
-        reference: 'bullets',
-        levels: [{
-          level: 0, format: LevelFormat.BULLET, text: '\u2022',
-          alignment: AlignmentType.LEFT,
-          style: { paragraph: { indent: { left: 720, hanging: 360 } } },
-        }, {
-          level: 1, format: LevelFormat.BULLET, text: '\u25E6',
-          alignment: AlignmentType.LEFT,
-          style: { paragraph: { indent: { left: 1080, hanging: 360 } } },
-        }],
-      },
-      {
-        reference: 'numbers',
-        levels: [{
-          level: 0, format: LevelFormat.DECIMAL, text: '%1.',
-          alignment: AlignmentType.LEFT,
-          style: { paragraph: { indent: { left: 720, hanging: 360 } } },
-        }],
-      },
+      { reference:'bullets', levels:[
+        { level:0, format:LevelFormat.BULLET, text:'\u2022', alignment:AlignmentType.LEFT,
+          style:{ paragraph:{ indent:{ left:720, hanging:360 } } } },
+        { level:1, format:LevelFormat.BULLET, text:'\u25E6', alignment:AlignmentType.LEFT,
+          style:{ paragraph:{ indent:{ left:1080, hanging:360 } } } },
+      ]},
+      { reference:'numbers', levels:[
+        { level:0, format:LevelFormat.DECIMAL, text:'%1.', alignment:AlignmentType.LEFT,
+          style:{ paragraph:{ indent:{ left:720, hanging:360 } } } },
+      ]},
     ],
   },
-
   styles: {
-    default: {
-      document: { run: { font: 'Arial', size: 22 } },
-    },
+    default: { document:{ run:{ font:'Arial', size:22 } } },
     paragraphStyles: [
-      {
-        id: 'Heading1', name: 'Heading 1', basedOn: 'Normal', next: 'Normal', quickFormat: true,
-        run: { size: 36, bold: true, font: 'Arial', color: C.accent },
-        paragraph: { spacing: { before: 480, after: 200 }, outlineLevel: 0 },
-      },
-      {
-        id: 'Heading2', name: 'Heading 2', basedOn: 'Normal', next: 'Normal', quickFormat: true,
-        run: { size: 28, bold: true, font: 'Arial', color: C.accent2 },
-        paragraph: { spacing: { before: 360, after: 160 }, outlineLevel: 1 },
-      },
-      {
-        id: 'Heading3', name: 'Heading 3', basedOn: 'Normal', next: 'Normal', quickFormat: true,
-        run: { size: 24, bold: true, font: 'Arial', color: C.accent3 },
-        paragraph: { spacing: { before: 240, after: 120 }, outlineLevel: 2 },
-      },
+      { id:'Heading1', name:'Heading 1', basedOn:'Normal', next:'Normal', quickFormat:true,
+        run:{ size:36, bold:true, font:'Arial', color:C.navy },
+        paragraph:{ spacing:{ before:480, after:200 }, outlineLevel:0 } },
+      { id:'Heading2', name:'Heading 2', basedOn:'Normal', next:'Normal', quickFormat:true,
+        run:{ size:28, bold:true, font:'Arial', color:C.blue },
+        paragraph:{ spacing:{ before:360, after:140 }, outlineLevel:1 } },
+      { id:'Heading3', name:'Heading 3', basedOn:'Normal', next:'Normal', quickFormat:true,
+        run:{ size:24, bold:true, font:'Arial', color:C.teal },
+        paragraph:{ spacing:{ before:240, after:100 }, outlineLevel:2 } },
     ],
   },
-
   sections: [{
     properties: {
       page: {
-        size: { width: 11906, height: 16838 }, // A4
-        margin: { top: 1134, right: 1134, bottom: 1134, left: 1134 }, // 2cm margins
+        size: { width:11906, height:16838 },
+        margin: { top:1080, right:1080, bottom:1080, left:1080 },
       },
     },
-    headers: {
-      default: new Header({
-        children: [new Paragraph({
-          border: { bottom: border(C.mutedLine, 6) },
-          children: [
-            new TextRun({ text: 'ModESP v4 — Інструкція користувача', font: 'Arial', size: 18, color: '94A3B8' }),
-          ],
-          spacing: { after: 80 },
-        })],
+    headers: { default: new Header({ children:[
+      new Paragraph({
+        border: { bottom: bdr(C.muted,6) },
+        children: [
+          new TextRun({ text:'ModESP v4  |  Інструкція з монтажу та налаштування  |  Для технічного персоналу', font:'Arial', size:18, color:'94A3B8' }),
+        ],
+        spacing:{ after:80 },
       }),
-    },
-    footers: {
-      default: new Footer({
-        children: [new Paragraph({
-          border: { top: border(C.mutedLine, 6) },
-          children: [
-            new TextRun({ text: '\u00A9 ModESP v4 Open Source Project  |  ESP32 Refrigeration Controller  |  Стор. ', font: 'Arial', size: 18, color: '94A3B8' }),
-            new TextRun({ children: [PageNumber.CURRENT], font: 'Arial', size: 18, color: '94A3B8' }),
-          ],
-          alignment: AlignmentType.CENTER,
-          spacing: { before: 80 },
-        })],
+    ]})},
+    footers: { default: new Footer({ children:[
+      new Paragraph({
+        border: { top: bdr(C.muted,6) },
+        alignment: AlignmentType.CENTER,
+        children: [
+          new TextRun({ text:'ModESP v4  |  ', font:'Arial', size:18, color:'94A3B8' }),
+          new TextRun({ children:[PageNumber.CURRENT], font:'Arial', size:18, color:'94A3B8' }),
+        ],
+        spacing:{ before:80 },
       }),
-    },
+    ]})},
     children: content,
   }],
 });
 
-// Write file
 const outputPath = path.join(__dirname, '..', 'docs', 'ModESP_v4_user_manual_ua.docx');
 Packer.toBuffer(doc).then(buffer => {
   fs.writeFileSync(outputPath, buffer);
   console.log(`Done! Written to: ${outputPath}`);
-  console.log(`File size: ${Math.round(buffer.length / 1024)} KB`);
-}).catch(err => {
-  console.error('Error:', err);
-  process.exit(1);
-});
+  console.log(`File size: ${Math.round(buffer.length/1024)} KB`);
+}).catch(err => { console.error(err); process.exit(1); });
