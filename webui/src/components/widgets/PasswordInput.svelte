@@ -13,12 +13,15 @@
     inputValue = String(value);
   }
 
-  // Sync wifi password з shared store (замість DOM querySelector)
-  $: if (config.key === 'wifi.password') wifiPassword.set(inputValue);
-
-  // Sync mqtt password з shared store
-  $: if (config.key === 'mqtt.password') mqttPass.set(inputValue);
+  // Read-back від зовнішніх store змін (MqttSave onMount)
   $: if (config.key === 'mqtt.password' && $mqttPass !== inputValue) inputValue = $mqttPass;
+
+  // Sync до store СИНХРОННО при вводі — до reactive cycle
+  function onInput(e) {
+    inputValue = e.target.value;
+    if (config.key === 'wifi.password') wifiPassword.set(inputValue);
+    else if (config.key === 'mqtt.password') mqttPass.set(inputValue);
+  }
 </script>
 
 <div class="input-widget">
@@ -29,14 +32,16 @@
         type="text"
         class="text-input"
         placeholder={config.description || ''}
-        bind:value={inputValue}
+        value={inputValue}
+        on:input={onInput}
       />
     {:else}
       <input
         type="password"
         class="text-input"
         placeholder={config.description || ''}
-        bind:value={inputValue}
+        value={inputValue}
+        on:input={onInput}
       />
     {/if}
     <button class="reveal-btn" on:click={() => revealed = !revealed}>

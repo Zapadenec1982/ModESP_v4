@@ -12,17 +12,22 @@
     inputValue = String(value);
   }
 
-  // Sync wifi SSID з shared store (замість DOM querySelector)
-  $: if (config.key === 'wifi.ssid') wifiSsid.set(inputValue);
+  // Read-back від зовнішніх store змін (WifiScan.selectNetwork, MqttSave onMount)
   $: if (config.key === 'wifi.ssid' && $wifiSsid !== inputValue) inputValue = $wifiSsid;
-
-  // Sync mqtt form fields з shared stores
-  $: if (config.key === 'mqtt.broker') mqttBroker.set(inputValue);
   $: if (config.key === 'mqtt.broker' && $mqttBroker !== inputValue) inputValue = $mqttBroker;
-  $: if (config.key === 'mqtt.user') mqttUser.set(inputValue);
   $: if (config.key === 'mqtt.user' && $mqttUser !== inputValue) inputValue = $mqttUser;
-  $: if (config.key === 'mqtt.prefix') mqttPrefix.set(inputValue);
   $: if (config.key === 'mqtt.prefix' && $mqttPrefix !== inputValue) inputValue = $mqttPrefix;
+
+  // Sync до store СИНХРОННО при вводі — до reactive cycle
+  // (Svelte reorders $: reactives при компіляції, тому bind:value + $: write
+  //  ламався: READ з store скидав inputValue до старого значення ДО WRITE)
+  function onInput(e) {
+    inputValue = e.target.value;
+    if (config.key === 'wifi.ssid') wifiSsid.set(inputValue);
+    else if (config.key === 'mqtt.broker') mqttBroker.set(inputValue);
+    else if (config.key === 'mqtt.user') mqttUser.set(inputValue);
+    else if (config.key === 'mqtt.prefix') mqttPrefix.set(inputValue);
+  }
 </script>
 
 <div class="input-widget">
@@ -31,7 +36,8 @@
     type="text"
     class="text-input"
     placeholder={config.description || ''}
-    bind:value={inputValue}
+    value={inputValue}
+    on:input={onInput}
   />
 </div>
 
