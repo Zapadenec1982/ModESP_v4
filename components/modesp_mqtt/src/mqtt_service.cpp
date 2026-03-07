@@ -5,6 +5,7 @@
 
 #include "modesp/net/mqtt_service.h"
 #include "modesp/net/http_service.h"
+#include "modesp/net/ota_handler.h"
 #include "modesp/shared_state.h"
 #include "modesp/services/nvs_helper.h"
 #include "modesp/types.h"
@@ -394,6 +395,13 @@ int MqttService::format_value(const StateValue& val, char* buf, size_t buf_size)
 void MqttService::publish_state() {
     if (!client_ || !state_) return;
 
+    // Системні ключі (OTA статус) — публікуються поряд зі згенерованими
+    static constexpr const char* SYS_KEYS[] = {
+        "_ota.status", "_ota.progress", "_ota.error"
+    };
+    static constexpr size_t SYS_KEYS_COUNT = sizeof(SYS_KEYS) / sizeof(SYS_KEYS[0]);
+
+    // 1. Згенеровані module keys (equipment.*, protection.*, etc.)
     for (size_t i = 0; i < gen::MQTT_PUBLISH_COUNT && i < MAX_PUBLISH_KEYS; i++) {
         auto val = state_->get(gen::MQTT_PUBLISH[i]);
         if (!val.has_value()) continue;
@@ -419,6 +427,39 @@ void MqttService::publish_state() {
         // Зберігаємо опубліковане значення в кеш
         strncpy(last_payloads_[i], payload, sizeof(last_payloads_[i]) - 1);
         last_payloads_[i][sizeof(last_payloads_[i]) - 1] = '\0';
+    }
+
+    // 2. System keys (_ota.status, _ota.progress, _ota.error)
+    for (size_t j = 0; j < SYS_KEYS_COUNT; j++) {
+        size_t cache_idx = gen::MQTT_PUBLISH_COUNT + j;
+        if (cache_idx >= MAX_PUBLISH_KEYS) break;
+
+        auto val = state_->get(SYS_KEYS[j]);
+        if (!val.has_value()) continue;
+
+        char payload[32];
+        int len = format_value(val.value(), payload, sizeof(payload));
+        if (len <= 0) {
+            // Пустий рядок — публікуємо як "" (1 байт = порожній MQTT payload)
+            payload[0] = '\0';
+            len = 0;
+        }
+
+        if (len > 0 && strncmp(payload, last_payloads_[cache_idx], sizeof(last_payloads_[cache_idx])) == 0) {
+            continue;
+        }
+        // Для len == 0 (пустий рядок): перевіряємо чи кеш вже порожній
+        if (len == 0 && last_payloads_[cache_idx][0] == '\0') {
+            continue;
+        }
+
+        char topic[128];
+        snprintf(topic, sizeof(topic), "%s/state/%s", prefix_, SYS_KEYS[j]);
+        esp_mqtt_client_publish(client_, topic, payload, len, 0, 0);
+        ESP_LOGD(TAG, "SYS publish: %s = '%s'", SYS_KEYS[j], payload);
+
+        strncpy(last_payloads_[cache_idx], payload, sizeof(last_payloads_[cache_idx]) - 1);
+        last_payloads_[cache_idx][sizeof(last_payloads_[cache_idx]) - 1] = '\0';
     }
 
     last_version_ = state_->version();
@@ -494,6 +535,56 @@ void MqttService::handle_incoming(const char* topic, int topic_len,
     }
 
     const char* key = cmd_marker + 5;  // skip "/cmd/"
+
+    // Special command: _ota (JSON payload — не поміщається в val_buf[32])
+    // Обробляємо ДО копіювання в val_buf, бо payload може бути 200+ байт
+    if (strcmp(key, "_ota") == 0) {
+        // Парсимо JSON з data/data_len напряму (на стеку ~640 байт)
+        char json_buf[512];
+        int json_len = (data_len < (int)sizeof(json_buf) - 1)
+                       ? data_len : (int)sizeof(json_buf) - 1;
+        memcpy(json_buf, data, json_len);
+        json_buf[json_len] = '\0';
+
+        jsmn_parser jp;
+        jsmntok_t tokens[16];
+        jsmn_init(&jp);
+        int tok_count = jsmn_parse(&jp, json_buf, json_len, tokens, 16);
+        if (tok_count < 1 || tokens[0].type != JSMN_OBJECT) {
+            ESP_LOGE(TAG, "_ota: invalid JSON payload");
+            return;
+        }
+
+        ota_handler::OtaParams ota_params = {};
+
+        for (int i = 1; i < tok_count - 1; i += 2) {
+            if (tokens[i].type != JSMN_STRING) continue;
+            json_buf[tokens[i].end] = '\0';
+            json_buf[tokens[i + 1].end] = '\0';
+            const char* k = json_buf + tokens[i].start;
+            const char* v = json_buf + tokens[i + 1].start;
+
+            if (strcmp(k, "url") == 0) {
+                strncpy(ota_params.url, v, sizeof(ota_params.url) - 1);
+            } else if (strcmp(k, "version") == 0) {
+                strncpy(ota_params.version, v, sizeof(ota_params.version) - 1);
+            } else if (strcmp(k, "checksum") == 0) {
+                strncpy(ota_params.checksum, v, sizeof(ota_params.checksum) - 1);
+            }
+        }
+
+        if (ota_params.url[0] == '\0') {
+            ESP_LOGE(TAG, "_ota: missing 'url' in payload");
+            return;
+        }
+
+        ESP_LOGI(TAG, "Cloud OTA command: version=%s", ota_params.version);
+
+        if (!ota_handler::start_ota(ota_params, state_)) {
+            ESP_LOGW(TAG, "_ota: already in progress or failed to start");
+        }
+        return;
+    }
 
     // Копіюємо payload в null-terminated буфер (потрібно для _set_tenant та звичайних команд)
     char val_buf[32];

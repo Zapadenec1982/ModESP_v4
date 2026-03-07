@@ -445,6 +445,12 @@ feat(module): короткий опис
 | `next_prompt.md` | Промпт для наступної сесії | В кінці поточної сесії |
 
 ## Changelog
+- 2026-03-08 — Cloud OTA Handler: ota_handler.h/.cpp (HTTP download → flash → reboot in FreeRTOS task,
+  SHA256 streaming verification, magic byte + board match validation, atomic guard). _ota command handler
+  in mqtt_service.cpp (jsmn JSON parse, OtaParams struct). System keys MQTT publishing (_ota.status,
+  _ota.progress, _ota.error) via SYS_KEYS loop in publish_state(). MAX_PUBLISH_KEYS 16→64 fix.
+  main.cpp: _ota.status/progress/error state key init. Tested: nourl reject, badurl graceful error,
+  atomic guard, MQTT real-time status feedback.
 - 2026-03-08 — Phase 18 partial (WiFi+MQTT Hardening): country code UA, STA watchdog, RSSI update;
   HA Auto-Discovery, TLS, LWT, exponential backoff, tenant prefix, alarm republish, delta-cache, heartbeat.
   Документаційна ревізія R1: docs/07_equipment.md (Phase 17), docs/08_webui.md (Premium R1),

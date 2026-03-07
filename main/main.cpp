@@ -142,6 +142,11 @@ extern "C" void app_main(void)
         snprintf(build_dt, sizeof(build_dt), "%s %s", desc->date, desc->time);
         app.state().set("_ota.date", build_dt);
         app.state().set("_ota.board", desc->project_name);
+
+        // OTA статус для cloud feedback (оновлюється з ota_handler.cpp)
+        app.state().set("_ota.status", "idle");
+        app.state().set("_ota.progress", static_cast<int32_t>(0));
+        app.state().set("_ota.error", "");
     }
 
     // WatchdogService needs ModuleManager reference
