@@ -262,8 +262,8 @@
           iconColor={card.icon_color || ""}
           subtitle={card.subtitle || ""}
           summaryKeys={card.summary_keys || []}
-          collapsible={isMobile}
-          defaultOpen={false}
+          collapsible={!isMobile ? false : (card.collapsible || false)}
+          defaultOpen={!isMobile}
         >
           {#each card.widgets as widget}
             {#if isVisible(widget.visible_when, $state)}
