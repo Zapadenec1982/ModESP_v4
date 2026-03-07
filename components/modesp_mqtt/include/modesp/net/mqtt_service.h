@@ -38,7 +38,7 @@ public:
 
     bool save_config(const char* broker, uint16_t port,
                      const char* user, const char* pass,
-                     const char* prefix, bool enabled);
+                     const char* prefix, const char* tenant, bool enabled);
     void reconnect();
 
 private:
@@ -53,7 +53,9 @@ private:
     uint16_t port_ = 1883;
     char user_[64] = {};
     char pass_[64] = {};
-    char prefix_[48] = {};        // "modesp/{mac}" default
+    char prefix_[80] = {};        // "modesp/v1/{tenant}/{device}" default
+    char tenant_[36] = {};        // tenant slug from NVS (empty = pending)
+    char device_id_[8] = {};      // MAC-based device ID (e.g., "A4CF12")
     bool enabled_ = false;        // default-off
 
     // State tracking
@@ -73,6 +75,10 @@ private:
     uint32_t alarm_republish_timer_ms_ = 0;
     static constexpr uint32_t ALARM_REPUBLISH_INTERVAL_MS = 300000; // 5 min
 
+    // Heartbeat (metadata, every 30s)
+    uint32_t heartbeat_timer_ms_ = 0;
+    static constexpr uint32_t HEARTBEAT_INTERVAL_MS = 30000; // 30s
+
     // Кеш останніх опублікованих значень для delta-publish
     static constexpr size_t MAX_PUBLISH_KEYS = 16;
     char last_payloads_[MAX_PUBLISH_KEYS][32] = {};
@@ -83,10 +89,19 @@ private:
     void stop_client();
     void publish_state();
     void publish_alarms_retained();
+    void publish_heartbeat();
+    void publish_ha_discovery();
+    void publish_ha_entity(const char* state_key, const char* name,
+                            const char* entity_type, const char* device_class,
+                            const char* unit, const char* state_class,
+                            const char* device_id, const char* device_name);
     void handle_incoming(const char* topic, int topic_len,
                          const char* data, int data_len);
     void register_http_handlers();
     void build_default_prefix();
+
+    // HA Auto-Discovery
+    bool ha_discovery_pending_ = false;
 
     // Форматування значення для MQTT payload (на стеку)
     static int format_value(const StateValue& val, char* buf, size_t buf_size);

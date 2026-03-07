@@ -15,6 +15,9 @@
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_crt_bundle.h"
+#include "esp_wifi.h"
+#include "esp_app_desc.h"
+#include "esp_timer.h"
 
 #define JSMN_STATIC
 #include "jsmn.h"
@@ -34,6 +37,7 @@ void MqttService::load_config() {
     nvs_helper::read_str("mqtt", "user", user_, sizeof(user_));
     nvs_helper::read_str("mqtt", "pass", pass_, sizeof(pass_));
     nvs_helper::read_str("mqtt", "prefix", prefix_, sizeof(prefix_));
+    nvs_helper::read_str("mqtt", "tenant", tenant_, sizeof(tenant_));
     nvs_helper::read_bool("mqtt", "enabled", enabled_);
 
     int32_t p = 1883;
@@ -44,12 +48,13 @@ void MqttService::load_config() {
 
 bool MqttService::save_config(const char* broker, uint16_t port,
                                const char* user, const char* pass,
-                               const char* prefix, bool enabled) {
+                               const char* prefix, const char* tenant, bool enabled) {
     bool ok = true;
     if (broker)  ok &= nvs_helper::write_str("mqtt", "broker", broker);
     if (user)    ok &= nvs_helper::write_str("mqtt", "user", user);
     if (pass)    ok &= nvs_helper::write_str("mqtt", "pass", pass);
     if (prefix)  ok &= nvs_helper::write_str("mqtt", "prefix", prefix);
+    if (tenant)  ok &= nvs_helper::write_str("mqtt", "tenant", tenant);
     ok &= nvs_helper::write_i32("mqtt", "port", static_cast<int32_t>(port));
     ok &= nvs_helper::write_bool("mqtt", "enabled", enabled);
 
@@ -71,20 +76,33 @@ bool MqttService::save_config(const char* broker, uint16_t port,
             strncpy(prefix_, prefix, sizeof(prefix_) - 1);
             prefix_[sizeof(prefix_) - 1] = '\0';
         }
+        if (tenant) {
+            strncpy(tenant_, tenant, sizeof(tenant_) - 1);
+            tenant_[sizeof(tenant_) - 1] = '\0';
+        }
         enabled_ = enabled;
-        ESP_LOGI(TAG, "Config saved (broker=%s, port=%d, enabled=%d)",
-                 broker_, port_, enabled_);
+        // Rebuild prefix if it was cleared (e.g. tenant change without explicit prefix)
+        build_default_prefix();
+        ESP_LOGI(TAG, "Config saved (broker=%s, port=%d, tenant=%s, enabled=%d)",
+                 broker_, port_, tenant_, enabled_);
     }
     return ok;
 }
 
 void MqttService::build_default_prefix() {
-    if (prefix_[0] != '\0') return;  // Вже задано
-
+    // Always generate device_id from MAC
     uint8_t mac[6];
     esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
-    snprintf(prefix_, sizeof(prefix_), "modesp/%02X%02X%02X",
+    snprintf(device_id_, sizeof(device_id_), "%02X%02X%02X",
              mac[3], mac[4], mac[5]);
+
+    if (prefix_[0] != '\0') return;  // Manual override from NVS
+
+    if (tenant_[0] != '\0') {
+        snprintf(prefix_, sizeof(prefix_), "modesp/v1/%s/%s", tenant_, device_id_);
+    } else {
+        snprintf(prefix_, sizeof(prefix_), "modesp/v1/pending/%s", device_id_);
+    }
 }
 
 // ── Lifecycle ───────────────────────────────────────────────────
@@ -161,6 +179,19 @@ void MqttService::on_update(uint32_t dt_ms) {
 
     if (!enabled_ || !connected_) return;
 
+    // Heartbeat (metadata, every 30s)
+    heartbeat_timer_ms_ += dt_ms;
+    if (heartbeat_timer_ms_ >= HEARTBEAT_INTERVAL_MS) {
+        heartbeat_timer_ms_ = 0;
+        publish_heartbeat();
+    }
+
+    // HA Auto-Discovery після підключення (виконуємо в main loop task)
+    if (ha_discovery_pending_) {
+        ha_discovery_pending_ = false;
+        publish_ha_discovery();
+    }
+
     publish_timer_ += dt_ms;
     if (publish_timer_ < PUBLISH_INTERVAL_MS) return;
     publish_timer_ = 0;
@@ -213,7 +244,7 @@ bool MqttService::start_client() {
     }
 
     // LWT (Last Will and Testament) — "offline" при розриві
-    char lwt_topic[80];
+    char lwt_topic[128];
     snprintf(lwt_topic, sizeof(lwt_topic), "%s/status", prefix_);
     mqtt_cfg.session.last_will.topic = lwt_topic;
     mqtt_cfg.session.last_will.msg = "offline";
@@ -281,23 +312,34 @@ void MqttService::mqtt_event_handler(void* args, esp_event_base_t base,
             ESP_LOGI(TAG, "Connected to broker");
 
             // Publish "online" status (retain)
-            char topic[80];
+            char topic[128];
             snprintf(topic, sizeof(topic), "%s/status", self->prefix_);
             esp_mqtt_client_publish(self->client_, topic, "online", 6, 1, 1);
 
-            // Subscribe to command topics
-            for (size_t i = 0; i < gen::MQTT_SUBSCRIBE_COUNT; i++) {
-                if (!self->connected_) break;  // З'єднання втрачено під час підписки
-                char sub_topic[80];
-                snprintf(sub_topic, sizeof(sub_topic), "%s/cmd/%s",
-                         self->prefix_, gen::MQTT_SUBSCRIBE[i]);
-                esp_mqtt_client_subscribe(self->client_, sub_topic, 0);
+            // Subscribe to ALL command topics with wildcard
+            // Previously subscribed to 60+ individual keys, which could overflow
+            // the ESP-MQTT outbox causing silent subscription failures.
+            // Wildcard is safe: handle_incoming() validates keys against STATE_META.
+            {
+                char cmd_wildcard[96];
+                snprintf(cmd_wildcard, sizeof(cmd_wildcard), "%s/cmd/+",
+                         self->prefix_);
+                int msg_id = esp_mqtt_client_subscribe(self->client_, cmd_wildcard, 0);
+                if (msg_id < 0) {
+                    ESP_LOGE(TAG, "Failed to subscribe to %s", cmd_wildcard);
+                } else {
+                    ESP_LOGI(TAG, "Subscribed to %s (covers %d keys + _set_tenant)",
+                             cmd_wildcard, (int)gen::MQTT_SUBSCRIBE_COUNT);
+                }
             }
-            ESP_LOGI(TAG, "Subscribed to %d command topics", (int)gen::MQTT_SUBSCRIBE_COUNT);
 
             // Публікуємо alarm state одразу при підключенні (retain)
             self->alarm_republish_timer_ms_ = 0;
+            self->heartbeat_timer_ms_ = 0;
             self->publish_alarms_retained();
+
+            // HA Auto-Discovery — відкладаємо до on_update() (більший стек)
+            self->ha_discovery_pending_ = true;
             break;
         }
 
@@ -365,7 +407,7 @@ void MqttService::publish_state() {
             continue;  // Значення не змінилось — не публікуємо
         }
 
-        char topic[80];
+        char topic[128];
         snprintf(topic, sizeof(topic), "%s/state/%s",
                  prefix_, gen::MQTT_PUBLISH[i]);
 
@@ -395,12 +437,41 @@ void MqttService::publish_alarms_retained() {
         int len = format_value(val.value(), payload, sizeof(payload));
         if (len <= 0) continue;
 
-        char topic[80];
+        char topic[128];
         snprintf(topic, sizeof(topic), "%s/state/%s",
                  prefix_, gen::MQTT_PUBLISH[i]);
         esp_mqtt_client_publish(client_, topic, payload, len, 1, 1);
     }
     ESP_LOGD(TAG, "Alarm topics re-published (retained)");
+}
+
+// ── Heartbeat (metadata) ────────────────────────────────────────
+
+void MqttService::publish_heartbeat() {
+    if (!connected_ || !client_) return;
+
+    char topic[96];
+    snprintf(topic, sizeof(topic), "%s/heartbeat", prefix_);
+
+    // Get RSSI from WiFi
+    int rssi = 0;
+    wifi_ap_record_t ap_info;
+    if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
+        rssi = ap_info.rssi;
+    }
+
+    // Get firmware version
+    const esp_app_desc_t* app_desc = esp_app_get_description();
+
+    char buf[128];  // Stack buffer, no heap allocation
+    int len = snprintf(buf, sizeof(buf),
+        "{\"proto\":1,\"fw\":\"%s\",\"up\":%lu,\"heap\":%lu,\"rssi\":%d}",
+        app_desc->version,
+        (unsigned long)(esp_timer_get_time() / 1000000ULL),
+        (unsigned long)esp_get_free_heap_size(),
+        rssi);
+
+    esp_mqtt_client_publish(client_, topic, buf, len, 0, 0);
 }
 
 // ── Handle incoming commands ────────────────────────────────────
@@ -409,7 +480,7 @@ void MqttService::handle_incoming(const char* topic, int topic_len,
                                     const char* data, int data_len) {
     // Вхідний topic: "{prefix}/cmd/{key}"
     // Шукаємо "/cmd/" в topic
-    char topic_buf[80];
+    char topic_buf[128];
     int copy_len = (topic_len < (int)sizeof(topic_buf) - 1)
                    ? topic_len : (int)sizeof(topic_buf) - 1;
     memcpy(topic_buf, topic, copy_len);
@@ -424,6 +495,33 @@ void MqttService::handle_incoming(const char* topic, int topic_len,
 
     const char* key = cmd_marker + 5;  // skip "/cmd/"
 
+    // Копіюємо payload в null-terminated буфер (потрібно для _set_tenant та звичайних команд)
+    char val_buf[32];
+    int val_len = (data_len < (int)sizeof(val_buf) - 1)
+                  ? data_len : (int)sizeof(val_buf) - 1;
+    memcpy(val_buf, data, val_len);
+    val_buf[val_len] = '\0';
+
+    // Trim trailing whitespace/newlines (MQTT clients may add \n)
+    while (val_len > 0 && (val_buf[val_len - 1] == '\n' ||
+                            val_buf[val_len - 1] == '\r' ||
+                            val_buf[val_len - 1] == ' ')) {
+        val_buf[--val_len] = '\0';
+    }
+
+    // Special command: _set_tenant (not in STATE_META)
+    if (strcmp(key, "_set_tenant") == 0) {
+        strncpy(tenant_, val_buf, sizeof(tenant_) - 1);
+        tenant_[sizeof(tenant_) - 1] = '\0';
+        nvs_helper::write_str("mqtt", "tenant", tenant_);
+        prefix_[0] = '\0';  // Force prefix rebuild
+        build_default_prefix();
+        ESP_LOGI(TAG, "Tenant set to '%s', reconnecting with prefix '%s'",
+                 tenant_, prefix_);
+        reconnect();
+        return;
+    }
+
     // Валідація: ключ має бути в STATE_META як writable
     const auto* meta = gen::find_state_meta(key);
     if (!meta) {
@@ -434,13 +532,6 @@ void MqttService::handle_incoming(const char* topic, int topic_len,
         ESP_LOGW(TAG, "Key not writable: %s", key);
         return;
     }
-
-    // Копіюємо payload в null-terminated буфер
-    char val_buf[32];
-    int val_len = (data_len < (int)sizeof(val_buf) - 1)
-                  ? data_len : (int)sizeof(val_buf) - 1;
-    memcpy(val_buf, data, val_len);
-    val_buf[val_len] = '\0';
 
     ESP_LOGI(TAG, "CMD: %s = %s", key, val_buf);
 
@@ -543,6 +634,8 @@ esp_err_t MqttService::handle_get_mqtt(httpd_req_t* req) {
         "\"port\":%d,"
         "\"user\":\"%s\","
         "\"prefix\":\"%s\","
+        "\"tenant\":\"%s\","
+        "\"device_id\":\"%s\","
         "\"status\":\"%s\"}",
         self->enabled_ ? "true" : "false",
         self->connected_ ? "true" : "false",
@@ -550,6 +643,8 @@ esp_err_t MqttService::handle_get_mqtt(httpd_req_t* req) {
         self->port_,
         self->user_,
         self->prefix_,
+        self->tenant_,
+        self->device_id_,
         status);
 
     set_cors_headers(req);
@@ -588,9 +683,13 @@ esp_err_t MqttService::handle_post_mqtt(httpd_req_t* req) {
     strncpy(new_user, self->user_, sizeof(new_user));
     char new_pass[64];
     strncpy(new_pass, self->pass_, sizeof(new_pass));
-    char new_prefix[48];
+    char new_prefix[80];
     strncpy(new_prefix, self->prefix_, sizeof(new_prefix));
+    char new_tenant[36];
+    strncpy(new_tenant, self->tenant_, sizeof(new_tenant));
     bool new_enabled = self->enabled_;
+    bool tenant_changed = false;
+    bool prefix_explicit = false;
 
     for (int i = 1; i < r - 1; i += 2) {
         if (tokens[i].type != JSMN_STRING) continue;
@@ -622,13 +721,23 @@ esp_err_t MqttService::handle_post_mqtt(httpd_req_t* req) {
         } else if (strcmp(k, "prefix") == 0) {
             strncpy(new_prefix, val, sizeof(new_prefix) - 1);
             new_prefix[sizeof(new_prefix) - 1] = '\0';
+            prefix_explicit = true;
+        } else if (strcmp(k, "tenant") == 0) {
+            strncpy(new_tenant, val, sizeof(new_tenant) - 1);
+            new_tenant[sizeof(new_tenant) - 1] = '\0';
+            tenant_changed = true;
         } else if (strcmp(k, "enabled") == 0) {
             new_enabled = (val[0] == 't' || val[0] == '1');
         }
     }
 
+    // If tenant changed and no explicit prefix, clear prefix for auto-rebuild
+    if (tenant_changed && !prefix_explicit) {
+        new_prefix[0] = '\0';
+    }
+
     bool ok = self->save_config(new_broker, new_port, new_user,
-                                 new_pass, new_prefix, new_enabled);
+                                 new_pass, new_prefix, new_tenant, new_enabled);
 
     set_cors_headers(req);
     httpd_resp_set_type(req, "application/json");
@@ -641,6 +750,144 @@ esp_err_t MqttService::handle_post_mqtt(httpd_req_t* req) {
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to save");
     }
     return ESP_OK;
+}
+
+// ── Home Assistant MQTT Auto-Discovery ──────────────────────────
+
+void MqttService::publish_ha_entity(
+        const char* state_key, const char* name,
+        const char* entity_type, const char* device_class,
+        const char* unit, const char* state_class,
+        const char* device_id, const char* device_name) {
+
+    // object_id: "equipment.air_temp" → "equipment_air_temp"
+    char object_id[48] = {};
+    strncpy(object_id, state_key, sizeof(object_id) - 1);
+    for (char* p = object_id; *p; p++) {
+        if (*p == '.') *p = '_';
+    }
+
+    char disc_topic[96];
+    snprintf(disc_topic, sizeof(disc_topic),
+             "homeassistant/%s/modesp_%s/%s/config",
+             entity_type, device_id, object_id);
+
+    char state_topic[128];
+    snprintf(state_topic, sizeof(state_topic), "%s/state/%s", prefix_, state_key);
+
+    char unique_id[64];
+    snprintf(unique_id, sizeof(unique_id), "modesp_%s_%s", device_id, object_id);
+
+    char payload[512];
+    int len = 0;
+
+    len += snprintf(payload + len, sizeof(payload) - len,
+        "{\"name\":\"%s\","
+        "\"unique_id\":\"%s\","
+        "\"state_topic\":\"%s\","
+        "\"availability_topic\":\"%s/status\","
+        "\"payload_available\":\"online\","
+        "\"payload_not_available\":\"offline\"",
+        name, unique_id, state_topic, prefix_);
+
+    if (device_class && device_class[0]) {
+        len += snprintf(payload + len, sizeof(payload) - len,
+            ",\"device_class\":\"%s\"", device_class);
+    }
+    if (unit && unit[0]) {
+        len += snprintf(payload + len, sizeof(payload) - len,
+            ",\"unit_of_measurement\":\"%s\"", unit);
+    }
+    if (state_class && state_class[0]) {
+        len += snprintf(payload + len, sizeof(payload) - len,
+            ",\"state_class\":\"%s\"", state_class);
+    }
+    // binary_sensor: HA очікує ON/OFF, але ми публікуємо true/false
+    if (strcmp(entity_type, "binary_sensor") == 0) {
+        len += snprintf(payload + len, sizeof(payload) - len,
+            ",\"payload_on\":\"true\",\"payload_off\":\"false\"");
+    }
+
+    len += snprintf(payload + len, sizeof(payload) - len,
+        ",\"device\":{"
+        "\"identifiers\":[\"modesp_%s\"],"
+        "\"name\":\"%s\","
+        "\"model\":\"ModESP v4\","
+        "\"manufacturer\":\"ModESP\""
+        "}}",
+        device_id, device_name);
+
+    esp_mqtt_client_publish(client_, disc_topic, payload, len, 1, 1);
+    ESP_LOGD(TAG, "HA discovery: %s", disc_topic);
+}
+
+void MqttService::publish_ha_discovery() {
+    if (!client_ || !connected_) return;
+
+    // device_id: витягуємо з prefix_ "modesp/A1B2C3" → "a1b2c3" (lowercase)
+    char device_id[8] = {};
+    const char* slash = strrchr(prefix_, '/');
+    if (slash && *(slash + 1) != '\0') {
+        strncpy(device_id, slash + 1, sizeof(device_id) - 1);
+        for (int i = 0; device_id[i]; i++) {
+            if (device_id[i] >= 'A' && device_id[i] <= 'F') {
+                device_id[i] = device_id[i] - 'A' + 'a';
+            }
+        }
+    }
+
+    char device_name[32];
+    snprintf(device_name, sizeof(device_name), "ModESP %s", device_id);
+
+    // Таблиця entities: {state_key, name, entity_type, device_class, unit, state_class}
+    struct EntityDef {
+        const char* state_key;
+        const char* name;
+        const char* entity_type;
+        const char* device_class;
+        const char* unit;
+        const char* state_class;
+    };
+
+    static const EntityDef ENTITIES[] = {
+        // Температури
+        {"equipment.air_temp",          "Air Temperature",    "sensor",        "temperature", "\xc2\xb0" "C", "measurement"},
+        {"equipment.evap_temp",         "Evap Temperature",   "sensor",        "temperature", "\xc2\xb0" "C", "measurement"},
+        {"equipment.cond_temp",         "Cond Temperature",   "sensor",        "temperature", "\xc2\xb0" "C", "measurement"},
+        {"thermostat.setpoint",         "Setpoint",           "sensor",        "temperature", "\xc2\xb0" "C", "measurement"},
+        {"thermostat.effective_setpoint","Effective Setpoint", "sensor",        "temperature", "\xc2\xb0" "C", "measurement"},
+        // Бінарні стани обладнання
+        {"equipment.compressor",        "Compressor",         "binary_sensor", "",            "",            ""},
+        {"equipment.defrost_relay",     "Defrost Relay",      "binary_sensor", "",            "",            ""},
+        {"equipment.evap_fan",          "Evap Fan",           "binary_sensor", "",            "",            ""},
+        {"equipment.cond_fan",          "Cond Fan",           "binary_sensor", "",            "",            ""},
+        // Аварії
+        {"thermostat.alarm_active",     "Alarm Active",       "binary_sensor", "problem",     "",            ""},
+        {"protection.high_alarm",       "High Temp Alarm",    "binary_sensor", "problem",     "",            ""},
+        {"protection.low_alarm",        "Low Temp Alarm",     "binary_sensor", "problem",     "",            ""},
+        {"protection.rate_alarm",       "Rate-of-Change Alarm","binary_sensor","problem",     "",            ""},
+        {"protection.short_cycle_alarm","Short Cycle Alarm",  "binary_sensor", "problem",     "",            ""},
+        {"protection.rapid_cycle_alarm","Rapid Cycle Alarm",  "binary_sensor", "problem",     "",            ""},
+        // Текстові стани
+        {"thermostat.alarm_code",       "Alarm Code",         "sensor",        "",            "",            ""},
+        {"defrost.active",              "Defrost Active",     "binary_sensor", "",            "",            ""},
+        {"defrost.state",               "Defrost State",      "sensor",        "",            "",            ""},
+        // Діагностика
+        {"protection.compressor_hours", "Motor Hours",        "sensor",        "duration",    "h",           "total_increasing"},
+        {"protection.compressor_duty",  "Duty Cycle",         "sensor",        "",            "%",           "measurement"},
+        {"system.uptime",               "Uptime",             "sensor",        "duration",    "s",           "total_increasing"},
+        {"system.heap_free",            "Free Heap",          "sensor",        "",            "B",           "measurement"},
+    };
+
+    ESP_LOGI(TAG, "Publishing HA discovery (%d entities, device=%s)", (int)(sizeof(ENTITIES)/sizeof(ENTITIES[0])), device_id);
+
+    for (const auto& e : ENTITIES) {
+        publish_ha_entity(e.state_key, e.name, e.entity_type,
+                          e.device_class, e.unit, e.state_class,
+                          device_id, device_name);
+    }
+
+    ESP_LOGI(TAG, "HA discovery complete");
 }
 
 } // namespace modesp

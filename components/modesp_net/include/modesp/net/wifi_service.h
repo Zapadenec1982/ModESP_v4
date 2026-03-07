@@ -22,6 +22,7 @@ public:
 
     bool on_init() override;
     void on_update(uint32_t dt_ms) override;
+    void on_stop() override;
 
     // Current state
     bool is_connected() const { return connected_; }
@@ -55,6 +56,9 @@ private:
     esp_netif_t* sta_netif_ = nullptr;
     esp_netif_t* ap_netif_  = nullptr;
 
+    // mDNS
+    bool mdns_started_ = false;
+
     // Scan state
     bool scan_done_ = false;
     bool restore_ap_after_scan_ = false;  // AP mode restore deferred until results read
@@ -87,6 +91,8 @@ private:
     bool start_ap();
     void ensure_sta_netif();
     void ensure_ap_netif();
+    void start_mdns();
+    void stop_mdns();
 
     // ESP event handler (static because ESP-IDF API requires function pointer)
     static void event_handler(void* arg, esp_event_base_t base,

@@ -10,6 +10,7 @@
 #include "modesp/services/nvs_helper.h"
 #include "esp_mac.h"
 #include "esp_log.h"
+#include "mdns.h"
 
 #include <cstring>
 #include <cstdio>
@@ -83,6 +84,9 @@ void WiFiService::handle_ip_event(int32_t event_id, void* event_data) {
         state_set("wifi.ip", ip_str_);
 
         ESP_LOGI(TAG, "Connected! IP: %s", ip_str_);
+
+        // Запускаємо mDNS після отримання IP в STA mode
+        start_mdns();
     }
 }
 
@@ -126,6 +130,10 @@ bool WiFiService::on_init() {
         ESP_LOGW(TAG, "No credentials found in NVS, starting AP mode");
         return start_ap();
     }
+}
+
+void WiFiService::on_stop() {
+    stop_mdns();
 }
 
 void WiFiService::on_update(uint32_t dt_ms) {
@@ -448,7 +456,47 @@ bool WiFiService::start_ap() {
 
     ESP_LOGI(TAG, "AP mode started: %s ch=%ld %s", ap_ssid, (long)ap_channel,
              wifi_config.ap.authmode == WIFI_AUTH_WPA2_PSK ? "WPA2" : "open");
+
+    // Запускаємо mDNS в AP mode (клієнти AP можуть використовувати .local)
+    start_mdns();
     return true;
+}
+
+// ── mDNS ────────────────────────────────────────────────────────
+
+void WiFiService::start_mdns() {
+    if (mdns_started_) return;
+
+    uint8_t mac[6];
+    esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
+    char hostname[24];
+    snprintf(hostname, sizeof(hostname), "modesp-%02x%02x", mac[4], mac[5]);
+
+    esp_err_t err = mdns_init();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "mDNS init failed: %s", esp_err_to_name(err));
+        return;
+    }
+
+    mdns_hostname_set(hostname);
+    mdns_instance_name_set("ModESP Controller");
+
+    // Реєструємо HTTP сервіс (для виявлення WebUI в мережі)
+    mdns_txt_item_t txt_items[] = {
+        {"path", "/"},
+    };
+    mdns_service_add(nullptr, "_http", "_tcp", 80, txt_items, 1);
+
+    mdns_started_ = true;
+    state_set("system.mdns_hostname", hostname);
+    ESP_LOGI(TAG, "mDNS started: %s.local", hostname);
+}
+
+void WiFiService::stop_mdns() {
+    if (!mdns_started_) return;
+    mdns_free();
+    mdns_started_ = false;
+    ESP_LOGI(TAG, "mDNS stopped");
 }
 
 } // namespace modesp
