@@ -969,7 +969,7 @@ class UIJsonGenerator:
         }
 
     def _system_page(self):
-        """System page: info, firmware, settings (time+auth), service actions."""
+        """System page: wide system info, time, security, service actions."""
         return {
             "id": "system",
             "title": "Система",
@@ -978,8 +978,10 @@ class UIJsonGenerator:
             "system": True,
             "cards": [
                 {
-                    "title": "Інформація",
+                    "title": "Інформація про систему",
                     "icon": "info",
+                    "subtitle": "Стан та прошивка",
+                    "wide": True,
                     "widgets": [
                         {"key": "system.uptime", "widget": "value",
                          "unit": "s", "description": "Час роботи"},
@@ -989,12 +991,6 @@ class UIJsonGenerator:
                          "unit": "B", "description": "Мінімум RAM"},
                         {"key": "system.boot_reason", "widget": "value",
                          "description": "Причина завантаження"},
-                    ],
-                },
-                {
-                    "title": "Прошивка",
-                    "icon": "cpu",
-                    "widgets": [
                         {"key": "_ota.version", "widget": "value",
                          "description": "Версія"},
                         {"key": "_ota.date", "widget": "value",
@@ -1004,13 +1000,12 @@ class UIJsonGenerator:
                         {"key": "_ota.upload", "widget": "firmware_upload",
                          "api_endpoint": "/api/ota",
                          "label": "Вибрати .bin файл",
-                         "description": "Завантажити нову прошивку"},
+                         "description": "Оновити прошивку"},
                     ],
                 },
                 {
-                    "title": "Налаштування",
-                    "icon": "settings",
-                    "subtitle": "Час та безпека",
+                    "title": "Час",
+                    "icon": "clock",
                     "group": "settings",
                     "collapsible": True,
                     "widgets": [
@@ -1025,6 +1020,14 @@ class UIJsonGenerator:
                         {"key": "_action.time_save", "widget": "time_save",
                          "label": "Зберегти",
                          "api_endpoint": "/api/time"},
+                    ],
+                },
+                {
+                    "title": "Безпека",
+                    "icon": "shield",
+                    "group": "settings",
+                    "collapsible": True,
+                    "widgets": [
                         {"key": "_action.auth_save", "widget": "auth_save",
                          "description": "Аутентифікація"},
                     ],

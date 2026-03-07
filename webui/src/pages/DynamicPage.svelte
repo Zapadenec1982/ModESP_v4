@@ -53,9 +53,9 @@
     }))
     .filter(c => !c.isAlarmCard && !c.isDiagCard && c.visible)
     .sort((a, b) => {
-      // Короткі картки першими (парами), довгі після них (повна ширина)
-      const aFull = a.widgetCount > FULL_WIDTH_THRESHOLD ? 1 : 0;
-      const bFull = b.widgetCount > FULL_WIDTH_THRESHOLD ? 1 : 0;
+      // Явно wide картки зберігають позицію; auto-wide (>7 widgets) — після коротких
+      const aFull = !a.card.wide && a.widgetCount > FULL_WIDTH_THRESHOLD ? 1 : 0;
+      const bFull = !b.card.wide && b.widgetCount > FULL_WIDTH_THRESHOLD ? 1 : 0;
       return aFull - bFull;
     })
     : [];
