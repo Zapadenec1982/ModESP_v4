@@ -983,18 +983,22 @@ class UIJsonGenerator:
                     "subtitle": "Стан та прошивка",
                     "wide": True,
                     "widgets": [
+                        # Row 1: runtime
                         {"key": "system.uptime", "widget": "value",
                          "unit": "s", "description": "Час роботи"},
+                        {"key": "system.boot_reason", "widget": "value",
+                         "description": "Причина завантаження"},
+                        # Row 2: memory
                         {"key": "system.heap_free", "widget": "value",
                          "unit": "B", "description": "Вільна RAM"},
                         {"key": "system.heap_min", "widget": "value",
                          "unit": "B", "description": "Мінімум RAM"},
-                        {"key": "system.boot_reason", "widget": "value",
-                         "description": "Причина завантаження"},
+                        # Row 3: firmware identity
                         {"key": "_ota.version", "widget": "value",
-                         "description": "Версія"},
+                         "description": "Версія прошивки"},
                         {"key": "_ota.date", "widget": "value",
                          "description": "Дата збірки"},
+                        # Row 4: board + update
                         {"key": "_ota.board", "widget": "value",
                          "description": "Плата"},
                         {"key": "_ota.upload", "widget": "firmware_upload",
