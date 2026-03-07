@@ -96,7 +96,11 @@
     </div>
   {/if}
 
-  {#if open || !collapsible}
+  {#if !collapsible}
+    <div class="grp-body">
+      <slot />
+    </div>
+  {:else if open}
     <div
       class="grp-body"
       transition:slide={{ duration: reducedMotion ? 0 : 200 }}
