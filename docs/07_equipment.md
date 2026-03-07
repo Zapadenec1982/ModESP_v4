@@ -189,26 +189,44 @@ equipment.ds18b20_offset, equipment.filter_coeff
 
 ### Архітектура
 
-Protection module моніторить 5 типів аварій і публікує стан через SharedState.
+Protection module моніторить 10 незалежних аварій і публікує стан через SharedState.
 Не зупиняє обладнання напряму — `protection.lockout` зарезервований (завжди false).
 
 - **Priority:** HIGH (1) — оновлюється ПІСЛЯ Equipment (0), ДО Thermostat (2)
 - **Inputs:** читає equipment.air_temp, equipment.sensor1_ok, equipment.sensor2_ok,
-  equipment.door_open, defrost.active, defrost.phase з SharedState
-- **Features:** `basic_protection` (always_active), `door_protection` (requires door_contact role)
+  equipment.door_open, equipment.compressor, equipment.evap_temp, defrost.active,
+  defrost.phase з SharedState
+- **Features:** 4 features (basic_protection, door_protection, compressor_protection, rate_protection)
 
-### 5 незалежних моніторів аварій
+### 10 незалежних моніторів аварій
 
 Кожен монітор має структуру AlarmMonitor: `active` (аварія зараз), `pending` (в затримці),
 `pending_ms` (час в pending стані).
+
+**Група 1 — Температурні:**
 
 | Монітор | Код аварії | Тип затримки | Параметр затримки | Блокування defrost |
 |---------|------------|--------------|-------------------|--------------------|
 | High Temp (HAL) | `high_temp` | delayed | `high_alarm_delay` (хв) | Так (heating-фази + post-defrost) |
 | Low Temp (LAL) | `low_temp` | delayed | `low_alarm_delay` (хв) | Ні |
-| Sensor1 (ERR1) | `err1` | instant | - | Ні |
-| Sensor2 (ERR2) | `err2` | instant | - | Ні |
-| Door | `door` | delayed | `door_delay` (хв) | Ні |
+
+**Група 2 — Сенсорні:**
+
+| Монітор | Код аварії | Тип затримки | Параметр затримки |
+|---------|------------|--------------|-------------------|
+| Sensor1 (ERR1) | `err1` | instant | - |
+| Sensor2 (ERR2) | `err2` | instant | - |
+| Door | `door` | delayed | `door_delay` (хв) |
+
+**Група 3 — Компресорні (Phase 17):**
+
+| # | Монітор | Код аварії | Умова | Auto-clear |
+|---|---------|------------|-------|------------|
+| 6 | Short Cycling | `short_cycle` | 3 послідовних цикли < min_compressor_run | Так |
+| 7 | Rapid Cycling | `rapid_cycle` | > max_starts_hour запусків за 1 год | Так |
+| 8 | Continuous Run | `continuous_run` | Робота > max_continuous_run хв | Так (при OFF) |
+| 9 | Pulldown Failure | `pulldown` | T не впала на pulldown_min_drop за pulldown_timeout | Так |
+| 10 | Rate-of-Change | `rate_rise` | EWMA rate > max_rise_rate за rate_duration | Так |
 
 ### Алгоритм delayed alarm (High Temp, Low Temp, Door)
 
@@ -230,40 +248,46 @@ if (!sensor_ok && !active)  → active = true    // аварія негайно
 if (sensor_ok && active && !manual_reset) → active = false  // auto-clear
 ```
 
-### Defrost blocking (High Temp alarm)
+### CompressorTracker (Phase 17)
 
-High Temp alarm блокується у два етапи:
+Ring buffer із 30 timestamp запусків компресора (oldest evicted при переповненні).
+На кожен ON edge: запис timestamp, перевірка short cycle, підрахунок starts у 1h window.
+
+Діагностика публікується кожні 5 сек:
+- `protection.compressor_starts_1h` — скользне вікно 1 год
+- `protection.compressor_duty` — duty cycle %
+- `protection.compressor_run_time` — поточний час ON (0 якщо OFF)
+- `protection.last_cycle_run` / `protection.last_cycle_off` — тривалість попередніх циклів
+- `protection.compressor_hours` — кумулятивний наробіток (persist, зберігається раз на годину)
+
+### RateTracker (Phase 17)
+
+EWMA (lambda=0.3) згладжує миттєву швидкість зміни T. Якщо rate > `max_rise_rate` при
+працюючому компресорі протягом `rate_duration` хвилин → alarm. Блокується під час
+defrost.active та post_defrost_delay.
+
+### Defrost blocking
+
+High Temp + rate_rise алarms блокуються у два етапи:
 
 1. **Під час heating-фаз defrost** (stabilize, valve_open, active, equalize):
    - pending скидається, нові аварії не ставляться в чергу
-   - Якщо аварія вже active — вона залишається
 2. **Post-defrost suppression** (після завершення defrost):
    - Таймер `post_defrost_delay` (хвилини, default 30)
-   - Протягом цього часу HAL alarm також блокується
    - Дозволяє температурі стабілізуватися після відтайки
-
-Визначення heating-фази: EM читає `defrost.phase` і перевіряє чи це одна з:
-"active", "stabilize", "valve_open", "equalize".
 
 ### Auto-clear vs Manual reset
 
-- **Auto-clear** (manual_reset = false, default): аварія знімається автоматично при поверненні
-  умови в норму (температура в діапазоні, датчик відновився, двері закрились)
-- **Manual reset** (manual_reset = true): аварія залишається active навіть коли умова зникла.
-  Потрібна команда `protection.reset_alarms = true` через WebUI або API
+- **Auto-clear** (manual_reset = false, default): аварія знімається автоматично при поверненні умови в норму
+- **Manual reset** (manual_reset = true): потрібна команда `protection.reset_alarms = true` через WebUI або API
+- Виняток: continuous_run auto-clear при вимкненні компресора навіть в manual режимі
 
-Команда reset_alarms скидає ВСІ активні аварії одночасно та повертає trigger в false.
+### Пріоритет alarm_code (11 рівнів)
 
-### Пріоритет alarm_code
-
-Коли кілька аварій активні одночасно, `protection.alarm_code` показує найвищу за пріоритетом:
-
-1. `err1` — обрив датчика камери (найвищий пріоритет)
-2. `high_temp` — перевищення верхньої межі
-3. `low_temp` — перевищення нижньої межі
-4. `err2` — обрив датчика випарника
-5. `door` — двері відкриті занадто довго
-6. `none` — аварій немає
+```
+err1 > rate_rise > high_temp > pulldown > short_cycle > rapid_cycle >
+low_temp > continuous_run > err2 > door > none
+```
 
 ### State keys (повна таблиця)
 
@@ -273,14 +297,24 @@ High Temp alarm блокується у два етапи:
 |-----|------|------|
 | `protection.lockout` | bool | Аварійна зупинка (зарезервовано, завжди false) |
 | `protection.alarm_active` | bool | Є хоча б одна активна аварія |
-| `protection.alarm_code` | string | Код найвищої аварії (err1/high_temp/low_temp/err2/door/none) |
+| `protection.alarm_code` | string | Код найвищої аварії (11 варіантів) |
 | `protection.high_temp_alarm` | bool | Аварія верхньої температури |
 | `protection.low_temp_alarm` | bool | Аварія нижньої температури |
 | `protection.sensor1_alarm` | bool | Обрив датчика камери |
 | `protection.sensor2_alarm` | bool | Обрив датчика випарника |
 | `protection.door_alarm` | bool | Двері відкриті занадто довго |
+| `protection.short_cycle_alarm` | bool | Короткі цикли компресора |
+| `protection.rapid_cycle_alarm` | bool | Часті запуски компресора |
+| `protection.continuous_run_alarm` | bool | Безперервна тривала робота |
+| `protection.pulldown_alarm` | bool | Відмова відтягування температури |
+| `protection.rate_alarm` | bool | Швидке зростання температури |
+| `protection.compressor_starts_1h` | int | Запусків за останню годину |
+| `protection.compressor_duty` | float | Duty cycle компресора (%) |
+| `protection.compressor_run_time` | int | Поточний час роботи (сек) |
+| `protection.last_cycle_run` | int | Тривалість останнього циклу ON (сек) |
+| `protection.last_cycle_off` | int | Тривалість останнього циклу OFF (сек) |
 
-**Readwrite (налаштування, persist в NVS):**
+**Readwrite (налаштування, persist в NVS — 15 параметрів):**
 
 | Key | Type | Unit | Min | Max | Step | Default | Опис |
 |-----|------|------|-----|-----|------|---------|------|
@@ -291,6 +325,14 @@ High Temp alarm блокується у два етапи:
 | `protection.door_delay` | int | хв | 0 | 60 | 1 | 5 | Затримка аварії дверей |
 | `protection.manual_reset` | bool | - | - | - | - | false | Ручне скидання (false=auto) |
 | `protection.post_defrost_delay` | int | хв | 0 | 120 | 5 | 30 | Suppress HAL alarm після defrost |
+| `protection.min_compressor_run` | int | сек | 30 | 600 | 10 | 120 | Мін. тривалість циклу ON |
+| `protection.max_starts_hour` | int | разів | 4 | 30 | 1 | 12 | Макс. запусків за годину |
+| `protection.max_continuous_run` | int | хв | 60 | 720 | 30 | 360 | Макс. безперервна робота |
+| `protection.pulldown_timeout` | int | хв | 15 | 240 | 5 | 60 | Таймаут зниження T |
+| `protection.pulldown_min_drop` | float | °C | 0.5 | 10.0 | 0.5 | 2.0 | Мін. зниження T |
+| `protection.max_rise_rate` | float | °C/хв | 0.1 | 2.0 | 0.1 | 0.5 | Макс. швидкість росту T |
+| `protection.rate_duration` | int | хв | 1 | 30 | 1 | 5 | Тривалість rate alarm |
+| `protection.compressor_hours` | float | год | 0 | 999999 | 1 | 0 | Кумулятивні мотогодини |
 
 **Readwrite (команда):**
 
@@ -302,21 +344,27 @@ High Temp alarm блокується у два етапи:
 
 | Feature | Always active | Requires roles | Controls settings |
 |---------|---------------|----------------|-------------------|
-| `basic_protection` | Так | - | high_limit, low_limit, high_alarm_delay, low_alarm_delay, manual_reset, post_defrost_delay |
+| `basic_protection` | Так | - | high_limit, low_limit, high/low_alarm_delay, manual_reset, post_defrost_delay |
 | `door_protection` | Ні | door_contact | door_delay |
-
-door_delay widget в UI має `visible_when: {"key": "equipment.has_door_contact", "eq": true}` —
-показується тільки коли контакт дверей прив'язаний в bindings.
+| `compressor_protection` | Ні | compressor | min_compressor_run, max_starts_hour, max_continuous_run, pulldown_timeout, pulldown_min_drop |
+| `rate_protection` | Ні | compressor, air_temp | max_rise_rate, rate_duration |
 
 ### MQTT
 
 **Publish:** protection.lockout, protection.alarm_active, protection.alarm_code,
 protection.high_temp_alarm, protection.low_temp_alarm, protection.sensor1_alarm,
-protection.sensor2_alarm, protection.door_alarm
+protection.sensor2_alarm, protection.door_alarm, protection.short_cycle_alarm,
+protection.rapid_cycle_alarm, protection.continuous_run_alarm, protection.pulldown_alarm,
+protection.rate_alarm, protection.compressor_starts_1h, protection.compressor_duty,
+protection.compressor_run_time, protection.last_cycle_run, protection.last_cycle_off,
+protection.compressor_hours
 
 **Subscribe:** protection.high_limit, protection.low_limit, protection.high_alarm_delay,
 protection.low_alarm_delay, protection.door_delay, protection.manual_reset,
-protection.post_defrost_delay, protection.reset_alarms
+protection.post_defrost_delay, protection.reset_alarms, protection.min_compressor_run,
+protection.max_starts_hour, protection.max_continuous_run, protection.pulldown_timeout,
+protection.pulldown_min_drop, protection.max_rise_rate, protection.rate_duration,
+protection.compressor_hours
 
 ---
 
@@ -335,5 +383,6 @@ Equipment завжди оновлюється першим, бо Protection та
 
 ## Changelog
 
+- 2026-03-07 — Phase 17 (Compressor Safety): розширено Protection до 10 моніторів, CompressorTracker, RateTracker, 15 persist params, 4 features, alarm priority 11 рівнів
 - 2026-03-01 — Рефакторинг: defrost_relay merger (heater+hg_valve->defrost_relay), додано NTC/DS18B20 settings, has_* keys оновлено, EMA filter + rounding, pcf8574_relay/pcf8574_input drivers
 - 2026-02-25 — Створено: Equipment Manager + Protection документація

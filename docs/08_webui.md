@@ -4,7 +4,7 @@
 
 - **Svelte 4** (4.2.18) + **Rollup 3** bundler
 - Deployed як gzipped bundle на LittleFS ESP32
-- Bundle size: ~44KB gzipped (bundle.js.gz + bundle.css.gz)
+- Bundle size: **63KB JS gz + 13KB CSS gz** (76KB total)
 - Target: ESP32 HTTP server (port 80), SPA shell в `data/www/index.html`
 - Zero runtime dependencies -- тільки devDependencies (svelte, rollup, terser, etc.)
 
@@ -32,16 +32,18 @@ webui/
 │   ├── components/              # Загальнi компоненти
 │   │   ├── Layout.svelte        # Sidebar (desktop) + bottom tabs (mobile)
 │   │   ├── Card.svelte          # Collapsible card wrapper
+│   │   ├── GroupAccordion.svelte # Responsive accordion (desktop open / mobile collapsed)
 │   │   ├── Clock.svelte         # Годинник на Dashboard (поточний час)
 │   │   ├── Icon.svelte          # SVG icon renderer
 │   │   ├── MiniChart.svelte     # Sparkline температури в Dashboard tiles
 │   │   ├── Toast.svelte         # Toast повiдомлення (save/error feedback)
 │   │   └── WidgetRenderer.svelte # Dispatch widget по типу
 │   │   └── widgets/             # 21 widget компонентiв
-│   └── pages/                   # 3 page компоненти
-│       ├── Dashboard.svelte     # Tile-based overview
+│   └── pages/                   # 7 page компоненти
+│       ├── Dashboard.svelte     # Bento-card overview (Premium Redesign R1)
 │       ├── DynamicPage.svelte   # Рендер будь-якої ui.json page
 │       └── BindingsEditor.svelte # Equipment bindings + OneWire scan
+│           (+ bindings/: BindingCard, EquipmentStatus, OneWireDiscovery, OneWirePicker)
 ├── scripts/
 │   └── deploy.js                # Gzip (level 9) + copy to data/www/
 ├── rollup.config.js             # IIFE output, terser, css-only
@@ -140,12 +142,13 @@ webui/
 
 ### Dashboard (`Dashboard.svelte`)
 
-- Tile-based layout з головними показниками
-- Велике значення температури з кольоровими зонами (blue/green/amber/red)
-- Setpoint slider (inline)
-- Tiles: компресор, вентилятор, нагрiвач, конденсатор, дверi
-- Badges: стан термостата, дефрост фаза, нiчний режим, аварiя
-- Показує `thermostat.display_temp` (може бути "-d-" пiд час вiдтайки)
+Bento-card layout (Premium Redesign R1):
+- **Main temp-card**: велика температура з gradient + heroBreath glow animation, setpoint slider,
+  hero-badges (COOLING / DEFROST / NIGHT), відображає `thermostat.display_temp`
+- **Metrics row**: evap_temp та cond_temp tiles з кольоровим border-left (frost/warn)
+- **Protection summary**: shield icon + red/green status badge + alarm code
+- **Equipment grid**: 4-cell 2-column, color-coded badges (cyan=compressor, orange=defrost,
+  frost=evap_fan, green=cond_fan), progress bar animations
 
 ### DynamicPage (`DynamicPage.svelte`)
 
@@ -260,8 +263,50 @@ cd webui && npm run deploy
 - Мiнiмальний HTML з `<link>` на `/bundle.css` та `<script>` на `/bundle.js`
 - ESP32 HTTP server вiддає `.gz` файли з `Content-Encoding: gzip`
 
+## Premium Redesign R1 (2026-03-07)
+
+### GroupAccordion
+
+Компонент `GroupAccordion.svelte` реалізує responsive accordion для груп налаштувань:
+
+- **Desktop (≥768px):** відкрито за замовчуванням, collapsible = false
+- **Mobile (<768px):** collapsed, summary chips показують поточні значення
+- `collapsible` prop — контролює режим; `defaultOpen` — поведінка за замовчуванням
+- Стан зберігається в `sessionStorage` / `localStorage` між навігацією
+- Slide transition (Svelte built-in) + icon color `var(--accent)`
+
+### Dashboard Bento-card Layout
+
+Замість плоского tile layout — ієрархічний bento-card дизайн:
+
+| Зона | Вміст | Стиль |
+|------|-------|-------|
+| Main temp-card | Температура + setpoint slider + COOLING/DEFROST/NIGHT badges | Gradient + heroBreath animation |
+| Metrics row | evap_temp, cond_temp tiles | Кольоровий border-left |
+| Protection summary | shield icon + status + alarm code | Red/green badge |
+| Equipment grid | compressor, defrost, evap_fan, cond_fan | Color-coded 2×2 grid |
+
+### System / Network Pages
+
+- **System page:** wide status card вгорі, firmware/runtime у двох колонках
+- **Network page:** WiFi + MQTT у власних картках з icons
+- **Uptime:** ClockWidget форматує як HH:MM:SS замість сирих секунд
+
+### Icons
+
+- `lib/icons.js`: inline Lucide SVG paths (shield, flame, snowflake, wifi, thermometer та ін.)
+- Protection page: shield icon (SVG inline)
+- Equipment status: color-coded badges замість SVG icons (cyan/orange/frost/green)
+
+### Статистика R1
+
+- **41 Svelte файл** (7 pages + 34 components/widgets)
+- **63KB JS gz + 13KB CSS gz** (76KB total; 43KB→63KB після R1)
+
 ## Changelog
 
+- 2026-03-07 -- Premium Redesign R1: GroupAccordion responsive, bento-card Dashboard, System/Network
+  pages restructure, uptime HH:MM:SS. Bundle 44KB→76KB (63KB JS + 13KB CSS gz).
 - 2026-03-01 -- Оновлено requires_state приклад (defrost_relay), додано компоненти Toast/MiniChart/Clock.
   Додано stores toast.js, wifiForm.js. Додано lib/chart.js.
 - 2026-02-25 -- Створено

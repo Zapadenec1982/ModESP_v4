@@ -42,6 +42,8 @@ desktop.ini
 first_prompt.md
 next_prompt*.md
 CLAUDE_TASK.md
+CLAUDE_TASK_*.md
+test_out.txt
 # /prompts/  — тепер частина проекту (MVP/Production plan)
 .clangd
 nul

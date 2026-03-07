@@ -16,13 +16,13 @@ ModESP v4 is an open-source firmware framework that turns a cheap ESP32 module i
 
 ### Key Features
 
-- **Full refrigeration control** — thermostat with asymmetric differential, 7-phase defrost (3 types), 5 alarm monitors with protection
+- **Full refrigeration control** — thermostat with asymmetric differential, 7-phase defrost (3 types), 10 alarm monitors with CompressorTracker
 - **Equipment Manager** — centralized HAL owner with arbitration (Protection > Defrost > Thermostat) and safety interlocks
 - **Progressive feature disclosure** — UI shows only settings for connected equipment; select widgets with human-readable labels
 - **Manifest-driven code generation** — JSON manifests → auto-generated UI, C++ headers, MQTT topics, feature flags
 - **Zero heap in hot path** — ETL instead of STL; no `new`/`malloc` in runtime loops
 - **6-channel DataLogger** — temperature history + events on LittleFS, streaming JSON API, SVG chart with CSV export
-- **Svelte Web UI** — real-time dashboard with WebSocket, 44KB gzipped, light/dark theme, i18n UA/EN
+- **Svelte Web UI** — real-time bento-card dashboard with WebSocket, 76KB gzipped (63KB+13KB), light/dark theme, i18n UA/EN, responsive accordions
 - **MQTT with TLS** — publish state and subscribe to commands via any MQTT broker
 - **OTA updates** — over-the-air firmware upload with rollback support
 - **Persistent settings** — auto-save configuration to NVS with debounce
@@ -86,7 +86,7 @@ ModESP_v4/
 │   ├── equipment/                 # HAL owner, arbitration, interlocks
 │   ├── thermostat/                # Asymmetric differential, fan control, safety run
 │   ├── defrost/                   # 7-phase FSM, 3 defrost types, 4 initiations
-│   ├── protection/                # 5 alarm monitors, delayed alarms, manual reset
+│   ├── protection/                # 10 alarm monitors, CompressorTracker, motor hours
 │   └── datalogger/                # 6-channel temperature logging + events (LittleFS)
 ├── tools/
 │   ├── generate_ui.py             # Manifest → 5 artifacts generator (~1644 lines)
@@ -173,18 +173,19 @@ cd tests/host && cmake -B build && cmake --build build && ctest --test-dir build
 
 ## Current Status
 
-**Phase 14b (DataLogger 6-channel) complete.** Milestone M3 "Production Ready" achieved. The following is fully operational:
+**Phase 17 (Compressor Safety) + WebUI Premium Redesign R1 complete.** Milestone M3 "Production Ready" achieved. The following is fully operational:
 
-- 5 business modules: Equipment Manager, Thermostat v2, Defrost (7-phase), Protection (5 alarms), DataLogger (6-ch)
+- 5 business modules: Equipment Manager, Thermostat v2, Defrost (7-phase), Protection (10 alarms + CompressorTracker), DataLogger (6-ch)
 - 6 drivers: DS18B20 (OneWire), Relay (GPIO), Digital Input (GPIO), NTC (ADC), PCF8574 Relay (I2C), PCF8574 Input (I2C)
 - 2 boards: ESP32-DevKit (GPIO direct), KC868-A6 (I2C PCF8574 expander)
 - 6-channel temperature logging with event history, SVG chart, CSV export
 - Night Setback (4 modes), post-defrost alarm suppression, display during defrost
 - Progressive feature disclosure with runtime UI visibility (visible_when, requires_state)
-- Svelte WebUI with 24 widget types, light/dark theme, i18n UA/EN (44KB gzipped)
+- Compressor Safety: short/rapid cycling, continuous run, pulldown failure, rate-of-change alarms + motor hours tracking
+- Svelte WebUI: bento-card dashboard, GroupAccordion responsive, 41 Svelte files, light/dark theme, i18n UA/EN (76KB gzipped)
 - MQTT with TLS, OTA with rollback, auto-persist settings to NVS
-- WiFi STA + AP fallback
-- 53 STATE_META entries, 37 MQTT pub, 52 MQTT sub
+- WiFi STA + AP fallback (country code UA, STA watchdog)
+- 61 STATE_META entries, 48 MQTT pub, 60 MQTT sub
 - 264 pytest tests + 90 C++ host tests green
 - Free heap after boot: **176 KB** / 240 KB
 
@@ -200,7 +201,7 @@ cd tests/host && cmake -B build && cmake --build build && ctest --test-dir build
 | Containers | ETL (Embedded Template Library) |
 | JSON parser | jsmn (header-only) |
 | Filesystem | LittleFS |
-| WebUI | Svelte 4, Rollup, Lucide icons, i18n UA/EN |
+| WebUI | Svelte 4, Rollup, Lucide icons, i18n UA/EN, GroupAccordion (responsive) |
 | Code generation | Python 3 (manifest → 5 artifacts, ~1644 lines) |
 | Testing | pytest (264 tests) + doctest (90 C++ host tests) |
 

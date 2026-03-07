@@ -4,6 +4,15 @@
 
 ## 2026-03-07
 
+- **Документаційна ревізія R1:** аудит 5 агентів, виявлені та виправлені невідповідності:
+  - `docs/07_equipment.md`: додана повна секція Phase 17 Protection (10 моніторів, CompressorTracker,
+    RateTracker, alarm priority 11 рівнів, 15 persist params, 4 features)
+  - `docs/08_webui.md`: додана секція Premium Redesign R1 (GroupAccordion, bento-card, System/Network pages),
+    виправлений bundle size (44KB→76KB)
+  - `docs/11_protection.md`: виправлено persist params 14→15 (compressor_hours persist)
+  - `README.md`: оновлені метрики STATE_META 53→61, MQTT pub 37→48, MQTT sub 52→60,
+    статус Phase 14b→Phase 17, опис Protection (5→10 alarms), WebUI (44KB→76KB)
+
 - **WebUI Premium Redesign:** повний ребрендинг інтерфейсу:
   - Dark theme redesign: нові CSS токени, bento-card dashboard, unified color system
   - Card icons: shield (Protection), flame (Defrost), thermometer (Thermostat), database (DataLogger)
