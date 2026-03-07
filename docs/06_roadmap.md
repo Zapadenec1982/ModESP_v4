@@ -1,6 +1,6 @@
 # ModESP v4 — Дорожня карта розвитку
 
-> Останнє оновлення: 2026-03-01
+> Останнє оновлення: 2026-03-07
 > Платформа: ESP32-WROOM-32, ESP-IDF v5.5, C++17 + ETL
 
 ---
@@ -150,11 +150,37 @@ I2C bus + PCF8574 expander підтримка в HAL:
 
 Виправлення фрагментації heap та оптимізація пам'яті:
 - **NVS batch API** — batch_open/batch_close замість 30+ окремих nvs_open/close
-- **WS broadcast interval** — 1000→3000ms (зменшення malloc/free частоти)
+- **WS broadcast interval** — 3000→1500ms (delta ~200B замість 3.5KB full state)
 - **Float rounding** — roundf(T×100)/100 зменшує SharedState version bumps
 - **Thermostat publish debounce** — effective_setpoint та display_temp публікуються лише при зміні
-- **WS heap guard** — skip broadcast при heap < 40KB
+- **WS heap guard** — 16KB (full state) / 8KB (delta/ping) мінімум перед malloc
 - **system.heap_largest** — моніторинг фрагментації heap (найбільший вільний блок)
+
+### Phase 17 Phase 1 — Compressor Safety (завершено 2026-03-02)
+
+5 нових моніторів аварій в Protection Module:
+- **Short Cycling** — 3 послідовних циклів < min_compressor_run → alarm
+- **Rapid Cycling** — > max_starts_hour запусків за 1 годину → alarm
+- **Continuous Run** — безперервна робота > max_continuous_run → alarm
+- **Pulldown Failure** — T не впала на pulldown_min_drop після pulldown_timeout → alarm
+- **Rate-of-Change** — EWMA lambda=0.3, T росте > max_rise_rate → alarm
+- **CompressorTracker** — ring buffer 30 starts, sliding 1h window, duty cycle
+- **Motor hours** — compressor_hours (float, persist, інкремент 5 сек)
+- **Дефрост інтеграція** — rate alarm блокується під час heating-фаз + post_defrost_delay
+- 2 features (compressor_protection, rate_protection), 18 нових state keys
+- 122 state keys, 61 STATE_META, 48 MQTT pub, 60 MQTT sub, 254 pytest + 51 host C++
+
+### WebUI Premium Redesign R1 (завершено 2026-03-07)
+
+Повний ребрендинг інтерфейсу до рівня промислового HMI:
+- **Premium dark theme** — нові CSS токени, bento-card dashboard, unified color system
+- **Card icons** — shield (Protection), flame (Defrost), thermometer (Thermostat), database (DataLogger)
+- **Responsive accordions** — desktop = open, mobile (< 768px) = collapsed (GroupAccordion)
+- **System & Network pages** — wide status card at top, balanced layout, card icons
+- **Widget grouping** — same-type widgets in columns, logical ordering
+- **Duplicate removal** — Compressor Diagnostics, Alarm Status, defrost.state
+- **Uptime format** — HH:MM:SS
+- Bundle: 63KB JS gz + 13KB CSS gz, 32 Svelte компоненти, ~120 i18n keys per language
 
 ---
 
@@ -257,7 +283,7 @@ I2C bus + PCF8574 expander підтримка в HAL:
 | M1 | Лабораторний прототип | 1-5c | ✅ 2026-02-17 |
 | M2 | Connected Controller | 6 | ✅ 2026-02-17 |
 | M3 | Production Ready | 9 + 9.5 + 10.5 | ✅ 2026-02-20 |
-| M4 | Industrial Grade | 12a + 8 + 13 | 🔄 Частково (12a ✅) |
+| M4 | Industrial Grade | 12a + 8 + 13 | 🔄 Частково (12a ✅, 17Ph1 ✅) |
 
 ---
 
@@ -272,6 +298,8 @@ I2C bus + PCF8574 expander підтримка в HAL:
 ---
 
 ## Changelog
+- v26.0 (2026-03-07) — WebUI Premium Redesign R1 DONE + ревізія документації. 63KB JS gz, responsive accordions, card icons, System/Network pages.
+- v25.0 (2026-03-02) — Phase 17 Phase 1 DONE: Compressor Safety. 5 alarms, CompressorTracker, RateTracker, motor hours. 122 state keys, 61 META.
 - v24.0 (2026-03-01) — Рефакторинг документації: замінено Danfoss абревіатури на людські назви, виправлено одиниці параметрів, додано відсутні HTTP endpoints
 - v23.0 (2026-03-01) — Phase 12a DONE: KC868-A6, defrost_relay merger, heap optimization. 6 drivers, 53 STATE_META, 52 MQTT sub.
 - v22.0 (2026-02-24) — Phase 14b DONE: 6-channel DataLogger, TempRecord 16 bytes, ChannelDef table, JSON v3. 97 state keys, 264 tests.

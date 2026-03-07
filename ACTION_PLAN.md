@@ -9,15 +9,15 @@
 **Milestone M3: "Production Ready" — ДОСЯГНУТО (2026-02-20).**
 
 Повністю працюючий контролер холодильної камери:
-- 5 бізнес-модулів (Equipment Manager, Thermostat v2, Defrost 7-phase, Protection 5 alarms, DataLogger)
+- 5 бізнес-модулів (Equipment Manager, Thermostat v2, Defrost 7-phase, Protection 10 alarms + CompressorTracker, DataLogger)
 - 6 драйверів (DS18B20, Relay, Digital Input, NTC, PCF8574 Relay, PCF8574 Input)
 - Features System — UI показує тільки підключене обладнання
 - Runtime UI visibility — visible_when + per-option disabled
-- Svelte WebUI (21 widget type, Dashboard, dark/light theme, i18n UA/EN, 52KB gzipped)
+- Svelte WebUI (32 компоненти, Dashboard, premium dark theme, responsive accordions, i18n UA/EN, 63KB JS + 13KB CSS gzipped)
 - MQTT TLS, OTA з rollback, auto-persist NVS
-- 264 pytest + 90 host C++ (doctest) тестів
+- 254 pytest + 51 host C++ (doctest) тестів
 - KC868-A6 board support (Phase 12a)
-- 97 state keys, 53 STATE_META, 37 MQTT pub, 52 MQTT sub
+- 122 state keys, 61 STATE_META, 48 MQTT pub, 60 MQTT sub
 
 **Стабільність:** 30+ годин на реальному KC868-A6. Всі алгоритми працюють.
 
@@ -197,7 +197,7 @@
 
 ---
 
-## Архітектурні рішення (діючі)
+## Архітектурні рішення (діючі і заплановані)
 
 | Тема | Рішення |
 |------|---------|
@@ -209,6 +209,9 @@
 | UI | Manifest → generate_ui.py → ui.json → Svelte WebUI runtime |
 | **Design System** | Industrial HMI: tokens.css, semantic colors, 44px touch, mobile-first |
 | **WS Broadcast** | ✅ Delta-only (Sprint 1.1a): changed_keys_ вектор, ~200B vs 3.5KB, track_change=false для таймерів |
+| **MQTT топіки** | ⚠️ ЗАПЛАНОВАНО: додати `v1/{tenant_id}/{device_id}/...` до Sprint 12. Поточна структура без tenant_id не масштабується |
+| **Версіонування протоколу** | ⚠️ ЗАПЛАНОВАНО: `proto` поле в status JSON + версія в топіку (`v1`). Бекенд підписується на всі версії одночасно |
+| **БД схема** | ⚠️ ЗАПЛАНОВАНО: `tenant_id` в кожній таблиці з першого дня. Телеметрія — партиціонування по місяцях або TimescaleDB |
 
 ---
 
@@ -244,6 +247,8 @@
 | 14+14a+14b | 6-channel DataLogger + ChartWidget | 02-24 |
 | 7b-c | WebUI Polish: theme, i18n, animations | 02-24 |
 | 12a | KC868-A6: I2C PCF8574 relay + input drivers | 03-01 |
+| 17 Ph.1 | Compressor Safety: 5 нових аварій, CompressorTracker, RateTracker | 03-02 |
+| WebUI R1 | Premium Redesign: dark theme bento, icons, accordions, System/Network pages | 03-07 |
 
 **Детальна історія:** docs/CHANGELOG.md
 
@@ -251,6 +256,8 @@
 
 ## Changelog
 
+- 2026-03-07 — Ревізія стану проекту: оновлено "Де ми зараз" (122 state keys, 61 META, 63KB bundle), додано завершені фази Phase 17 + WebUI Redesign R1.
+- 2026-03-07 — Додано ЧАСТИНУ 3 (Хмарна інфраструктура): архітектурні рішення tenant_id + версіонування MQTT протоколу + схема БД. Спринти 12-17. Оновлено таблицю архітектурних рішень.
 - 2026-03-02 — **MVP ЧАСТИНА 1 ЗАВЕРШЕНА.** Session 1.8 (°C/°F) відкладено, Session 1.9 (HW test) — пройдено.
 - 2026-03-02 — Session 1.7 DONE: MQTT backoff (5s→5min), WiFi STA watchdog (10min→restart), retained alarms (QoS1+retain), Auth Settings card, OTA board validation (project_name check), SharedState auto-capacity (136 = 104 manifest + 32 runtime).
 - 2026-03-02 — Session 1.1a DONE: Delta WS broadcasts, DataLogger NTP fix, DS18B20 MATCH_ROM only, Bindings unbind/rebind UI.

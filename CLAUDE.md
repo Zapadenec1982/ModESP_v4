@@ -30,12 +30,15 @@ board.json + bindings.json ─┘
 - `webui/src/` — Svelte 4 source code (App.svelte, stores, components, pages)
 - `webui/dist/` — Build output (bundle.js, bundle.css) — gitignored
 - `data/www/index.html` — SPA shell (підключає /bundle.css + /bundle.js)
-- `data/www/bundle.js.gz` — Svelte app gzipped (~38KB)
-- `data/www/bundle.css.gz` — Styles gzipped (~6KB)
+- `data/www/bundle.js.gz` — Svelte app gzipped (~63KB)
+- `data/www/bundle.css.gz` — Styles gzipped (~13KB)
 - Build: `cd webui && npm run build` → Deploy: `npm run deploy` → data/www/
 - **Theme:** Light/Dark toggle (stores/theme.js), CSS custom properties, localStorage + prefers-color-scheme
-- **i18n:** UA/EN toggle (stores/i18n.js), ~75 inline keys per language, derived `$t` store
+- **i18n:** UA/EN toggle (stores/i18n.js), ~120 inline keys per language, derived `$t` store
 - **Animations:** Svelte transitions (fly/fade/slide/scale), value flash on change, staggered card entrance
+- **Responsive accordions:** desktop open by default, mobile (< 768px) collapsed (GroupAccordion)
+- **Card icons:** shield, flame, thermometer, database, network per module
+- **Premium dark theme:** bento-card dashboard layout, unified color tokens
 
 ### Equipment Layer (Phase 9.1)
 - **EquipmentModule** (priority=CRITICAL) — єдиний модуль з доступом до HAL drivers
@@ -86,7 +89,7 @@ board.json + bindings.json ─┘
   - Діагностика (кожні 5 сек): starts_1h, duty%, run_time, last_cycle_run/off, compressor_hours
   - 2 features: compressor_protection (requires_roles: [compressor]), rate_protection (requires_roles: [compressor, air_temp])
 - **Alarm code priority:** err1 > rate_rise > high_temp > pulldown > short_cycle > rapid_cycle > low_temp > continuous_run > err2 > door > none
-- **14 persist параметрів:** high_limit, low_limit, high_alarm_delay, low_alarm_delay, door_delay, manual_reset, post_defrost_delay + min_compressor_run, max_starts_hour, max_continuous_run, pulldown_timeout, pulldown_min_drop, max_rise_rate, rate_duration
+- **15 persist параметрів:** high_limit, low_limit, high_alarm_delay, low_alarm_delay, door_delay, manual_reset, post_defrost_delay + min_compressor_run, max_starts_hour, max_continuous_run, pulldown_timeout, pulldown_min_drop, max_rise_rate, rate_duration, compressor_hours
 - **compressor_hours:** float, persist — кумулятивні мотогодини (інкремент 5 сек)
 - **protection.lockout = false** завжди (зарезервовано)
 - Порядок update: Equipment(0) → **Protection(1)** → Thermostat(2)
@@ -166,7 +169,7 @@ board.json + bindings.json ─┘
 - `drivers/*/manifest.json` — опис драйверів (category, hardware_type, settings)
 - `data/board.json` — PCB pin assignment (gpio_outputs, onewire_buses, gpio_inputs, adc_channels, i2c_buses, i2c_expanders, expander_outputs, expander_inputs)
 - `data/bindings.json` — Runtime: role → driver → GPIO mapping
-- `tools/generate_ui.py` — генератор (~1644 рядків, генерує 5 артефактів)
+- `tools/generate_ui.py` — генератор (~1677 рядків, генерує 5 артефактів)
 - `components/*/src/*.cpp` — C++ реалізація
 - `main/main.cpp` — boot sequence та main loop
 
@@ -429,6 +432,7 @@ feat(module): короткий опис
 | `next_prompt.md` | Промпт для наступної сесії | В кінці поточної сесії |
 
 ## Changelog
+- 2026-03-07 — WebUI Premium Redesign R1: premium dark theme bento-card dashboard, card icons (shield/flame/thermometer/database), responsive accordions (GroupAccordion, desktop open / mobile collapsed), System & Network pages restructure, widget grouping, duplicate card removal, uptime HH:MM:SS. Bundle: 63KB JS + 13KB CSS gz. i18n: ~120 keys per language. 32 Svelte компоненти.
 - 2026-03-02 — Phase 17 Phase 1: Compressor Safety in Protection Module. 5 new alarm monitors (short cycle,
   rapid cycle, continuous run, pulldown failure, rate-of-change). CompressorTracker (ring buffer 30 starts,
   sliding 1h window). RateTracker (EWMA lambda=0.3). Motor hours tracking. 2 features (compressor_protection,

@@ -2,6 +2,22 @@
 
 > Повний changelog проекту. Останні зміни також дублюються в CLAUDE.md.
 
+## 2026-03-07
+
+- **WebUI Premium Redesign:** повний ребрендинг інтерфейсу:
+  - Dark theme redesign: нові CSS токени, bento-card dashboard, unified color system
+  - Card icons: shield (Protection), flame (Defrost), thermometer (Thermostat), database (DataLogger)
+  - Unit labels у Compressor Diagnostics card (хв, год, °C)
+  - Wide card flag: Налаштування захисту + System Info як wide cards
+  - Logical widget grouping: same-type widgets in columns
+  - Duplicate card removal: Compressor Diagnostics, Alarm Status, defrost.state
+  - sensor2 alarm guard: visible_when equipment.has_evap_temp
+  - System page: wide status card at top, balanced layout (runtime/firmware info)
+  - Network & System pages restructure: card patterns, icons, wide flags
+  - Responsive accordions: desktop = open, mobile (< 768px) = collapsed (GroupAccordion)
+  - Uptime format: HH:MM:SS замість секунд
+  - bundle.js.gz: ~63KB, bundle.css.gz: ~13KB
+
 ## 2026-03-02
 
 - **TASK_17 Phase 1:** Compressor Safety in Protection Module:
