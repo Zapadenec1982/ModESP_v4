@@ -447,7 +447,9 @@ esp_err_t HttpService::handle_post_settings(httpd_req_t* req) {
     if (!check_auth(req)) return ESP_OK;
     auto* self = static_cast<HttpService*>(req->user_ctx);
 
-    char buf[256];
+    // 512B: один ключ до 32 chars + float = ~40B → вміщує до ~12 пар за раз.
+    // 32 tokens: 1 об'єкт + 2 tokens/пара × 15 пар = 31 tokens — з запасом.
+    char buf[512];
     int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
     if (len <= 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty body");
@@ -457,9 +459,9 @@ esp_err_t HttpService::handle_post_settings(httpd_req_t* req) {
 
     // Parse with jsmn
     jsmn_parser parser;
-    jsmntok_t tokens[16];
+    jsmntok_t tokens[32];
     jsmn_init(&parser);
-    int r = jsmn_parse(&parser, buf, len, tokens, 16);
+    int r = jsmn_parse(&parser, buf, len, tokens, 32);
     if (r < 1 || tokens[0].type != JSMN_OBJECT) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
         return ESP_FAIL;
