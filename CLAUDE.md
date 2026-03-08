@@ -445,6 +445,8 @@ feat(module): короткий опис
 | `next_prompt.md` | Промпт для наступної сесії | В кінці поточної сесії |
 
 ## Changelog
+- 2026-03-08 — Partition table fix for OTA: added otadata (8KB) + ota_1 (1.5MB), removed factory
+  (4MB flash constraint). E2E OTA verified: download → SHA256 → flash → set_boot → reboot in ~8s.
 - 2026-03-08 — Cloud OTA Handler: ota_handler.h/.cpp (HTTP download → flash → reboot in FreeRTOS task,
   SHA256 streaming verification, magic byte + board match validation, atomic guard). _ota command handler
   in mqtt_service.cpp (jsmn JSON parse, OtaParams struct). System keys MQTT publishing (_ota.status,
