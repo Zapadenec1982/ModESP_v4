@@ -27,12 +27,8 @@ static const char* TAG = "DS18B20";
 // portDISABLE_INTERRUPTS() захищає тільки поточне ядро від переривань,
 // але НЕ зупиняє задачі на іншому ядрі (dual-core ESP32).
 static SemaphoreHandle_t s_bus_mutex = nullptr;
-
-static void ensure_bus_mutex() {
-    if (!s_bus_mutex) {
-        s_bus_mutex = xSemaphoreCreateMutex();
-    }
-}
+// Mutex ініціалізується в DS18B20Driver::init() — викликається послідовно
+// з DriverManager::init() до старту HTTP/WiFi tasks.
 
 // ═══════════════════════════════════════════════════════════════
 // DS18B20 ROM commands
@@ -74,6 +70,17 @@ bool DS18B20Driver::init() {
         return false;
     }
 
+    // Ініціалізуємо bus mutex один раз (перший instance).
+    // Виклик відбувається з DriverManager::init() — до старту HTTP task,
+    // тому race condition між instances неможливий.
+    if (!s_bus_mutex) {
+        s_bus_mutex = xSemaphoreCreateMutex();
+        if (!s_bus_mutex) {
+            ESP_LOGE(TAG, "Failed to create OneWire bus mutex");
+            return false;
+        }
+    }
+
     // Configure GPIO as open-drain output (for OneWire)
     gpio_config_t io_conf = {};
     io_conf.pin_bit_mask = (1ULL << gpio_);
@@ -112,7 +119,7 @@ void DS18B20Driver::update(uint32_t dt_ms) {
 
     // Phase 1: start conversion
     if (!conversion_started_ && ms_since_read_ >= read_interval_ms_) {
-        ensure_bus_mutex();
+
         bool converted = false;
         if (xSemaphoreTake(s_bus_mutex, pdMS_TO_TICKS(200)) == pdTRUE) {
             converted = start_conversion();
@@ -140,7 +147,7 @@ void DS18B20Driver::update(uint32_t dt_ms) {
 
         float temp = 0.0f;
         bool read_ok = false;
-        ensure_bus_mutex();
+
         if (xSemaphoreTake(s_bus_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
             read_ok = retry([&]() { return read_temperature(temp); });
             xSemaphoreGive(s_bus_mutex);
@@ -443,11 +450,16 @@ uint8_t DS18B20Driver::ow_read_byte(gpio_num_t gpio) {
 // ═══════════════════════════════════════════════════════════════
 
 size_t DS18B20Driver::scan_bus(gpio_num_t gpio, RomAddress* results, size_t max_results) {
-    // Захист від конкурентного доступу з DS18B20Driver::update() (main task)
-    ensure_bus_mutex();
-    if (xSemaphoreTake(s_bus_mutex, pdMS_TO_TICKS(2000)) != pdTRUE) {
-        ESP_LOGE(TAG, "scan_bus: cannot acquire bus mutex (bus busy?)");
-        return 0;
+    // Захист від конкурентного доступу з DS18B20Driver::update() (main task).
+    // Якщо mutex == nullptr — жоден DS18B20 не ініціалізований → active update() немає
+    // → конкурентного доступу немає, сканування безпечне без mutex.
+    bool have_mutex = false;
+    if (s_bus_mutex) {
+        if (xSemaphoreTake(s_bus_mutex, pdMS_TO_TICKS(2000)) != pdTRUE) {
+            ESP_LOGE(TAG, "scan_bus: cannot acquire bus mutex (bus busy?)");
+            return 0;
+        }
+        have_mutex = true;
     }
 
     // Налаштувати GPIO для OneWire (open-drain + pull-up)
@@ -592,7 +604,7 @@ size_t DS18B20Driver::scan_bus(gpio_num_t gpio, RomAddress* results, size_t max_
     }
 
     ESP_LOGI(TAG, "Bus scan complete: %d device(s) on GPIO %d", (int)found, gpio);
-    xSemaphoreGive(s_bus_mutex);
+    if (have_mutex) xSemaphoreGive(s_bus_mutex);
     return found;
 }
 
@@ -602,17 +614,20 @@ size_t DS18B20Driver::scan_bus(gpio_num_t gpio, RomAddress* results, size_t max_
 
 bool DS18B20Driver::read_temp_by_address(gpio_num_t gpio,
                                           const RomAddress& addr, float& temp_out) {
-    ensure_bus_mutex();
-    if (xSemaphoreTake(s_bus_mutex, pdMS_TO_TICKS(2000)) != pdTRUE) {
-        ESP_LOGE(TAG, "read_temp_by_address: cannot acquire bus mutex");
-        return false;
+    bool have_mutex = false;
+    if (s_bus_mutex) {
+        if (xSemaphoreTake(s_bus_mutex, pdMS_TO_TICKS(2000)) != pdTRUE) {
+            ESP_LOGE(TAG, "read_temp_by_address: cannot acquire bus mutex");
+            return false;
+        }
+        have_mutex = true;
     }
 
     bool result = false;
 
     // Start conversion з MATCH_ROM
     if (!ow_reset(gpio)) {
-        xSemaphoreGive(s_bus_mutex);
+        if (have_mutex) xSemaphoreGive(s_bus_mutex);
         return false;
     }
     ow_write_byte(gpio, CMD_MATCH_ROM);
@@ -643,7 +658,7 @@ bool DS18B20Driver::read_temp_by_address(gpio_num_t gpio,
         }
     }
 
-    xSemaphoreGive(s_bus_mutex);
+    if (have_mutex) xSemaphoreGive(s_bus_mutex);
     return result;
 }
 
