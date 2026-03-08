@@ -28,6 +28,12 @@
       "description": "Аварійна зупинка від Protection",
       "optional": true
     },
+    "protection.compressor_blocked": {
+      "source_module": "protection",
+      "type": "bool",
+      "description": "Примусова зупинка компресора (скасовує hot gas defrost)",
+      "optional": true
+    },
     "thermostat.display_defrost": {
       "source_module": "thermostat",
       "type": "int",

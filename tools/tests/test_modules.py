@@ -423,9 +423,9 @@ class TestDefrostManifest:
                     "defrost.req.evap_fan", "defrost.req.cond_fan"}
         assert set(req_keys) == expected
 
-    def test_has_5_inputs(self, defrost):
-        """Defrost має 5 inputs."""
-        assert len(defrost["inputs"]) == 5
+    def test_has_6_inputs(self, defrost):
+        """Defrost має 6 inputs."""
+        assert len(defrost["inputs"]) == 6
 
     def test_compressor_input_required(self, defrost):
         """equipment.compressor — обов'язковий input (для dct=2)."""

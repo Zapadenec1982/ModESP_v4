@@ -238,6 +238,16 @@ void DefrostModule::on_update(uint32_t dt_ms) {
         return;
     }
 
+    // Compressor blocked → abort hot gas defrost (потрібен потік хладагенту)
+    bool comp_blocked = read_bool("protection.compressor_blocked");
+    if (comp_blocked && phase_ != Phase::IDLE && active_defrost_type_ == 2) {
+        if (phase_ == Phase::STABILIZE || phase_ == Phase::VALVE_OPEN || phase_ == Phase::ACTIVE) {
+            ESP_LOGW(TAG, "Compressor blocked — aborting hot gas defrost");
+            finish_defrost();
+            return;
+        }
+    }
+
     // Ручна зупинка розморозки
     if (read_bool("defrost.manual_stop")) {
         state_set("defrost.manual_stop", false);

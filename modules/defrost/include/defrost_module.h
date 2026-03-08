@@ -38,8 +38,8 @@
  *   defrost.phase               — string (idle/stabilize/valve_open/active/equalize/drip/fad)
  *   defrost.state               — string (human-readable for UI)
  *   defrost.phase_timer         — int (seconds in current phase)
- *   defrost.interval_timer      — int (seconds, persisted)
- *   defrost.defrost_count       — int (persisted)
+ *   defrost.interval_timer      — int (seconds remaining, NOT persisted)
+ *   defrost.defrost_count       — int (NOT persisted, resets on reboot)
  *   defrost.last_termination    — string (temp/timeout)
  *   defrost.consecutive_timeouts — int
  *   defrost.req.compressor      — bool

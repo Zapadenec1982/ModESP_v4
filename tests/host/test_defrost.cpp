@@ -643,6 +643,87 @@ TEST_CASE("Defrost: skip when evap temp > end_temp (clean evaporator) [defrost]"
 // TEST 15: defrost.initiation=3 (disabled) -- never starts
 // -----------------------------------------------------------------------------
 
+TEST_CASE("Defrost: compressor_blocked aborts hot gas defrost [defrost]") {
+    modesp::SharedState state;
+    DefrostModule defrost;
+    modesp::ModuleManager mgr;
+    mgr.register_module(defrost);
+    mgr.init_all(state);
+
+    df_setup_inputs(state);
+    state.set("equipment.has_defrost_relay", true);
+    state.set("defrost.type",           static_cast<int32_t>(2));  // hot gas
+    state.set("defrost.stabilize_time", static_cast<int32_t>(1));  // 1 min
+    state.set("defrost.valve_delay",    static_cast<int32_t>(3));  // 3 s
+    state.set("defrost.termination",    static_cast<int32_t>(1));  // by timer
+
+    SUBCASE("aborts hot gas in STABILIZE phase") {
+        state.set("defrost.manual_start", true);
+        defrost.on_update(100u);
+        REQUIRE(df_get_str(state, "defrost.phase") == "stabilize");
+
+        state.set("protection.compressor_blocked", true);
+        defrost.on_update(100u);
+
+        CHECK(df_get_bool(state, "defrost.active") == false);
+        CHECK(df_get_str(state, "defrost.phase") == "idle");
+        CHECK(df_get_bool(state, "defrost.req.compressor") == false);
+        CHECK(df_get_bool(state, "defrost.req.defrost_relay") == false);
+    }
+
+    SUBCASE("aborts hot gas in ACTIVE phase") {
+        state.set("defrost.manual_start", true);
+        defrost.on_update(100u);      // → STABILIZE
+        defrost.on_update(60001u);    // → VALVE_OPEN
+        defrost.on_update(3001u);     // → ACTIVE
+        REQUIRE(df_get_str(state, "defrost.phase") == "active");
+
+        state.set("protection.compressor_blocked", true);
+        defrost.on_update(100u);
+
+        CHECK(df_get_bool(state, "defrost.active") == false);
+        CHECK(df_get_str(state, "defrost.phase") == "idle");
+    }
+
+    SUBCASE("does NOT abort heater defrost (type=1)") {
+        state.set("defrost.type", static_cast<int32_t>(1));  // heater
+        state.set("defrost.manual_start", true);
+        defrost.on_update(100u);
+        REQUIRE(df_get_str(state, "defrost.phase") == "active");
+
+        state.set("protection.compressor_blocked", true);
+        defrost.on_update(100u);
+
+        // Heater defrost continues — compressor not needed
+        CHECK(df_get_bool(state, "defrost.active") == true);
+        CHECK(df_get_str(state, "defrost.phase") == "active");
+    }
+
+    SUBCASE("does NOT abort hot gas in DRIP/FAD phases") {
+        state.set("defrost.manual_start", true);
+        state.set("defrost.max_duration", static_cast<int32_t>(1));  // 1 min
+        state.set("defrost.drip_time",    static_cast<int32_t>(2));  // 2 min
+        state.set("defrost.fan_delay",    static_cast<int32_t>(2));  // 2 min FAD
+        defrost.on_update(100u);      // → STABILIZE
+        defrost.on_update(60001u);    // → VALVE_OPEN
+        defrost.on_update(3001u);     // → ACTIVE
+        defrost.on_update(60001u);    // → EQUALIZE (timer termination)
+        defrost.on_update(120001u);   // → DRIP
+        REQUIRE(df_get_str(state, "defrost.phase") == "drip");
+
+        state.set("protection.compressor_blocked", true);
+        defrost.on_update(100u);
+
+        // DRIP phase continues — no compressor needed
+        CHECK(df_get_bool(state, "defrost.active") == true);
+        CHECK(df_get_str(state, "defrost.phase") == "drip");
+    }
+}
+
+// -----------------------------------------------------------------------------
+// TEST 16: defrost.initiation=3 (disabled) -- never starts
+// -----------------------------------------------------------------------------
+
 TEST_CASE("Defrost: initiation=3 disabled -- never auto-starts [defrost]") {
     modesp::SharedState state;
     DefrostModule defrost;
