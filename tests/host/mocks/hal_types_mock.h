@@ -25,9 +25,9 @@ typedef enum {
 typedef int adc_channel_t;
 typedef int adc_unit_t;
 
-// I2C
-typedef int i2c_master_bus_handle_t;
-typedef int i2c_master_dev_handle_t;
+// I2C — pointer types для сумісності з nullptr в hal_types.h
+typedef void* i2c_master_bus_handle_t;
+typedef void* i2c_master_dev_handle_t;
 
 // esp_err_t
 typedef int esp_err_t;

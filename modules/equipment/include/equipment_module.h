@@ -133,4 +133,18 @@ private:
     uint32_t comp_since_ms_   = modesp::TIMER_SATISFIED;  // Час з останнього перемикання
     static constexpr uint32_t COMP_MIN_OFF_MS = 180000;  // 3 хв min OFF
     static constexpr uint32_t COMP_MIN_ON_MS  = 120000;  // 2 хв min ON
+
+#ifdef HOST_BUILD
+public:
+    // Test-only: прямий доступ до driver pointers для ін'єкції mock drivers
+    void inject_sensor_air(modesp::ISensorDriver* s)     { sensor_air_ = s; }
+    void inject_sensor_evap(modesp::ISensorDriver* s)    { sensor_evap_ = s; }
+    void inject_sensor_cond(modesp::ISensorDriver* s)    { sensor_cond_ = s; }
+    void inject_compressor(modesp::IActuatorDriver* a)   { compressor_ = a; }
+    void inject_defrost_relay(modesp::IActuatorDriver* a){ defrost_relay_ = a; }
+    void inject_evap_fan(modesp::IActuatorDriver* a)     { evap_fan_ = a; }
+    void inject_cond_fan(modesp::IActuatorDriver* a)     { cond_fan_ = a; }
+    void inject_door_sensor(modesp::ISensorDriver* s)    { door_sensor_ = s; }
+    void inject_night_sensor(modesp::ISensorDriver* s)   { night_sensor_ = s; }
+#endif
 };

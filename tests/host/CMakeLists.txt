@@ -36,9 +36,12 @@ include_directories(
     "${ETL_INCLUDE}"                                        # etl/*.h (pure C++, no stubs needed)
     "${ROOT}/components/modesp_core/include"                # modesp/shared_state.h, base_module.h, types.h
     "${ROOT}/generated"                                     # features_config.h, state_meta.h, etc.
+    "${ROOT}/components/modesp_hal/include"                  # modesp/hal/driver_interfaces.h, hal_types.h
     "${ROOT}/modules/thermostat/include"                    # thermostat_module.h
     "${ROOT}/modules/defrost/include"                       # defrost_module.h
     "${ROOT}/modules/protection/include"                    # protection_module.h
+    "${ROOT}/modules/equipment/include"                     # equipment_module.h
+    "${ROOT}/modules/datalogger/include"                    # datalogger_module.h
     "${CMAKE_SOURCE_DIR}"                                   # for #include "doctest.h"
 )
 
@@ -47,6 +50,7 @@ set(CORE_SOURCES
     "${CMAKE_SOURCE_DIR}/shared_state_host.cpp"
     "${CMAKE_SOURCE_DIR}/base_module_host.cpp"
     "${CMAKE_SOURCE_DIR}/module_manager_host.cpp"
+    "${CMAKE_SOURCE_DIR}/driver_manager_host.cpp"
 )
 
 # ── Business module sources (compile directly — only need esp_log.h which is mocked) ──
@@ -54,6 +58,8 @@ set(MODULE_SOURCES
     "${ROOT}/modules/thermostat/src/thermostat_module.cpp"
     "${ROOT}/modules/defrost/src/defrost_module.cpp"
     "${ROOT}/modules/protection/src/protection_module.cpp"
+    "${ROOT}/modules/equipment/src/equipment_module.cpp"
+    "${ROOT}/modules/datalogger/src/datalogger_module.cpp"
 )
 
 # ── Test sources ──
@@ -62,6 +68,8 @@ set(TEST_SOURCES
     "${CMAKE_SOURCE_DIR}/test_thermostat.cpp"
     "${CMAKE_SOURCE_DIR}/test_defrost.cpp"
     "${CMAKE_SOURCE_DIR}/test_protection.cpp"
+    "${CMAKE_SOURCE_DIR}/test_equipment.cpp"
+    "${CMAKE_SOURCE_DIR}/test_datalogger.cpp"
 )
 
 add_executable(test_runner
