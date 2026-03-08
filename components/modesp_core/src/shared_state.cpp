@@ -30,11 +30,15 @@ bool SharedState::set(const StateKey& key, const StateValue& value, bool track_c
     }
 
     if (map_.full() && !map_.count(key)) {
-        set_failures_++;  // BUG-018
-        ESP_LOGE(TAG, "STATE MAP FULL (%d/%d) — cannot add '%s' [failures=%lu]",
-                 (int)map_.size(), MODESP_MAX_STATE_ENTRIES,
-                 key.c_str(), (unsigned long)set_failures_);
+        set_failures_++;
+        // Знімаємо дані до release mutex, логуємо ПІСЛЯ — інакше ризик deadlock
+        // (ESP_LOG бере свій внутрішній lock; якщо інший core тримає log lock і чекає
+        // state mutex — класичний ABBA deadlock на двоядерному ESP32)
+        int sz = (int)map_.size();
+        unsigned long failures = (unsigned long)set_failures_;
         xSemaphoreGive(mutex_);
+        ESP_LOGE(TAG, "STATE MAP FULL (%d/%d) — cannot add '%s' [failures=%lu]",
+                 sz, MODESP_MAX_STATE_ENTRIES, key.c_str(), failures);
         return false;
     }
 

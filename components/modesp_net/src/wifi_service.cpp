@@ -103,17 +103,6 @@ bool WiFiService::on_init() {
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
-    // Встановлюємо country code — UA (канали 1-13, max TX 20dBm)
-    // Без цього ESP32 за замовчуванням сканує тільки канали 1-11,
-    // що не бачить AP на каналах 12-13 (часто використовуються Xiaomi, TP-Link тощо)
-    wifi_country_t country = {};
-    country.cc[0] = 'U'; country.cc[1] = 'A'; country.cc[2] = '\0';
-    country.schan = 1;
-    country.nchan = 13;
-    country.max_tx_power = 80;  // 20 dBm (значення в 0.25 dBm)
-    country.policy = WIFI_COUNTRY_POLICY_MANUAL;
-    esp_wifi_set_country(&country);
-
     // Реєструємо event handlers
     ESP_ERROR_CHECK(esp_event_handler_instance_register(
         WIFI_EVENT, ESP_EVENT_ANY_ID, &event_handler, this, nullptr));
@@ -381,6 +370,18 @@ bool WiFiService::start_sta() {
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 
+    // Country code UA (канали 1-13) — потрібно викликати ПІСЛЯ esp_wifi_start(),
+    // інакше налаштування не застосовуються у деяких версіях ESP-IDF v5.x
+    {
+        wifi_country_t country = {};
+        country.cc[0] = 'U'; country.cc[1] = 'A'; country.cc[2] = '\0';
+        country.schan = 1;
+        country.nchan = 13;
+        country.max_tx_power = 80;  // 20 dBm (значення в 0.25 dBm)
+        country.policy = WIFI_COUNTRY_POLICY_MANUAL;
+        esp_wifi_set_country(&country);
+    }
+
     ap_mode_ = false;
     wifi_started_ = true;
     retry_count_ = 0;
@@ -441,6 +442,17 @@ bool WiFiService::start_ap() {
 
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
+
+    // Country code UA — після esp_wifi_start()
+    {
+        wifi_country_t country = {};
+        country.cc[0] = 'U'; country.cc[1] = 'A'; country.cc[2] = '\0';
+        country.schan = 1;
+        country.nchan = 13;
+        country.max_tx_power = 80;
+        country.policy = WIFI_COUNTRY_POLICY_MANUAL;
+        esp_wifi_set_country(&country);
+    }
 
     ap_mode_ = true;
     wifi_started_ = true;

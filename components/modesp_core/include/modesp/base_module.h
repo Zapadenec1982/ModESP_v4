@@ -111,7 +111,7 @@ private:
     const char*    name_;
     ModulePriority priority_;
     State          state_ = State::CREATED;
-    uint32_t       last_update_ms_ = 0;
+    volatile uint32_t last_update_ms_ = 0;
 
     // Зворотні посилання (встановлює ModuleManager при реєстрації)
     ModuleManager* manager_ = nullptr;

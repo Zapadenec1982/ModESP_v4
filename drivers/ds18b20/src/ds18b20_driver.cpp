@@ -17,9 +17,22 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "rom/ets_sys.h"
 
 static const char* TAG = "DS18B20";
+
+// М'ютекс OneWire шини — захист від конкурентного доступу між
+// DS18B20Driver::update() (main task) і scan_bus() (HTTP handler task).
+// portDISABLE_INTERRUPTS() захищає тільки поточне ядро від переривань,
+// але НЕ зупиняє задачі на іншому ядрі (dual-core ESP32).
+static SemaphoreHandle_t s_bus_mutex = nullptr;
+
+static void ensure_bus_mutex() {
+    if (!s_bus_mutex) {
+        s_bus_mutex = xSemaphoreCreateMutex();
+    }
+}
 
 // ═══════════════════════════════════════════════════════════════
 // DS18B20 ROM commands
@@ -99,10 +112,16 @@ void DS18B20Driver::update(uint32_t dt_ms) {
 
     // Phase 1: start conversion
     if (!conversion_started_ && ms_since_read_ >= read_interval_ms_) {
-        if (start_conversion()) {
+        ensure_bus_mutex();
+        bool converted = false;
+        if (xSemaphoreTake(s_bus_mutex, pdMS_TO_TICKS(200)) == pdTRUE) {
+            converted = start_conversion();
+            xSemaphoreGive(s_bus_mutex);
+        }
+        if (converted) {
             conversion_started_ = true;
         } else {
-            // Reset failed — sensor absent
+            // Reset failed — sensor absent або bus busy
             ms_since_read_ = 0;
             consecutive_errors_++;
             if (consecutive_errors_ >= MAX_CONSECUTIVE_ERRORS &&
@@ -120,7 +139,14 @@ void DS18B20Driver::update(uint32_t dt_ms) {
         ms_since_read_ = 0;
 
         float temp = 0.0f;
-        if (retry([&]() { return read_temperature(temp); })) {
+        bool read_ok = false;
+        ensure_bus_mutex();
+        if (xSemaphoreTake(s_bus_mutex, pdMS_TO_TICKS(500)) == pdTRUE) {
+            read_ok = retry([&]() { return read_temperature(temp); });
+            xSemaphoreGive(s_bus_mutex);
+        }
+
+        if (read_ok) {
             if (validate_reading(temp)) {
                 current_temp_ = temp;
                 last_valid_temp_ = temp;
@@ -417,6 +443,13 @@ uint8_t DS18B20Driver::ow_read_byte(gpio_num_t gpio) {
 // ═══════════════════════════════════════════════════════════════
 
 size_t DS18B20Driver::scan_bus(gpio_num_t gpio, RomAddress* results, size_t max_results) {
+    // Захист від конкурентного доступу з DS18B20Driver::update() (main task)
+    ensure_bus_mutex();
+    if (xSemaphoreTake(s_bus_mutex, pdMS_TO_TICKS(2000)) != pdTRUE) {
+        ESP_LOGE(TAG, "scan_bus: cannot acquire bus mutex (bus busy?)");
+        return 0;
+    }
+
     // Налаштувати GPIO для OneWire (open-drain + pull-up)
     gpio_config_t io_conf = {};
     io_conf.pin_bit_mask = (1ULL << gpio);
@@ -559,6 +592,7 @@ size_t DS18B20Driver::scan_bus(gpio_num_t gpio, RomAddress* results, size_t max_
     }
 
     ESP_LOGI(TAG, "Bus scan complete: %d device(s) on GPIO %d", (int)found, gpio);
+    xSemaphoreGive(s_bus_mutex);
     return found;
 }
 
@@ -568,37 +602,49 @@ size_t DS18B20Driver::scan_bus(gpio_num_t gpio, RomAddress* results, size_t max_
 
 bool DS18B20Driver::read_temp_by_address(gpio_num_t gpio,
                                           const RomAddress& addr, float& temp_out) {
+    ensure_bus_mutex();
+    if (xSemaphoreTake(s_bus_mutex, pdMS_TO_TICKS(2000)) != pdTRUE) {
+        ESP_LOGE(TAG, "read_temp_by_address: cannot acquire bus mutex");
+        return false;
+    }
+
+    bool result = false;
+
     // Start conversion з MATCH_ROM
-    if (!ow_reset(gpio)) return false;
+    if (!ow_reset(gpio)) {
+        xSemaphoreGive(s_bus_mutex);
+        return false;
+    }
     ow_write_byte(gpio, CMD_MATCH_ROM);
     for (int i = 0; i < 8; i++) ow_write_byte(gpio, addr.bytes[i]);
     ow_write_byte(gpio, CMD_CONVERT_T);
 
-    // Чекаємо 750ms на конвертацію
+    // Чекаємо 750ms на конвертацію (mutex тримаємо — bus зайнятий)
     vTaskDelay(pdMS_TO_TICKS(800));
 
     // Read scratchpad з MATCH_ROM
-    if (!ow_reset(gpio)) return false;
-    ow_write_byte(gpio, CMD_MATCH_ROM);
-    for (int i = 0; i < 8; i++) ow_write_byte(gpio, addr.bytes[i]);
-    ow_write_byte(gpio, CMD_READ_SCRATCH);
+    if (ow_reset(gpio)) {
+        ow_write_byte(gpio, CMD_MATCH_ROM);
+        for (int i = 0; i < 8; i++) ow_write_byte(gpio, addr.bytes[i]);
+        ow_write_byte(gpio, CMD_READ_SCRATCH);
 
-    uint8_t scratchpad[9];
-    for (int i = 0; i < 9; i++) scratchpad[i] = ow_read_byte(gpio);
+        uint8_t scratchpad[9];
+        for (int i = 0; i < 9; i++) scratchpad[i] = ow_read_byte(gpio);
 
-    // CRC8 scratchpad check (з толерантністю до клонів)
-    if (crc8(scratchpad, 8) != scratchpad[8]) {
+        // CRC8 scratchpad check (з толерантністю до клонів)
+        bool crc_ok = (crc8(scratchpad, 8) == scratchpad[8]);
         bool is_clone = (scratchpad[5] == 0xA5 && scratchpad[6] == 0xA5);
-        if (!is_clone) return false;
-        // Клон — пропускаємо CRC, валідуємо температуру нижче
+        if (crc_ok || is_clone) {
+            int16_t raw = (static_cast<int16_t>(scratchpad[1]) << 8) | scratchpad[0];
+            if (raw != 0x0550) {  // Power-on reset (85°C)
+                temp_out = raw / 16.0f;
+                result = true;
+            }
+        }
     }
 
-    // Decode temperature
-    int16_t raw = (static_cast<int16_t>(scratchpad[1]) << 8) | scratchpad[0];
-    if (raw == 0x0550) return false;  // Power-on reset (85°C)
-
-    temp_out = raw / 16.0f;
-    return true;
+    xSemaphoreGive(s_bus_mutex);
+    return result;
 }
 
 // ═══════════════════════════════════════════════════════════════
