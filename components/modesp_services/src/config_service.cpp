@@ -20,6 +20,13 @@
 
 static const char* TAG = "ConfigSvc";
 
+// Спільний parse-буфер для board.json і bindings.json (boot-only, sequential calls)
+// Один набір замість двох static local — економія ~8 KB BSS
+namespace {
+static char s_json_buf[4096];
+static jsmntok_t s_json_tokens[512];
+}  // namespace
+
 namespace modesp {
 
 // ═══════════════════════════════════════════════════════════════
@@ -134,8 +141,8 @@ bool ConfigService::mount_littlefs() {
 // ═══════════════════════════════════════════════════════════════
 
 bool ConfigService::parse_board_json() {
-    static char buf[MAX_JSON_SIZE];
-    static jsmntok_t tokens[MAX_TOKENS];
+    char* buf = s_json_buf;
+    jsmntok_t* tokens = s_json_tokens;
 
     // Read file
     FILE* f = fopen("/data/board.json", "r");
@@ -494,8 +501,8 @@ bool ConfigService::parse_board_json() {
 // ═══════════════════════════════════════════════════════════════
 
 bool ConfigService::parse_bindings_json() {
-    static char buf[MAX_JSON_SIZE];
-    static jsmntok_t tokens[MAX_TOKENS];
+    char* buf = s_json_buf;
+    jsmntok_t* tokens = s_json_tokens;
 
     FILE* f = fopen("/data/bindings.json", "r");
     if (!f) {

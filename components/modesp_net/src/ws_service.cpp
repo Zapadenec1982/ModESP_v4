@@ -301,9 +301,9 @@ void WsService::broadcast_state() {
 void WsService::send_full_state_to(int fd) {
     if (!server_ || !state_) return;
 
-    // Захист від OOM: ~6KB serialize + AsyncSendCtx copy
-    if (esp_get_free_heap_size() < 20000) {
-        ESP_LOGW(TAG, "Heap < 20KB, skip initial state to fd=%d", fd);
+    // Захист від OOM: ~6KB serialize buf + ~6KB AsyncSendCtx × 3 клієнти = ~18KB peak
+    if (esp_get_free_heap_size() < 32000) {
+        ESP_LOGW(TAG, "Heap < 32KB, skip initial state to fd=%d", fd);
         return;
     }
 
