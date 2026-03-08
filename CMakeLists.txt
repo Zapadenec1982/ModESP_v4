@@ -50,6 +50,11 @@ file(READ "${CMAKE_SOURCE_DIR}/data/board.json" _BOARD_JSON_CONTENT)
 string(JSON _BOARD_NAME GET "${_BOARD_JSON_CONTENT}" "board")
 message(STATUS "ModESP board name: ${_BOARD_NAME}")
 
+# ── Firmware version (semver) ──
+# Used by esp_app_get_description()->version in heartbeat & OTA version matching.
+# MUST be updated before each release build.
+set(PROJECT_VER "1.0.1")
+
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(modesp_${_BOARD_NAME})
 
