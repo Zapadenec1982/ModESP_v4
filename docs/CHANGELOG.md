@@ -2,6 +2,24 @@
 
 > Повний changelog проекту. Останні зміни також дублюються в CLAUDE.md.
 
+## 2026-03-08
+
+- **Phase 17b:** 2-рівнева ескалація continuous run в Protection Module:
+  - Level 1 (compressor_blocked): примусова зупинка компресора, вентилятори продовжують працювати
+  - Level 2 (lockout): перманентна блокіровка після max_continuous_retries спрацювань, manual reset
+  - Equipment Module: arbitration для compressor_blocked та lockout
+  - 2 нових persist параметри: forced_off_min, max_continuous_retries
+  - 4 нових state keys: lockout, compressor_blocked, continuous_run_count, forced_off_min, max_continuous_retries
+  - 126 state keys, 63 STATE_META, 50 MQTT pub, 62 MQTT sub
+  - 9 нових host tests (Phase 17b escalation)
+
+- **3 bugfixes Protection Module:**
+  - Fix 1: Pulldown matched baseline — evap_at_start vs evap_now (було: air_at_start vs evap_now)
+  - Fix 2: Short cycle counter idle reset після 10× min_compressor_run OFF
+  - Fix 3: alarm_code включає lockout (найвищий) та comp_blocked пріоритети
+  - 6 нових host test subcases (2 pulldown + 2 short cycle + 3 alarm_code)
+  - Всього: 63 host C++ tests, 312 assertions, 254 pytest
+
 ## 2026-03-07
 
 - **Документаційна ревізія R1:** аудит 5 агентів, виявлені та виправлені невідповідності:

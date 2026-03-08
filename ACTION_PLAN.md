@@ -15,9 +15,9 @@
 - Runtime UI visibility — visible_when + per-option disabled
 - Svelte WebUI (32 компоненти, Dashboard, premium dark theme, responsive accordions, i18n UA/EN, 63KB JS + 13KB CSS gzipped)
 - MQTT TLS, OTA з rollback, auto-persist NVS
-- 254 pytest + 51 host C++ (doctest) тестів
+- 254 pytest + 63 host C++ (doctest) тестів
 - KC868-A6 board support (Phase 12a)
-- 122 state keys, 61 STATE_META, 48 MQTT pub, 60 MQTT sub
+- 126 state keys, 63 STATE_META, 50 MQTT pub, 62 MQTT sub
 
 **Стабільність:** 30+ годин на реальному KC868-A6. Всі алгоритми працюють.
 
@@ -248,6 +248,7 @@
 | 7b-c | WebUI Polish: theme, i18n, animations | 02-24 |
 | 12a | KC868-A6: I2C PCF8574 relay + input drivers | 03-01 |
 | 17 Ph.1 | Compressor Safety: 5 нових аварій, CompressorTracker, RateTracker | 03-02 |
+| 17b | Continuous run ескалація (compressor_blocked → lockout) + 3 bugfixes | 03-08 |
 | WebUI R1 | Premium Redesign: dark theme bento, icons, accordions, System/Network pages | 03-07 |
 
 **Детальна історія:** docs/CHANGELOG.md
@@ -256,6 +257,7 @@
 
 ## Changelog
 
+- 2026-03-08 — Phase 17b DONE: 2-рівнева ескалація continuous run + 3 bugfixes (pulldown baseline, short cycle idle, alarm_code). 126 state keys, 63 META, 63 host tests.
 - 2026-03-07 — Ревізія стану проекту: оновлено "Де ми зараз" (122 state keys, 61 META, 63KB bundle), додано завершені фази Phase 17 + WebUI Redesign R1.
 - 2026-03-07 — Додано ЧАСТИНУ 3 (Хмарна інфраструктура): архітектурні рішення tenant_id + версіонування MQTT протоколу + схема БД. Спринти 12-17. Оновлено таблицю архітектурних рішень.
 - 2026-03-02 — **MVP ЧАСТИНА 1 ЗАВЕРШЕНА.** Session 1.8 (°C/°F) відкладено, Session 1.9 (HW test) — пройдено.
