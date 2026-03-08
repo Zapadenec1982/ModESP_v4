@@ -600,6 +600,14 @@ void MqttService::handle_incoming(const char* topic, int topic_len,
         val_buf[--val_len] = '\0';
     }
 
+    // Special command: _request_full_state — cloud asks for all 48 keys
+    if (strcmp(key, "_request_full_state") == 0) {
+        ESP_LOGI(TAG, "Full state requested by cloud — clearing publish cache");
+        memset(last_payloads_, 0, sizeof(last_payloads_));
+        last_version_ = 0;  // Force publish on next on_update() cycle
+        return;
+    }
+
     // Special command: _set_tenant (not in STATE_META)
     if (strcmp(key, "_set_tenant") == 0) {
         strncpy(tenant_, val_buf, sizeof(tenant_) - 1);
