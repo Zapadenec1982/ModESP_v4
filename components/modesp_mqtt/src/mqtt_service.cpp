@@ -202,6 +202,12 @@ void MqttService::on_update(uint32_t dt_ms) {
         publish_state();
     }
 
+    // One-shot: publish writable params on cloud request
+    if (params_publish_requested_) {
+        params_publish_requested_ = false;
+        publish_params();
+    }
+
     // Periodic alarm re-publish (кожні 5 хв, retain + QoS 1)
     alarm_republish_timer_ms_ += dt_ms;
     if (alarm_republish_timer_ms_ >= ALARM_REPUBLISH_INTERVAL_MS) {
@@ -465,6 +471,28 @@ void MqttService::publish_state() {
     last_version_ = state_->version();
 }
 
+void MqttService::publish_params() {
+    if (!connected_ || !client_ || !state_) return;
+
+    int count = 0;
+    for (size_t i = 0; i < gen::MQTT_SUBSCRIBE_COUNT; i++) {
+        auto val = state_->get(gen::MQTT_SUBSCRIBE[i]);
+        if (!val.has_value()) continue;
+
+        char payload[32];
+        int len = format_value(val.value(), payload, sizeof(payload));
+        if (len <= 0) continue;
+
+        char topic[128];
+        snprintf(topic, sizeof(topic), "%s/state/%s",
+                 prefix_, gen::MQTT_SUBSCRIBE[i]);
+        esp_mqtt_client_publish(client_, topic, payload, len, 0, 0);
+        count++;
+    }
+
+    ESP_LOGI(TAG, "Published %d writable params (one-shot)", count);
+}
+
 void MqttService::publish_alarms_retained() {
     if (!connected_ || !client_ || !state_) return;
 
@@ -600,11 +628,12 @@ void MqttService::handle_incoming(const char* topic, int topic_len,
         val_buf[--val_len] = '\0';
     }
 
-    // Special command: _request_full_state — cloud asks for all 48 keys
+    // Special command: _request_full_state — cloud asks for ALL keys
     if (strcmp(key, "_request_full_state") == 0) {
         ESP_LOGI(TAG, "Full state requested by cloud — clearing publish cache");
         memset(last_payloads_, 0, sizeof(last_payloads_));
-        last_version_ = 0;  // Force publish on next on_update() cycle
+        last_version_ = 0;              // Force re-publish of 48 read-only keys
+        params_publish_requested_ = true; // Also publish 60 writable params
         return;
     }
 

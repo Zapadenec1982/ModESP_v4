@@ -61,6 +61,7 @@ private:
     // State tracking
     bool connected_ = false;
     bool reconnect_requested_ = false;  // Deferred reconnect (set by httpd, executed by on_update)
+    bool params_publish_requested_ = false;  // One-shot publish of writable params
     uint32_t last_version_ = 0;
     uint32_t publish_timer_ = 0;
     static constexpr uint32_t PUBLISH_INTERVAL_MS = 1000;
@@ -89,6 +90,7 @@ private:
     bool start_client();
     void stop_client();
     void publish_state();
+    void publish_params();  // One-shot: publish all writable param current values
     void publish_alarms_retained();
     void publish_heartbeat();
     void publish_ha_discovery();
