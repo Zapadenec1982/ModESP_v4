@@ -88,7 +88,9 @@ board.json + bindings.json ─┘
   - Rate-of-Change: EWMA lambda=0.3, T росте > max_rise_rate протягом rate_duration → alarm
   - Діагностика (кожні 5 сек): starts_1h, duty%, run_time, last_cycle_run/off, compressor_hours
   - 2 features: compressor_protection (requires_roles: [compressor]), rate_protection (requires_roles: [compressor, air_temp])
-- **Alarm code priority:** err1 > rate_rise > high_temp > pulldown > short_cycle > rapid_cycle > low_temp > continuous_run > err2 > door > none
+- **Alarm code priority:** lockout > comp_blocked > err1 > rate_rise > high_temp > pulldown > short_cycle > rapid_cycle > low_temp > continuous_run > err2 > door > none
+- **Pulldown:** matched baseline (evap_at_start vs evap_now, або air vs air) — коректне порівняння
+- **Short cycle idle reset:** лічильник скидається після 10× min_compressor_run простою
 - **Continuous Run Escalation (Phase 17b):**
   - Level 1: `compressor_blocked` — forced off тільки компресора (вентилятори працюють), `forced_off_period` хвилин
   - Level 2: `lockout` — перманентна блокіровка всього обладнання після `max_continuous_retries` спрацювань
@@ -459,6 +461,9 @@ feat(module): короткий опис
   _ota.progress, _ota.error) via SYS_KEYS loop in publish_state(). MAX_PUBLISH_KEYS 16→64 fix.
   main.cpp: _ota.status/progress/error state key init. Tested: nourl reject, badurl graceful error,
   atomic guard, MQTT real-time status feedback.
+- 2026-03-08 — fix(protection): 3 bugfixes — pulldown matched evap baseline (evap_at_start vs evap_now),
+  short cycle counter idle reset (10× min_run), alarm_code includes lockout/comp_blocked (highest priority).
+  63 host tests, 312 assertions. No manifest/API changes.
 - 2026-03-08 — Phase 17b: Continuous Run Escalation. 2-level industrial algorithm:
   Level 1 compressor_blocked (forced off, fans continue), Level 2 lockout (permanent, all OFF).
   Icing detection (evap_temp < demand_temp → defrost trigger). Defrost guard, normal cycle counter reset.

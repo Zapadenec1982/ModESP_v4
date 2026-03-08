@@ -378,6 +378,15 @@ void ProtectionModule::update_compressor_tracker(bool compressor_on, float temp,
         comp_.last_off_ms = comp_.current_off_ms;
         comp_.temp_at_start = temp;
 
+        // Записуємо evap baseline для pulldown (matched comparison)
+        auto evap_start = state_get("equipment.evap_temp");
+        if (evap_start.has_value()) {
+            const auto* fp = etl::get_if<float>(&evap_start.value());
+            comp_.evap_at_start = fp ? *fp : temp;
+        } else {
+            comp_.evap_at_start = temp;  // fallback to air
+        }
+
         // Записуємо timestamp в ring buffer
         comp_.start_timestamps[comp_.start_head] = comp_.window_ms;
         comp_.start_head = (comp_.start_head + 1) % CompressorTracker::MAX_STARTS;
@@ -410,6 +419,15 @@ void ProtectionModule::update_compressor_tracker(bool compressor_on, float temp,
         comp_.total_on_1h_ms += dt_ms;
     } else {
         comp_.current_off_ms += dt_ms;
+    }
+
+    // Скидання short cycle counter після тривалого простою (10× min_compressor_run)
+    if (!compressor_on && comp_.short_cycle_count > 0) {
+        if (comp_.current_off_ms > min_compressor_run_ms_ * 10) {
+            comp_.short_cycle_count = 0;
+            ESP_LOGD(TAG, "Short cycle counter reset (idle > %lu sec)",
+                     (min_compressor_run_ms_ * 10) / 1000);
+        }
     }
 
     // --- Аварії ---
@@ -518,18 +536,19 @@ void ProtectionModule::update_compressor_tracker(bool compressor_on, float temp,
     // 9. Pulldown Failure: компресор працює, а температура не падає
     if (compressor_on && !defrost_active &&
         comp_.current_run_ms > pulldown_timeout_ms_) {
-        // Визначаємо яку температуру використовувати
-        float current_temp = temp;  // air_temp за замовчуванням
-        // Якщо є датчик випарника — використовуємо його (швидший відгук)
+        // Matched baseline: evap vs evap, або air vs air
+        float start_temp = comp_.temp_at_start;   // air_temp при старті
+        float current_temp = temp;                 // air_temp зараз
         auto evap_val = state_get("equipment.evap_temp");
         if (evap_val.has_value()) {
             const auto* fp = etl::get_if<float>(&evap_val.value());
             if (fp) {
-                current_temp = *fp;
+                start_temp = comp_.evap_at_start;  // evap при старті
+                current_temp = *fp;                 // evap зараз
             }
         }
 
-        float temp_drop = comp_.temp_at_start - current_temp;
+        float temp_drop = start_temp - current_temp;
         if (temp_drop < pulldown_min_drop_) {
             if (!pulldown_.active) {
                 pulldown_.active = true;
@@ -724,17 +743,22 @@ void ProtectionModule::publish_alarms() {
     state_set("protection.pulldown_alarm", pulldown_.active);
     state_set("protection.rate_alarm", rate_rise_.active);
 
-    // Зведений статус
+    // Зведений статус (включає ескалацію)
     bool any_alarm = high_temp_.active || low_temp_.active ||
                      sensor1_.active || sensor2_.active || door_.active ||
                      short_cycle_.active || rapid_cycle_.active ||
-                     continuous_run_.active || pulldown_.active || rate_rise_.active;
+                     continuous_run_.active || pulldown_.active || rate_rise_.active ||
+                     permanent_lockout_ || forced_off_active_;
     state_set("protection.alarm_active", any_alarm);
 
     // Код найвищої за пріоритетом аварії
-    // err1 > rate_rise > high_temp > pulldown > short_cycle >
-    // rapid_cycle > low_temp > continuous_run > err2 > door > none
-    if (sensor1_.active) {
+    // lockout > comp_blocked > err1 > rate_rise > high_temp > pulldown >
+    // short_cycle > rapid_cycle > low_temp > continuous_run > err2 > door > none
+    if (permanent_lockout_) {
+        alarm_code_ = "lockout";
+    } else if (forced_off_active_) {
+        alarm_code_ = "comp_blocked";
+    } else if (sensor1_.active) {
         alarm_code_ = "err1";
     } else if (rate_rise_.active) {
         alarm_code_ = "rate_rise";

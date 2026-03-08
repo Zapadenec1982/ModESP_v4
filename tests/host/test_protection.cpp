@@ -959,8 +959,8 @@ TEST_CASE("Protection: alarm code priority includes compressor alarms [compresso
     pr_setup_compressor_settings(state, 120, 12, 10);
     pr_setup_short_delays(state, 1, 1, 1);
 
-    SUBCASE("continuous_run has lower priority than low_temp") {
-        // T=-40 (below low_limit=-35) + continuous_run
+    SUBCASE("comp_blocked has higher priority than low_temp") {
+        // T=-40 (below low_limit=-35) + continuous_run → forced off
         pr_setup_normal(state, -40.0f, true, true, false, false, true);
 
         // Тригеримо обидва: low_temp після 60s delay + continuous_run після 10 min
@@ -968,8 +968,8 @@ TEST_CASE("Protection: alarm code priority includes compressor alarms [compresso
 
         CHECK(pr_get_bool(state, "protection.low_temp_alarm") == true);
         CHECK(pr_get_bool(state, "protection.continuous_run_alarm") == true);
-        CHECK_MESSAGE(pr_get_str(state, "protection.alarm_code") == "low_temp",
-                      "low_temp must have higher priority than continuous_run");
+        CHECK_MESSAGE(pr_get_str(state, "protection.alarm_code") == "comp_blocked",
+                      "comp_blocked must have higher priority than low_temp");
     }
 
     SUBCASE("rate_rise has second-highest priority") {
@@ -1397,4 +1397,178 @@ TEST_CASE("Protection: defrost guard skips continuous run tracking [escalation]"
                   "No continuous run alarm during defrost (hot gas = normal operation)");
     CHECK(pr_get_bool(state, "protection.compressor_blocked") == false);
     CHECK(pr_get_bool(state, "protection.lockout") == false);
+}
+
+// =============================================================================
+// BUG FIX TESTS (TEST 31-36)
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// TEST 31: Pulldown uses matched evap baseline (Fix 1)
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: pulldown uses evap_at_start when evap sensor present [compressor]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    // pulldown_timeout = 5 min, pulldown_min_drop = 2.0 C
+    pr_setup_compressor_settings(state, 120, 12, 360, 5, 2.0f);
+
+    // Evap sensor present — evap = -10°C at start
+    state.set("equipment.has_evap_temp", true);
+    state.set("equipment.evap_temp", -10.0f);
+
+    // Компресор ON (записує air_temp=10, evap_at_start=-10)
+    pr_setup_normal(state, 10.0f, true, true, false, false, true);
+
+    static constexpr uint32_t pulldown_ms = 300000u;  // 5 min
+
+    SUBCASE("alarm fires when evap didn't drop") {
+        // Evap залишилась -10°C (drop=0 < 2°C) — pulldown alarm
+        prot.on_update(pulldown_ms + 1u);
+
+        CHECK_MESSAGE(pr_get_bool(state, "protection.pulldown_alarm") == true,
+                      "Pulldown alarm must fire when evap didn't drop");
+    }
+
+    SUBCASE("no alarm when evap dropped enough") {
+        // Evap впала з -10 до -13 (drop=3 > 2°C) — OK
+        prot.on_update(pulldown_ms / 2);
+        state.set("equipment.evap_temp", -13.0f);
+        prot.on_update(pulldown_ms / 2 + 1u);
+
+        CHECK_MESSAGE(pr_get_bool(state, "protection.pulldown_alarm") == false,
+                      "No pulldown alarm when evap dropped sufficiently");
+    }
+}
+
+// -----------------------------------------------------------------------------
+// TEST 32: Short cycle counter resets after prolonged idle (Fix 2)
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: short cycle counter resets after prolonged idle [compressor]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    // min_compressor_run = 120 sec → idle reset = 1200 sec (20 min)
+    pr_setup_compressor_settings(state, 120);
+    pr_setup_normal(state, 5.0f, true, true, false, false, false);
+
+    SUBCASE("counter resets after 10x min_run idle") {
+        // 2 коротких цикли
+        state.set("equipment.compressor", true);
+        prot.on_update(60000u);  // 60s < 120s min
+        state.set("equipment.compressor", false);
+        prot.on_update(SETUP_MS);
+
+        state.set("equipment.compressor", true);
+        prot.on_update(60000u);
+        state.set("equipment.compressor", false);
+        prot.on_update(SETUP_MS);
+
+        CHECK(pr_get_bool(state, "protection.short_cycle_alarm") == false);
+
+        // Тривалий простій: 1200001 ms (> 120s × 10 = 1200s)
+        prot.on_update(1200001u);
+
+        // 1 короткий цикл після простою — лічильник скинувся, alarm НЕ тригерить
+        state.set("equipment.compressor", true);
+        prot.on_update(60000u);
+        state.set("equipment.compressor", false);
+        prot.on_update(SETUP_MS);
+
+        CHECK_MESSAGE(pr_get_bool(state, "protection.short_cycle_alarm") == false,
+                      "Short cycle alarm must NOT fire — counter was reset by idle timeout");
+    }
+
+    SUBCASE("counter still triggers without idle") {
+        // 3 послідовних коротких цикли без тривалого простою
+        for (int i = 0; i < 3; i++) {
+            state.set("equipment.compressor", true);
+            prot.on_update(60000u);
+            state.set("equipment.compressor", false);
+            prot.on_update(SETUP_MS);
+            // Короткий простій: 5 сек (< 1200 сек)
+            prot.on_update(5000u);
+        }
+
+        CHECK_MESSAGE(pr_get_bool(state, "protection.short_cycle_alarm") == true,
+                      "Short cycle alarm must fire — 3 consecutive without idle reset");
+    }
+}
+
+// -----------------------------------------------------------------------------
+// TEST 33: alarm_code includes lockout and compressor_blocked (Fix 3)
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: alarm_code includes lockout and comp_blocked [escalation]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    // max_continuous_run = 10 min, forced_off = 1 min, max_retries = 2
+    pr_setup_compressor_settings(state, 120, 12, 10, 60, 2.0f, 0.5f, 5, 1, 2);
+    pr_setup_normal(state, 5.0f, true, true, false, false, true);
+    state.set("equipment.has_evap_temp", false);
+
+    static constexpr uint32_t max_run_ms = 600000u;
+    static constexpr uint32_t forced_off_ms = 60000u;
+
+    SUBCASE("comp_blocked shows in alarm_code") {
+        // Тригер forced off
+        prot.on_update(max_run_ms + 1u);
+
+        CHECK(pr_get_str(state, "protection.alarm_code") == "comp_blocked");
+        CHECK(pr_get_bool(state, "protection.alarm_active") == true);
+    }
+
+    SUBCASE("lockout shows in alarm_code") {
+        // Доводимо до lockout
+        prot.on_update(max_run_ms + 1u);
+        state.set("equipment.compressor", false);
+        prot.on_update(forced_off_ms + 1u);
+
+        state.set("equipment.compressor", true);
+        prot.on_update(SETUP_MS);
+        prot.on_update(max_run_ms + 1u);
+
+        state.set("equipment.compressor", false);
+        prot.on_update(forced_off_ms + 1u);
+
+        REQUIRE(pr_get_bool(state, "protection.lockout") == true);
+        CHECK(pr_get_str(state, "protection.alarm_code") == "lockout");
+        CHECK_MESSAGE(pr_get_bool(state, "protection.alarm_active") == true,
+                      "alarm_active must be true when lockout is active");
+    }
+
+    SUBCASE("lockout has highest priority over err1") {
+        // Доводимо до lockout
+        prot.on_update(max_run_ms + 1u);
+        state.set("equipment.compressor", false);
+        prot.on_update(forced_off_ms + 1u);
+
+        state.set("equipment.compressor", true);
+        prot.on_update(SETUP_MS);
+        prot.on_update(max_run_ms + 1u);
+
+        state.set("equipment.compressor", false);
+        prot.on_update(forced_off_ms + 1u);
+        REQUIRE(pr_get_bool(state, "protection.lockout") == true);
+
+        // Додаємо sensor1 fault — err1 alarm
+        state.set("equipment.sensor1_ok", false);
+        prot.on_update(SETUP_MS);
+
+        CHECK(pr_get_bool(state, "protection.sensor1_alarm") == true);
+        CHECK_MESSAGE(pr_get_str(state, "protection.alarm_code") == "lockout",
+                      "lockout must have highest priority over err1");
+    }
 }

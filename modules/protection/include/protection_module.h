@@ -57,8 +57,8 @@
  *   protection.compressor_hours     — float (cumulative hours, persist)
  *
  * Alarm code priority:
- *   err1 > rate_rise > high_temp > pulldown > short_cycle >
- *   rapid_cycle > low_temp > continuous_run > err2 > door > none
+ *   lockout > comp_blocked > err1 > rate_rise > high_temp > pulldown >
+ *   short_cycle > rapid_cycle > low_temp > continuous_run > err2 > door > none
  */
 
 #pragma once
@@ -106,6 +106,7 @@ private:
         uint32_t last_run_ms     = 0;
         uint32_t last_off_ms     = 0;
         float    temp_at_start   = 0.0f;
+        float    evap_at_start   = 0.0f;   // evap_temp при старті (для pulldown)
 
         static constexpr size_t MAX_STARTS = 30;
         uint32_t start_timestamps[MAX_STARTS] = {};
