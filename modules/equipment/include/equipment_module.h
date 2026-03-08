@@ -111,7 +111,8 @@ private:
         bool def_cond_fan      = false;
 
         // Protection
-        bool protection_lockout = false;
+        bool protection_lockout    = false;
+        bool compressor_blocked    = false;
     } req_;
 
     // Фінальний вихід (після арбітражу)

@@ -44,7 +44,7 @@ board.json + bindings.json ─┘
 - **EquipmentModule** (priority=CRITICAL) — єдиний модуль з доступом до HAL drivers
 - Читає сенсори → публікує `equipment.air_temp`, `equipment.sensor1_ok`, etc.
 - Читає requests від бізнес-модулів: `thermostat.req.compressor`, `defrost.req.*`, `protection.lockout`
-- Арбітраж: Protection LOCKOUT > Defrost active > Thermostat
+- Арбітраж: Protection LOCKOUT > compressor_blocked > Defrost active > Thermostat
 - Інтерлоки: defrost_relay↔компресор ніколи одночасно
 - **defrost_relay** — unified relay for both electric heater and hot gas valve (merged from heater+hg_valve)
 - **Compressor anti-short-cycle (output-level):** COMP_MIN_OFF_MS=180s, COMP_MIN_ON_MS=120s
@@ -89,9 +89,15 @@ board.json + bindings.json ─┘
   - Діагностика (кожні 5 сек): starts_1h, duty%, run_time, last_cycle_run/off, compressor_hours
   - 2 features: compressor_protection (requires_roles: [compressor]), rate_protection (requires_roles: [compressor, air_temp])
 - **Alarm code priority:** err1 > rate_rise > high_temp > pulldown > short_cycle > rapid_cycle > low_temp > continuous_run > err2 > door > none
-- **15 persist параметрів:** high_limit, low_limit, high_alarm_delay, low_alarm_delay, door_delay, manual_reset, post_defrost_delay + min_compressor_run, max_starts_hour, max_continuous_run, pulldown_timeout, pulldown_min_drop, max_rise_rate, rate_duration, compressor_hours
+- **Continuous Run Escalation (Phase 17b):**
+  - Level 1: `compressor_blocked` — forced off тільки компресора (вентилятори працюють), `forced_off_period` хвилин
+  - Level 2: `lockout` — перманентна блокіровка всього обладнання після `max_continuous_retries` спрацювань
+  - Icing detection: після forced off перевіряє evap_temp < demand_temp → тригер `defrost.manual_start` (type!=0)
+  - Defrost guard: continuous run НЕ рахується при `defrost.active` (hot gas = нормальна робота)
+  - Normal cycle reset: лічильник скидається при нормальному завершенні циклу (comp OFF до max_continuous_run)
+  - Equipment арбітраж: lockout > compressor_blocked > defrost > thermostat
+- **17 persist параметрів:** high_limit, low_limit, high_alarm_delay, low_alarm_delay, door_delay, manual_reset, post_defrost_delay + min_compressor_run, max_starts_hour, max_continuous_run, pulldown_timeout, pulldown_min_drop, max_rise_rate, rate_duration, compressor_hours, forced_off_period, max_continuous_retries
 - **compressor_hours:** float, persist — кумулятивні мотогодини (інкремент 5 сек)
-- **protection.lockout = false** завжди (зарезервовано)
 - Порядок update: Equipment(0) → **Protection(1)** → Thermostat(2)
 
 ### Defrost (Phase 9.4)
@@ -453,6 +459,11 @@ feat(module): короткий опис
   _ota.progress, _ota.error) via SYS_KEYS loop in publish_state(). MAX_PUBLISH_KEYS 16→64 fix.
   main.cpp: _ota.status/progress/error state key init. Tested: nourl reject, badurl graceful error,
   atomic guard, MQTT real-time status feedback.
+- 2026-03-08 — Phase 17b: Continuous Run Escalation. 2-level industrial algorithm:
+  Level 1 compressor_blocked (forced off, fans continue), Level 2 lockout (permanent, all OFF).
+  Icing detection (evap_temp < demand_temp → defrost trigger). Defrost guard, normal cycle counter reset.
+  Equipment: compressor_blocked arbitration. 2 new persist settings, 2 new state keys, 126 total.
+  9 new host tests (60 total, 299 assertions). 2 bugfixes: re-trigger guard, reset scope.
 - 2026-03-08 — Phase 18 partial (WiFi+MQTT Hardening): country code UA, STA watchdog, RSSI update;
   HA Auto-Discovery, TLS, LWT, exponential backoff, tenant prefix, alarm republish, delta-cache, heartbeat.
   Документаційна ревізія R1: docs/07_equipment.md (Phase 17), docs/08_webui.md (Premium R1),

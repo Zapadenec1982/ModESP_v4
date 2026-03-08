@@ -184,9 +184,9 @@ class TestProtectionManifest:
         assert result is True, f"Errors: {v.errors}"
         assert len(v.errors) == 0
 
-    def test_has_34_state_keys(self, protection):
-        """Protection має 34 state keys."""
-        assert len(protection["state"]) == 34
+    def test_has_38_state_keys(self, protection):
+        """Protection має 38 state keys."""
+        assert len(protection["state"]) == 38
 
     def test_alarm_readonly_keys(self, protection):
         """Alarm keys — read-only."""
@@ -220,9 +220,9 @@ class TestProtectionManifest:
             assert info["min"] == 0
             assert info["max"] == 120
 
-    def test_has_12_inputs(self, protection):
-        """Protection має 12 inputs (7 data + 5 thermostat UI-only)."""
-        assert len(protection["inputs"]) == 12
+    def test_has_14_inputs(self, protection):
+        """Protection має 14 inputs (7 data + 5 thermostat UI-only + 2 defrost)."""
+        assert len(protection["inputs"]) == 14
 
     def test_required_inputs(self, protection):
         """Обов'язкові inputs: equipment.air_temp, equipment.sensor1_ok."""
@@ -235,13 +235,13 @@ class TestProtectionManifest:
         assert protection["inputs"]["equipment.door_open"]["optional"] is True
         assert protection["inputs"]["defrost.active"]["optional"] is True
 
-    def test_mqtt_19_publish(self, protection):
-        """MQTT публікує 19 alarm/status keys."""
-        assert len(protection["mqtt"]["publish"]) == 19
+    def test_mqtt_21_publish(self, protection):
+        """MQTT публікує 21 alarm/status keys."""
+        assert len(protection["mqtt"]["publish"]) == 21
 
-    def test_mqtt_16_subscribe(self, protection):
-        """MQTT підписка на 16 settings keys."""
-        assert len(protection["mqtt"]["subscribe"]) == 16
+    def test_mqtt_18_subscribe(self, protection):
+        """MQTT підписка на 18 settings keys."""
+        assert len(protection["mqtt"]["subscribe"]) == 18
 
     def test_display_main_value(self, protection):
         """Display main_value — alarm_code."""
@@ -526,9 +526,9 @@ class TestCrossModuleValidation:
         assert len(therm_errors) == 0, f"Thermostat errors: {therm_errors}"
 
     def test_total_state_keys(self, all_manifests):
-        """Всього 122 state keys у 5 модулях."""
+        """Всього 126 state keys у 5 модулях."""
         total = sum(len(m.get("state", {})) for m in all_manifests)
-        assert total == 122
+        assert total == 126
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -663,7 +663,7 @@ class TestStateMetaFullProject:
         # datalogger: enabled, retention_hours, sample_interval, log_evap, log_cond,
         #   log_setpoint, log_humidity = 7 rw
         # Total: 61 (auto-counted from manifests)
-        assert "STATE_META_COUNT = 61" in result
+        assert "STATE_META_COUNT = 63" in result
 
     def test_persist_true_for_setpoint(self, all_manifests):
         """thermostat.setpoint — writable=true, persist=true."""
@@ -702,14 +702,14 @@ class TestMqttTopicsFullProject:
         gen = MqttTopicsGenerator()
         result = gen.generate(all_manifests)
         # equipment=6, protection=19, thermostat=10, defrost=10, datalogger=3 = 48
-        assert "MQTT_PUBLISH_COUNT = 48" in result
+        assert "MQTT_PUBLISH_COUNT = 50" in result
 
     def test_subscribe_count(self, all_manifests):
         """Загальна кількість MQTT subscribe topics."""
         gen = MqttTopicsGenerator()
         result = gen.generate(all_manifests)
         # equipment=5, protection=16, thermostat=17, defrost=15, datalogger=7 = 60
-        assert "MQTT_SUBSCRIBE_COUNT = 60" in result
+        assert "MQTT_SUBSCRIBE_COUNT = 62" in result
 
     def test_contains_all_module_topics(self, all_manifests):
         """Містить topics від усіх модулів."""

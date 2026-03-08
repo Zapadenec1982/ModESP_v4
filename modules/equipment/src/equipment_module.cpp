@@ -248,7 +248,8 @@ void EquipmentModule::read_requests() {
     req_.def_cond_fan      = read_bool("defrost.req.cond_fan");
 
     // Protection
-    req_.protection_lockout = read_bool("protection.lockout");
+    req_.protection_lockout  = read_bool("protection.lockout");
+    req_.compressor_blocked  = read_bool("protection.compressor_blocked");
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -305,6 +306,12 @@ void EquipmentModule::apply_arbitration() {
                          comp_since_ms_, COMP_MIN_ON_MS);
             }
         }
+    }
+
+    // === Protection compressor block (forced off при continuous run) ===
+    // Тільки компресор OFF, вентилятори працюють за нормальним арбітражем.
+    if (req_.compressor_blocked) {
+        out_.compressor = false;
     }
 
     // === ІНТЕРЛОКИ (hardcoded, неможливо обійти) ===

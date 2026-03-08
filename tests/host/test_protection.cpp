@@ -624,7 +624,9 @@ static void pr_setup_compressor_settings(modesp::SharedState& state,
                                           int pulldown_min = 60,
                                           float pulldown_drop = 2.0f,
                                           float max_rate = 0.5f,
-                                          int rate_dur_min = 5) {
+                                          int rate_dur_min = 5,
+                                          int forced_off_min = 20,
+                                          int max_retries = 3) {
     state.set("protection.min_compressor_run", static_cast<int32_t>(min_run_sec));
     state.set("protection.max_starts_hour",    static_cast<int32_t>(max_starts));
     state.set("protection.max_continuous_run",  static_cast<int32_t>(max_cont_min));
@@ -632,6 +634,8 @@ static void pr_setup_compressor_settings(modesp::SharedState& state,
     state.set("protection.pulldown_min_drop",   pulldown_drop);
     state.set("protection.max_rise_rate",       max_rate);
     state.set("protection.rate_duration",       static_cast<int32_t>(rate_dur_min));
+    state.set("protection.forced_off_period",   static_cast<int32_t>(forced_off_min));
+    state.set("protection.max_continuous_retries", static_cast<int32_t>(max_retries));
 }
 
 // -----------------------------------------------------------------------------
@@ -768,15 +772,23 @@ TEST_CASE("Protection: continuous run alarm after max duration [compressor]") {
                       "Continuous run alarm must fire after max duration");
     }
 
-    SUBCASE("auto-clears when compressor stops") {
+    SUBCASE("auto-clears after forced off period ends and compressor stops") {
         prot.on_update(max_run_ms + 1u);
         REQUIRE(pr_get_bool(state, "protection.continuous_run_alarm") == true);
+        REQUIRE(pr_get_bool(state, "protection.compressor_blocked") == true);
 
+        // Симулюємо Equipment: компресор OFF під час forced off
         state.set("equipment.compressor", false);
-        prot.on_update(SETUP_MS);
 
+        // Forced off ще тримається — alarm ще активний
+        prot.on_update(SETUP_MS);
+        CHECK(pr_get_bool(state, "protection.continuous_run_alarm") == true);
+
+        // Forced off завершується (default 20 min)
+        prot.on_update(1200000u);  // 20 min
         CHECK_MESSAGE(pr_get_bool(state, "protection.continuous_run_alarm") == false,
-                      "Continuous run alarm must auto-clear when compressor stops");
+                      "Continuous run alarm must clear after forced off release");
+        CHECK(pr_get_bool(state, "protection.compressor_blocked") == false);
     }
 }
 
@@ -1047,4 +1059,342 @@ TEST_CASE("Protection: motor hours accumulate when compressor ON [compressor]") 
         CHECK(*hp > 100.5f);
         CHECK(*hp < 101.5f);
     }
+}
+
+// =============================================================================
+// CONTINUOUS RUN ESCALATION TESTS (TEST 22-30)
+// =============================================================================
+
+// -----------------------------------------------------------------------------
+// TEST 22: Continuous run triggers compressor_blocked, NOT lockout
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: continuous run triggers compressor_blocked [escalation]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    // max_continuous_run = 10 min, forced_off = 5 min, max_retries = 3
+    pr_setup_compressor_settings(state, 120, 12, 10, 60, 2.0f, 0.5f, 5, 5, 3);
+    pr_setup_normal(state, 5.0f, true, true, false, false, true);
+
+    static constexpr uint32_t max_run_ms = 600000u;  // 10 min
+
+    // Перевищуємо ліміт
+    prot.on_update(max_run_ms + 1u);
+
+    CHECK(pr_get_bool(state, "protection.continuous_run_alarm") == true);
+    CHECK_MESSAGE(pr_get_bool(state, "protection.compressor_blocked") == true,
+                  "compressor_blocked must be true during forced off");
+    CHECK_MESSAGE(pr_get_bool(state, "protection.lockout") == false,
+                  "lockout must be false — only Level 1 (forced off)");
+}
+
+// -----------------------------------------------------------------------------
+// TEST 23: Forced off releases after period, count increments
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: forced off releases after period [escalation]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    // max_continuous_run = 10 min, forced_off = 2 min, max_retries = 3
+    pr_setup_compressor_settings(state, 120, 12, 10, 60, 2.0f, 0.5f, 5, 2, 3);
+    pr_setup_normal(state, 5.0f, true, true, false, false, true);
+
+    static constexpr uint32_t max_run_ms = 600000u;   // 10 min
+    static constexpr uint32_t forced_off_ms = 120000u; // 2 min
+
+    // Тригеримо continuous run
+    prot.on_update(max_run_ms + 1u);
+    REQUIRE(pr_get_bool(state, "protection.compressor_blocked") == true);
+
+    // Forced off ще не минув
+    prot.on_update(forced_off_ms - 1000u);
+    CHECK(pr_get_bool(state, "protection.compressor_blocked") == true);
+
+    // Forced off завершився
+    prot.on_update(2000u);  // тепер сумарно > forced_off_ms
+    CHECK_MESSAGE(pr_get_bool(state, "protection.compressor_blocked") == false,
+                  "compressor_blocked must clear after forced off period");
+
+    // Лічильник = 1
+    auto count = state.get("protection.continuous_run_count");
+    REQUIRE(count.has_value());
+    const auto* cp = etl::get_if<int32_t>(&count.value());
+    REQUIRE(cp != nullptr);
+    CHECK(*cp == 1);
+}
+
+// -----------------------------------------------------------------------------
+// TEST 24: Icing detection triggers defrost (type != 0, evap sensor present)
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: icing detection triggers manual defrost [escalation]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    // max_continuous_run = 10 min, forced_off = 1 min, max_retries = 3
+    pr_setup_compressor_settings(state, 120, 12, 10, 60, 2.0f, 0.5f, 5, 1, 3);
+    pr_setup_normal(state, 5.0f, true, true, false, false, true);
+
+    // Evap sensor present, cold evaporator (icing)
+    state.set("equipment.has_evap_temp", true);
+    state.set("equipment.evap_temp", -25.0f);  // below demand_temp (-15)
+    state.set("defrost.type", static_cast<int32_t>(1));  // electric defrost
+    state.set("defrost.demand_temp", -15.0f);
+
+    static constexpr uint32_t max_run_ms = 600000u;  // 10 min
+    static constexpr uint32_t forced_off_ms = 60000u; // 1 min
+
+    // Тригер forced off
+    prot.on_update(max_run_ms + 1u);
+    REQUIRE(pr_get_bool(state, "protection.compressor_blocked") == true);
+
+    // Чекаємо forced off period
+    prot.on_update(forced_off_ms + 1u);
+
+    // Defrost повинен бути тригернутий
+    CHECK_MESSAGE(pr_get_bool(state, "defrost.manual_start") == true,
+                  "Icing detected — defrost.manual_start must be set");
+}
+
+// -----------------------------------------------------------------------------
+// TEST 25: No defrost trigger for natural defrost (type=0)
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: no defrost trigger for type=0 natural [escalation]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    pr_setup_compressor_settings(state, 120, 12, 10, 60, 2.0f, 0.5f, 5, 1, 3);
+    pr_setup_normal(state, 5.0f, true, true, false, false, true);
+
+    state.set("equipment.has_evap_temp", true);
+    state.set("equipment.evap_temp", -25.0f);
+    state.set("defrost.type", static_cast<int32_t>(0));  // natural defrost
+    state.set("defrost.demand_temp", -15.0f);
+
+    static constexpr uint32_t max_run_ms = 600000u;
+    static constexpr uint32_t forced_off_ms = 60000u;
+
+    prot.on_update(max_run_ms + 1u);
+    prot.on_update(forced_off_ms + 1u);
+
+    // manual_start НЕ повинен бути тригернутий (type=0 — forced off вже зупинив компресор)
+    CHECK_MESSAGE(pr_get_bool(state, "defrost.manual_start") == false,
+                  "type=0 natural defrost — no manual_start trigger needed");
+}
+
+// -----------------------------------------------------------------------------
+// TEST 26: No defrost trigger without evap sensor
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: no defrost trigger without evap sensor [escalation]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    pr_setup_compressor_settings(state, 120, 12, 10, 60, 2.0f, 0.5f, 5, 1, 3);
+    pr_setup_normal(state, 5.0f, true, true, false, false, true);
+
+    state.set("equipment.has_evap_temp", false);  // no evap sensor
+    state.set("defrost.type", static_cast<int32_t>(1));
+
+    static constexpr uint32_t max_run_ms = 600000u;
+    static constexpr uint32_t forced_off_ms = 60000u;
+
+    prot.on_update(max_run_ms + 1u);
+    prot.on_update(forced_off_ms + 1u);
+
+    CHECK_MESSAGE(pr_get_bool(state, "defrost.manual_start") == false,
+                  "No evap sensor — cannot detect icing, no manual defrost");
+}
+
+// -----------------------------------------------------------------------------
+// TEST 27: Permanent lockout after max_retries
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: permanent lockout after max retries [escalation]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    // max_continuous_run = 10 min, forced_off = 1 min, max_retries = 2
+    pr_setup_compressor_settings(state, 120, 12, 10, 60, 2.0f, 0.5f, 5, 1, 2);
+    pr_setup_normal(state, 5.0f, true, true, false, false, true);
+    state.set("equipment.has_evap_temp", false);  // no icing detection
+
+    static constexpr uint32_t max_run_ms = 600000u;  // 10 min
+    static constexpr uint32_t forced_off_ms = 60000u; // 1 min
+
+    // Цикл 1: trigger → forced off → release → count=1
+    prot.on_update(max_run_ms + 1u);
+    REQUIRE(pr_get_bool(state, "protection.compressor_blocked") == true);
+
+    // Simulate Equipment response: compressor OFF during forced off
+    state.set("equipment.compressor", false);
+    prot.on_update(forced_off_ms + 1u);
+    CHECK(pr_get_bool(state, "protection.lockout") == false);
+
+    // Компресор знову ON (thermostat запросив після release)
+    state.set("equipment.compressor", true);
+    prot.on_update(SETUP_MS);  // OFF→ON transition
+    prot.on_update(max_run_ms + 1u);  // accumulate past max
+    REQUIRE(pr_get_bool(state, "protection.compressor_blocked") == true);
+
+    // Цикл 2: compressor OFF during forced off → lockout (count=2 >= max_retries=2)
+    state.set("equipment.compressor", false);
+    prot.on_update(forced_off_ms + 1u);
+
+    CHECK_MESSAGE(pr_get_bool(state, "protection.lockout") == true,
+                  "Permanent lockout after max_retries exhausted");
+
+    // Лічильник = 2
+    auto count = state.get("protection.continuous_run_count");
+    REQUIRE(count.has_value());
+    const auto* cp = etl::get_if<int32_t>(&count.value());
+    REQUIRE(cp != nullptr);
+    CHECK(*cp == 2);
+}
+
+// -----------------------------------------------------------------------------
+// TEST 28: Manual reset clears escalation state
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: manual reset clears escalation [escalation]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    pr_setup_compressor_settings(state, 120, 12, 10, 60, 2.0f, 0.5f, 5, 1, 2);
+    pr_setup_normal(state, 5.0f, true, true, false, false, true);
+    state.set("equipment.has_evap_temp", false);
+
+    static constexpr uint32_t max_run_ms = 600000u;
+    static constexpr uint32_t forced_off_ms = 60000u;
+
+    // Доводимо до lockout (2 retries) — з реалістичним comp OFF під час forced off
+    prot.on_update(max_run_ms + 1u);  // trigger #1
+    state.set("equipment.compressor", false);
+    prot.on_update(forced_off_ms + 1u);  // release #1, count=1
+
+    state.set("equipment.compressor", true);
+    prot.on_update(SETUP_MS);  // OFF→ON
+    prot.on_update(max_run_ms + 1u);  // trigger #2
+
+    state.set("equipment.compressor", false);
+    prot.on_update(forced_off_ms + 1u);  // release #2, count=2 → lockout
+    REQUIRE(pr_get_bool(state, "protection.lockout") == true);
+
+    // Manual reset
+    state.set("protection.reset_alarms", true);
+    prot.on_update(SETUP_MS);
+
+    CHECK_MESSAGE(pr_get_bool(state, "protection.lockout") == false,
+                  "lockout must be cleared by manual reset");
+    CHECK_MESSAGE(pr_get_bool(state, "protection.compressor_blocked") == false,
+                  "compressor_blocked must be cleared by manual reset");
+    CHECK(pr_get_bool(state, "protection.continuous_run_alarm") == false);
+
+    auto count = state.get("protection.continuous_run_count");
+    REQUIRE(count.has_value());
+    const auto* cp = etl::get_if<int32_t>(&count.value());
+    REQUIRE(cp != nullptr);
+    CHECK(*cp == 0);
+}
+
+// -----------------------------------------------------------------------------
+// TEST 29: Normal cycle resets continuous_run_count
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: normal cycle resets continuous run counter [escalation]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    // max_continuous_run = 10 min, forced_off = 1 min, max_retries = 5
+    pr_setup_compressor_settings(state, 120, 12, 10, 60, 2.0f, 0.5f, 5, 1, 5);
+    pr_setup_normal(state, 5.0f, true, true, false, false, true);
+    state.set("equipment.has_evap_temp", false);
+
+    static constexpr uint32_t max_run_ms = 600000u;
+    static constexpr uint32_t forced_off_ms = 60000u;
+
+    // Цикл 1: continuous run → forced off → release → count=1
+    prot.on_update(max_run_ms + 1u);
+    prot.on_update(forced_off_ms + 1u);
+
+    auto count = state.get("protection.continuous_run_count");
+    REQUIRE(count.has_value());
+    const auto* cp = etl::get_if<int32_t>(&count.value());
+    REQUIRE(cp != nullptr);
+    REQUIRE(*cp == 1);
+
+    // Тепер нормальний цикл: компресор ON 5 хвилин, потім OFF
+    state.set("equipment.compressor", true);
+    prot.on_update(300000u);  // 5 min (< 10 min max)
+
+    state.set("equipment.compressor", false);
+    prot.on_update(SETUP_MS);  // тригер off transition — записує last_run_ms
+
+    // Ще один тік для перевірки last_run_ms < max_continuous_run_ms_
+    prot.on_update(SETUP_MS);
+
+    // Лічильник скинутий (нормальний цикл завершився)
+    count = state.get("protection.continuous_run_count");
+    REQUIRE(count.has_value());
+    cp = etl::get_if<int32_t>(&count.value());
+    REQUIRE(cp != nullptr);
+    CHECK_MESSAGE(*cp == 0,
+                  "Counter must reset after a normal cooling cycle completes");
+}
+
+// -----------------------------------------------------------------------------
+// TEST 30: Defrost guard — continuous run not tracked during defrost.active
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: defrost guard skips continuous run tracking [escalation]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    // max_continuous_run = 10 min
+    pr_setup_compressor_settings(state, 120, 12, 10, 60, 2.0f, 0.5f, 5, 5, 3);
+    pr_setup_normal(state, 5.0f, true, true, false, false, true);
+
+    static constexpr uint32_t max_run_ms = 600000u;  // 10 min
+
+    // Defrost активний — компресор працює (hot gas)
+    state.set("defrost.active", true);
+    state.set("defrost.phase", modesp::StringValue("active"));
+
+    // Компресор працює 15 хв (> 10 min max), але це під час defrost
+    prot.on_update(max_run_ms + 300000u);
+
+    CHECK_MESSAGE(pr_get_bool(state, "protection.continuous_run_alarm") == false,
+                  "No continuous run alarm during defrost (hot gas = normal operation)");
+    CHECK(pr_get_bool(state, "protection.compressor_blocked") == false);
+    CHECK(pr_get_bool(state, "protection.lockout") == false);
 }

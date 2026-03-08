@@ -18,8 +18,9 @@
  * Compressor monitors use CompressorTracker for cycle analysis.
  * Rate monitor uses RateTracker with EWMA (lambda=0.3).
  *
- * Protection does NOT stop equipment.
- * protection.lockout is reserved (always false) for future phase.
+ * Continuous run escalation:
+ *   Level 1: compressor_blocked (forced off, fans still run)
+ *   Level 2: lockout (permanent, all OFF, manual reset required)
  *
  * Priority: HIGH(1) — runs BEFORE Thermostat(2), AFTER Equipment(0)
  *
@@ -33,7 +34,9 @@
  *   defrost.active          — bool
  *
  * SharedState keys written:
- *   protection.lockout              — bool (always false)
+ *   protection.lockout              — bool (permanent lockout after max retries)
+ *   protection.compressor_blocked   — bool (forced off during continuous run)
+ *   protection.continuous_run_count — int  (consecutive continuous run events)
  *   protection.alarm_active         — bool (any alarm active)
  *   protection.alarm_code           — string (highest priority code)
  *   protection.high_temp_alarm      — bool
@@ -157,6 +160,14 @@ private:
     float    max_rise_rate_            = 0.5f;      // °C/хв
     uint32_t rate_duration_ms_         = 300000;    // 5 хв
     float    compressor_hours_         = 0.0f;      // persist, кумулятивний наробіток
+
+    // ── Ескалація continuous run (forced off → defrost → retry → lockout) ──
+    bool     forced_off_active_        = false;     // Примусова зупинка активна
+    uint32_t forced_off_timer_ms_      = 0;         // Таймер примусової зупинки
+    uint8_t  continuous_run_count_     = 0;          // Лічильник послідовних спрацювань
+    bool     permanent_lockout_        = false;      // Перманентна блокіровка
+    uint32_t forced_off_period_ms_     = 1200000;    // 20 хв default
+    int32_t  max_continuous_retries_   = 3;          // default 3
 
     // Post-defrost suppression (HAL + Rate alarm)
     bool     was_defrost_active_       = false;

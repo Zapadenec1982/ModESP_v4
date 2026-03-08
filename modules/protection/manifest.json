@@ -46,6 +46,18 @@
       "description": "Чи активна розморозка (блокує аварію високої температури)",
       "optional": true
     },
+    "defrost.type": {
+      "source_module": "defrost",
+      "type": "int",
+      "description": "Тип відтайки (0=natural, 1=heater, 2=hot gas) — для icing detection",
+      "optional": true
+    },
+    "defrost.demand_temp": {
+      "source_module": "defrost",
+      "type": "float",
+      "description": "Порогова T випарника для demand defrost (icing detection)",
+      "optional": true
+    },
     "thermostat.min_off_time": {
       "source_module": "thermostat",
       "type": "int",
@@ -100,7 +112,8 @@
       "controls_settings": [
         "protection.min_compressor_run", "protection.max_starts_hour",
         "protection.max_continuous_run", "protection.pulldown_timeout",
-        "protection.pulldown_min_drop"
+        "protection.pulldown_min_drop",
+        "protection.forced_off_period", "protection.max_continuous_retries"
       ]
     },
     "rate_protection": {
@@ -114,7 +127,17 @@
     "protection.lockout": {
       "type": "bool",
       "access": "read",
-      "description": "Аварійна зупинка (зарезервовано, завжди false)"
+      "description": "Аварійна зупинка (перманентна блокіровка після вичерпання спроб)"
+    },
+    "protection.compressor_blocked": {
+      "type": "bool",
+      "access": "read",
+      "description": "Примусова зупинка компресора (forced off при continuous run)"
+    },
+    "protection.continuous_run_count": {
+      "type": "int",
+      "access": "read",
+      "description": "Лічильник послідовних continuous run спрацювань"
     },
     "protection.alarm_active": {
       "type": "bool",
@@ -367,6 +390,28 @@
       "default": 5,
       "persist": true,
       "description": "Тривалість перевищення rate для аварії"
+    },
+    "protection.forced_off_period": {
+      "type": "int",
+      "unit": "хв",
+      "access": "readwrite",
+      "min": 5,
+      "max": 60,
+      "step": 5,
+      "default": 20,
+      "persist": true,
+      "description": "Тривалість примусової зупинки компресора"
+    },
+    "protection.max_continuous_retries": {
+      "type": "int",
+      "unit": "разів",
+      "access": "readwrite",
+      "min": 1,
+      "max": 10,
+      "step": 1,
+      "default": 3,
+      "persist": true,
+      "description": "Макс. спроб перезапуску до блокіровки"
     }
   },
 
@@ -390,7 +435,9 @@
       "protection.compressor_run_time",
       "protection.last_cycle_run",
       "protection.last_cycle_off",
-      "protection.compressor_hours"
+      "protection.compressor_hours",
+      "protection.compressor_blocked",
+      "protection.continuous_run_count"
     ],
     "subscribe": [
       "protection.high_limit",
@@ -408,7 +455,9 @@
       "protection.pulldown_min_drop",
       "protection.max_rise_rate",
       "protection.rate_duration",
-      "protection.compressor_hours"
+      "protection.compressor_hours",
+      "protection.forced_off_period",
+      "protection.max_continuous_retries"
     ]
   },
 
@@ -526,6 +575,24 @@
             "label": "Безперервна робота",
             "on_label": "АВАРІЯ",
             "off_label": "Норма",
+            "on_color": "#ef4444",
+            "off_color": "#64748b"
+          },
+          {
+            "key": "protection.compressor_blocked",
+            "widget": "indicator",
+            "label": "Примусова зупинка",
+            "on_label": "FORCED OFF",
+            "off_label": "—",
+            "on_color": "#f59e0b",
+            "off_color": "#64748b"
+          },
+          {
+            "key": "protection.lockout",
+            "widget": "indicator",
+            "label": "Блокіровка",
+            "on_label": "ЗАБЛОКОВАНО",
+            "off_label": "—",
             "on_color": "#ef4444",
             "off_color": "#64748b"
           },
@@ -694,6 +761,14 @@
           },
           {
             "key": "protection.rate_duration",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.forced_off_period",
+            "widget": "number_input"
+          },
+          {
+            "key": "protection.max_continuous_retries",
             "widget": "number_input"
           }
         ]
