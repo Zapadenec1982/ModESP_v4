@@ -55,12 +55,13 @@ bool NtcDriver::init() {
 
     // Ініціалізуємо ADC1 oneshot — один shared handle для всіх NTC instances.
     // Якщо вже ініціалізований (другий датчик) — просто використовуємо існуючий.
+    esp_err_t err = ESP_OK;
     if (!s_adc1_handle) {
         adc_oneshot_unit_init_cfg_t unit_cfg = {};
         unit_cfg.unit_id = ADC_UNIT_1;
         unit_cfg.ulp_mode = ADC_ULP_MODE_DISABLE;
 
-        esp_err_t err = adc_oneshot_new_unit(&unit_cfg, &s_adc1_handle);
+        err = adc_oneshot_new_unit(&unit_cfg, &s_adc1_handle);
         if (err != ESP_OK) {
             ESP_LOGE(TAG, "[%s] ADC unit init failed: %s", role_.c_str(), esp_err_to_name(err));
             return false;
