@@ -81,9 +81,11 @@ private:
     static constexpr uint32_t HEARTBEAT_INTERVAL_MS = 30000; // 30s
 
     // Кеш останніх опублікованих значень для delta-publish
-    // gen::MQTT_PUBLISH_COUNT (48) + system keys (_ota.status/progress/error)
-    static constexpr size_t MAX_PUBLISH_KEYS = 64;
-    char last_payloads_[MAX_PUBLISH_KEYS][32] = {};
+    // gen::MQTT_PUBLISH_COUNT (50) + system keys (_ota.status/progress/error) = 53
+    static constexpr size_t MAX_PUBLISH_KEYS = 56;
+    // 16B covers float/int/bool/alarm_code payloads; longer strings (OTA errors)
+    // truncate in cache → extra publish, harmless for rare events
+    char last_payloads_[MAX_PUBLISH_KEYS][16] = {};
 
     // Internal
     void load_config();

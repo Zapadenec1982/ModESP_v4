@@ -261,6 +261,12 @@ bool MqttService::start_client() {
 
     mqtt_cfg.network.disable_auto_reconnect = true;
 
+    // Heap optimization: зменшити task stack (default 6144) та буфери (default 1024)
+    // MQTT payloads малі (<600B), 4KB стеку достатньо для publish/subscribe
+    mqtt_cfg.task.stack_size = 4096;
+    mqtt_cfg.buffer.size     = 768;      // inbound (default 1024)
+    mqtt_cfg.buffer.out_size = 768;      // outbound (default 1024)
+
     client_ = esp_mqtt_client_init(&mqtt_cfg);
     if (!client_) {
         ESP_LOGE(TAG, "Failed to init MQTT client");
@@ -316,7 +322,8 @@ void MqttService::mqtt_event_handler(void* args, esp_event_base_t base,
             self->last_version_ = 0;  // Форсуємо повну публікацію
             self->state_set("mqtt.connected", true);
             self->state_set("mqtt.status", "connected");
-            ESP_LOGI(TAG, "Connected to broker");
+            ESP_LOGI(TAG, "Connected to broker (heap=%lu)",
+                     esp_get_free_heap_size());
 
             // Publish "online" status (retain)
             char topic[128];
