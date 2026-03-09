@@ -4,6 +4,16 @@
 
 ## 2026-03-09
 
+- **feat(wifi): AP→STA periodic reconnect probe:**
+  - В AP mode ESP32 періодично пробує підключитися до збереженої WiFi мережі через WIFI_MODE_APSTA
+  - AP продовжує працювати під час проби — клієнти не втрачають доступ
+  - Backoff: 30s → 60s → 120s → 240s → 300s (cap), нескінченні спроби кожні 5 хв
+  - Heap guard 50KB, timeout 15s, fast-fail при STA_DISCONNECTED
+  - Guards: WiFi scan та deferred_reconnect скасовують probe
+  - STA_START handler не викликає auto-connect при probing (усунуто "sta is connecting" помилки)
+  - Вирішує проблему: ESP32 завантажується швидше за роутер → AP mode → авто-reconnect
+  - Перевірено на реальному залізі: probe #1 (30s) успішно підключається, MQTT reconnect працює
+
 - **feat(datalogger): логування всіх 10 типів аварій захисту:**
   - Додано 8 нових EventType (11-18): sensor1/2, continuous_run, pulldown, short_cycle, rapid_cycle, rate_rise, door
   - Раніше DataLogger логував тільки high_temp (5) і low_temp (6) — решта 8 аварій губилась

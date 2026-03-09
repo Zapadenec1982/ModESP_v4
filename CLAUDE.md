@@ -361,11 +361,16 @@ ModESP_v4/
 
 ### WiFi
 - STA mode: підключення до існуючого роутера (credentials з NVS)
-- AP fallback: ModESP-XXXX (якщо STA не вдалося)
+- AP fallback: ModESP-XXXX (якщо STA не вдалося після 3 спроб)
 - IP: залежить від режиму (STA = DHCP, AP = 192.168.4.1)
 - **Country code UA:** channels 1-13 (виправлення для Xiaomi/TP-Link роутерів)
 - **STA Watchdog:** авторестарт якщо STA disconnect сумарно > 10 хв (WIFI_MAX_DISCONNECT_MS=600s)
 - **RSSI periodic update:** кожні 10 сек → SharedState
+- **AP→STA periodic probe:** в AP mode періодично пробує STA через WIFI_MODE_APSTA
+  - Backoff: 30s → 60s → 120s → 240s → 300s (cap), нескінченні спроби
+  - AP продовжує працювати під час проби (клієнти не втрачають доступ)
+  - Heap guard 50KB, timeout 15s, guards: scan/deferred_reconnect скасовують probe
+  - Вирішує проблему: ESP32 завантажується швидше за роутер → AP → авто-reconnect
 
 ### MQTT Advanced (Phase 18 partial)
 - **HA Auto-Discovery:** публікація MQTT Discovery topics для Home Assistant
@@ -462,6 +467,8 @@ feat(module): короткий опис
   _ota.progress, _ota.error) via SYS_KEYS loop in publish_state(). MAX_PUBLISH_KEYS 16→64 fix.
   main.cpp: _ota.status/progress/error state key init. Tested: nourl reject, badurl graceful error,
   atomic guard, MQTT real-time status feedback.
+- 2026-03-09 — feat(wifi): AP→STA periodic reconnect probe. В AP mode пробує STA через APSTA
+  з backoff 30s→5min. Heap guard 50KB, timeout 15s. Вирішує проблему: ESP32 стартує швидше за роутер.
 - 2026-03-09 — feat(datalogger): логування всіх 10 типів аварій (8 нових EventType 11-18).
   Fix ALARM_CLEAR bug (prev_ before clear check). 108 host tests, 454 assertions.
   ARCH-001/002: manifest-driven events задокументовано як архітектурний борг.
