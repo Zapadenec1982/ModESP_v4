@@ -14,6 +14,7 @@
 
 #include <cstring>
 #include <cstdio>
+#include <algorithm>
 
 static const char* TAG = "WiFi";
 
@@ -40,6 +41,14 @@ void WiFiService::handle_wifi_event(int32_t event_id, void* event_data) {
 
         case WIFI_EVENT_STA_DISCONNECTED: {
             auto* dis = static_cast<wifi_event_sta_disconnected_t*>(event_data);
+
+            // AP→STA probe fast-fail: повертаємо чистий AP mode
+            if (ap_sta_probing_) {
+                ESP_LOGD(TAG, "AP→STA probe failed (reason %d)", dis->reason);
+                cancel_ap_sta_probe();
+                break;
+            }
+
             connected_ = false;
             ip_str_[0] = '\0';
             state_set("wifi.connected", false);
@@ -73,6 +82,34 @@ void WiFiService::handle_ip_event(int32_t event_id, void* event_data) {
     if (event_id == IP_EVENT_STA_GOT_IP) {
         auto* event = static_cast<ip_event_got_ip_t*>(event_data);
         snprintf(ip_str_, sizeof(ip_str_), IPSTR, IP2STR(&event->ip_info.ip));
+
+        // AP→STA probe успіх: переходимо в чистий STA mode
+        if (ap_sta_probing_) {
+            ESP_LOGI(TAG, "AP→STA probe success! Switching to STA, IP: %s", ip_str_);
+            ap_sta_probing_ = false;
+            ap_mode_ = false;
+            connected_ = true;
+            reconnect_pending_ = false;
+            retry_count_ = 0;
+            reconnect_interval_ = 2000;
+
+            // APSTA → чистий STA (вивільнити AP ресурси)
+            esp_wifi_set_mode(WIFI_MODE_STA);
+
+            // Перезапустити mDNS на STA інтерфейсі
+            stop_mdns();
+            start_mdns();
+
+            // Скинути STA watchdog
+            disconnect_accum_ms_ = 0;
+            stable_timer_ms_ = 0;
+
+            state_set("wifi.connected", true);
+            state_set("wifi.mode", "sta");
+            state_set("wifi.ssid", ssid_);
+            state_set("wifi.ip", ip_str_);
+            return;
+        }
 
         connected_ = true;
         reconnect_pending_ = false;
@@ -182,6 +219,37 @@ void WiFiService::on_update(uint32_t dt_ms) {
         }
     }
 
+    // ── AP→STA periodic probe ──
+    if (ap_mode_ && !ap_sta_probing_ && !deferred_reconnect_ && ssid_[0] != '\0') {
+        if (ap_sta_probe_timer_ > dt_ms) {
+            ap_sta_probe_timer_ -= dt_ms;
+        } else {
+            ap_sta_probe_timer_ = 0;
+        }
+        if (ap_sta_probe_timer_ == 0) {
+            if (esp_get_free_heap_size() >= AP_STA_PROBE_HEAP_MIN) {
+                attempt_ap_sta_probe();
+            } else {
+                ESP_LOGW(TAG, "AP→STA probe skipped: low heap %lu",
+                         (unsigned long)esp_get_free_heap_size());
+                ap_sta_probe_timer_ = ap_sta_probe_interval_;
+            }
+        }
+    }
+
+    // ── Probe timeout ──
+    if (ap_sta_probing_) {
+        if (ap_sta_probe_timeout_ > dt_ms) {
+            ap_sta_probe_timeout_ -= dt_ms;
+        } else {
+            ap_sta_probe_timeout_ = 0;
+        }
+        if (ap_sta_probe_timeout_ == 0) {
+            ESP_LOGW(TAG, "AP→STA probe #%u timeout", ap_sta_probe_count_);
+            cancel_ap_sta_probe();
+        }
+    }
+
     // STA Watchdog: рестарт при тривалому disconnect
     if (!ap_mode_) {
         if (connected_) {
@@ -235,6 +303,9 @@ bool WiFiService::save_credentials(const char* ssid, const char* password) {
 void WiFiService::request_reconnect() {
     ESP_LOGI(TAG, "Reconnect requested — deferred by %d ms to let HTTP response reach client",
              (int)DEFERRED_RECONNECT_DELAY_MS);
+    if (ap_sta_probing_) {
+        cancel_ap_sta_probe();
+    }
     deferred_reconnect_ = true;
     deferred_reconnect_timer_ = 0;
 }
@@ -243,6 +314,11 @@ void WiFiService::request_reconnect() {
 
 bool WiFiService::start_scan() {
     scan_done_ = false;
+
+    // Скасувати AP→STA probe перед scan (APSTA вже активний при probe)
+    if (ap_sta_probing_) {
+        cancel_ap_sta_probe();
+    }
 
     if (!wifi_started_) {
         ESP_LOGW(TAG, "Cannot scan: WiFi not started");
@@ -459,6 +535,12 @@ bool WiFiService::start_ap() {
     connected_ = false;
     reconnect_pending_ = false;
 
+    // Ініціалізація AP→STA probe (якщо є збережені credentials)
+    ap_sta_probing_        = false;
+    ap_sta_probe_timer_    = AP_STA_PROBE_INITIAL_MS;
+    ap_sta_probe_interval_ = AP_STA_PROBE_INITIAL_MS;
+    ap_sta_probe_count_    = 0;
+
     // AP IP завжди 192.168.4.1
     strncpy(ip_str_, "192.168.4.1", sizeof(ip_str_));
     state_set("wifi.mode", "ap");
@@ -472,6 +554,46 @@ bool WiFiService::start_ap() {
     // Запускаємо mDNS в AP mode (клієнти AP можуть використовувати .local)
     start_mdns();
     return true;
+}
+
+// ── AP→STA Probe ─────────────────────────────────────────────────
+
+void WiFiService::attempt_ap_sta_probe() {
+    ap_sta_probe_count_++;
+    ESP_LOGI(TAG, "AP→STA probe #%u (interval %lus)",
+             ap_sta_probe_count_,
+             (unsigned long)(ap_sta_probe_interval_ / 1000));
+
+    ensure_sta_netif();
+    esp_wifi_set_mode(WIFI_MODE_APSTA);
+
+    wifi_config_t sta_cfg = {};
+    strncpy(reinterpret_cast<char*>(sta_cfg.sta.ssid),
+            ssid_, sizeof(sta_cfg.sta.ssid) - 1);
+    strncpy(reinterpret_cast<char*>(sta_cfg.sta.password),
+            password_, sizeof(sta_cfg.sta.password) - 1);
+    sta_cfg.sta.scan_method = WIFI_ALL_CHANNEL_SCAN;
+    sta_cfg.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
+    esp_wifi_set_config(WIFI_IF_STA, &sta_cfg);
+    esp_wifi_connect();
+
+    ap_sta_probing_ = true;
+    ap_sta_probe_timeout_ = AP_STA_PROBE_TIMEOUT_MS;
+}
+
+void WiFiService::cancel_ap_sta_probe() {
+    // Встановити прапорець ДО disconnect, щоб STA_DISCONNECTED event не викликав рекурсію
+    ap_sta_probing_ = false;
+
+    esp_wifi_disconnect();
+    esp_wifi_set_mode(WIFI_MODE_AP);
+
+    // Backoff: 30s → 60s → 120s → 240s → 300s (cap)
+    ap_sta_probe_interval_ = std::min(ap_sta_probe_interval_ * 2, AP_STA_PROBE_MAX_MS);
+    ap_sta_probe_timer_    = ap_sta_probe_interval_;
+
+    ESP_LOGD(TAG, "AP→STA probe cancelled, next in %lus",
+             (unsigned long)(ap_sta_probe_interval_ / 1000));
 }
 
 // ── mDNS ────────────────────────────────────────────────────────

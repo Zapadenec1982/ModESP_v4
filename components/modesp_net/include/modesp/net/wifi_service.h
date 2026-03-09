@@ -86,6 +86,17 @@ private:
     static constexpr uint32_t WIFI_MAX_DISCONNECT_MS = 600000;   // 10 min
     static constexpr uint32_t WIFI_STABLE_RESET_MS = 3600000;    // 1 hour
 
+    // AP→STA periodic probe: спроби STA підключення з AP mode
+    bool     ap_sta_probing_        = false;
+    uint32_t ap_sta_probe_timer_    = 0;
+    uint32_t ap_sta_probe_interval_ = 30000;
+    uint32_t ap_sta_probe_timeout_  = 0;
+    uint8_t  ap_sta_probe_count_    = 0;
+    static constexpr uint32_t AP_STA_PROBE_INITIAL_MS  = 30000;   // 30s
+    static constexpr uint32_t AP_STA_PROBE_MAX_MS      = 300000;  // 5 min
+    static constexpr uint32_t AP_STA_PROBE_TIMEOUT_MS  = 15000;   // 15s
+    static constexpr uint32_t AP_STA_PROBE_HEAP_MIN    = 51200;   // 50KB
+
     bool load_credentials();
     bool start_sta();
     bool start_ap();
@@ -93,6 +104,8 @@ private:
     void ensure_ap_netif();
     void start_mdns();
     void stop_mdns();
+    void attempt_ap_sta_probe();
+    void cancel_ap_sta_probe();
 
     // ESP event handler (static because ESP-IDF API requires function pointer)
     static void event_handler(void* arg, esp_event_base_t base,
