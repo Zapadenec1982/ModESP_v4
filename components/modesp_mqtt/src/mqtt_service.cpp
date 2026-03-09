@@ -637,6 +637,62 @@ void MqttService::handle_incoming(const char* topic, int topic_len,
         return;
     }
 
+    // Special command: _set_mqtt_creds (JSON: {"user":"...","pass":"..."})
+    // Cloud sends this BEFORE _set_tenant — save creds but don't reconnect yet.
+    // The subsequent _set_tenant triggers reconnect with new credentials.
+    // If _set_tenant doesn't arrive within 10s, deferred reconnect kicks in.
+    if (strcmp(key, "_set_mqtt_creds") == 0) {
+        // Parse JSON from raw data (may be longer than val_buf[32])
+        char json_buf[256];
+        int json_len = (data_len < (int)sizeof(json_buf) - 1)
+                       ? data_len : (int)sizeof(json_buf) - 1;
+        memcpy(json_buf, data, json_len);
+        json_buf[json_len] = '\0';
+
+        jsmn_parser jp;
+        jsmntok_t tokens[8];
+        jsmn_init(&jp);
+        int tok_count = jsmn_parse(&jp, json_buf, json_len, tokens, 8);
+        if (tok_count < 1 || tokens[0].type != JSMN_OBJECT) {
+            ESP_LOGE(TAG, "_set_mqtt_creds: invalid JSON");
+            return;
+        }
+
+        char new_user[64] = {};
+        char new_pass[64] = {};
+
+        for (int i = 1; i < tok_count - 1; i += 2) {
+            if (tokens[i].type != JSMN_STRING) continue;
+            json_buf[tokens[i].end] = '\0';
+            json_buf[tokens[i + 1].end] = '\0';
+            const char* k = json_buf + tokens[i].start;
+            const char* v = json_buf + tokens[i + 1].start;
+
+            if (strcmp(k, "user") == 0 || strcmp(k, "username") == 0) {
+                strncpy(new_user, v, sizeof(new_user) - 1);
+            } else if (strcmp(k, "pass") == 0 || strcmp(k, "password") == 0) {
+                strncpy(new_pass, v, sizeof(new_pass) - 1);
+            }
+        }
+
+        if (new_user[0] == '\0' || new_pass[0] == '\0') {
+            ESP_LOGE(TAG, "_set_mqtt_creds: missing user or pass");
+            return;
+        }
+
+        // Save to NVS (same keys as load_config reads)
+        nvs_helper::write_str("mqtt", "user", new_user);
+        nvs_helper::write_str("mqtt", "pass", new_pass);
+        // Update in-memory
+        strncpy(user_, new_user, sizeof(user_) - 1);
+        user_[sizeof(user_) - 1] = '\0';
+        strncpy(pass_, new_pass, sizeof(pass_) - 1);
+        pass_[sizeof(pass_) - 1] = '\0';
+
+        ESP_LOGI(TAG, "MQTT credentials updated (user=%s), waiting for _set_tenant to reconnect", new_user);
+        return;
+    }
+
     // Special command: _set_tenant (not in STATE_META)
     if (strcmp(key, "_set_tenant") == 0) {
         strncpy(tenant_, val_buf, sizeof(tenant_) - 1);
