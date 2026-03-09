@@ -35,8 +35,13 @@ void WiFiService::event_handler(void* arg, esp_event_base_t base,
 void WiFiService::handle_wifi_event(int32_t event_id, void* event_data) {
     switch (event_id) {
         case WIFI_EVENT_STA_START:
-            ESP_LOGI(TAG, "STA started, connecting...");
-            esp_wifi_connect();
+            // При AP→STA probe connect викликається явно з attempt_ap_sta_probe()
+            if (ap_sta_probing_) {
+                ESP_LOGD(TAG, "STA started (probe mode, connect deferred)");
+            } else {
+                ESP_LOGI(TAG, "STA started, connecting...");
+                esp_wifi_connect();
+            }
             break;
 
         case WIFI_EVENT_STA_DISCONNECTED: {
@@ -564,9 +569,14 @@ void WiFiService::attempt_ap_sta_probe() {
              ap_sta_probe_count_,
              (unsigned long)(ap_sta_probe_interval_ / 1000));
 
+    // Встановити ДО mode switch — STA_START handler перевіряє цей прапорець
+    ap_sta_probing_ = true;
+    ap_sta_probe_timeout_ = AP_STA_PROBE_TIMEOUT_MS;
+
     ensure_sta_netif();
     esp_wifi_set_mode(WIFI_MODE_APSTA);
 
+    // Config + connect ПІСЛЯ mode switch (STA_START не викликає auto-connect)
     wifi_config_t sta_cfg = {};
     strncpy(reinterpret_cast<char*>(sta_cfg.sta.ssid),
             ssid_, sizeof(sta_cfg.sta.ssid) - 1);
@@ -576,9 +586,6 @@ void WiFiService::attempt_ap_sta_probe() {
     sta_cfg.sta.sort_method = WIFI_CONNECT_AP_BY_SIGNAL;
     esp_wifi_set_config(WIFI_IF_STA, &sta_cfg);
     esp_wifi_connect();
-
-    ap_sta_probing_ = true;
-    ap_sta_probe_timeout_ = AP_STA_PROBE_TIMEOUT_MS;
 }
 
 void WiFiService::cancel_ap_sta_probe() {
