@@ -118,13 +118,14 @@ bool DataLoggerModule::on_init() {
 
     update_flash_used();
 
-    // Ініціалізувати SharedState
-    state_set("datalogger.records_count", static_cast<int32_t>(temp_count_));
-    state_set("datalogger.events_count", static_cast<int32_t>(event_count_));
-    state_set("datalogger.flash_used", static_cast<int32_t>(flash_used_kb_));
-
     // POWER_ON маркер
     log_event(EVENT_POWER_ON);
+
+    // Ініціалізувати SharedState (після POWER_ON щоб events_count включав його)
+    state_set("datalogger.records_count", static_cast<int32_t>(temp_count_));
+    state_set("datalogger.events_count",
+              static_cast<int32_t>(event_count_ + event_buf_.size()));
+    state_set("datalogger.flash_used", static_cast<int32_t>(flash_used_kb_));
 
     // Прочитати початковий стан для edge-detect
     prev_compressor_     = read_bool("equipment.compressor", false);
@@ -132,6 +133,14 @@ bool DataLoggerModule::on_init() {
     prev_door_open_      = read_bool("equipment.door_open", false);
     prev_alarm_high_     = read_bool("protection.high_temp_alarm", false);
     prev_alarm_low_      = read_bool("protection.low_temp_alarm", false);
+    prev_sensor1_alarm_  = read_bool("protection.sensor1_alarm", false);
+    prev_sensor2_alarm_  = read_bool("protection.sensor2_alarm", false);
+    prev_cont_run_alarm_ = read_bool("protection.continuous_run_alarm", false);
+    prev_pulldown_alarm_ = read_bool("protection.pulldown_alarm", false);
+    prev_short_cyc_alarm_= read_bool("protection.short_cycle_alarm", false);
+    prev_rapid_cyc_alarm_= read_bool("protection.rapid_cycle_alarm", false);
+    prev_rate_alarm_     = read_bool("protection.rate_alarm", false);
+    prev_door_alarm_     = read_bool("protection.door_alarm", false);
 
     // Логувати активні канали
     int active = 0;
@@ -241,21 +250,60 @@ void DataLoggerModule::poll_events() {
         prev_door_open_ = door;
     }
 
+    // === Аварії: rising edge → event, falling edge → ALARM_CLEAR ===
+    // ВАЖЛИВО: зберігаємо prev_ ПІСЛЯ clear check
+
     bool alarm_high = read_bool("protection.high_temp_alarm", false);
-    if (alarm_high && !prev_alarm_high_) {
-        log_event(EVENT_ALARM_HIGH);
-    }
+    if (alarm_high && !prev_alarm_high_) log_event(EVENT_ALARM_HIGH);
+    if (!alarm_high && prev_alarm_high_) log_event(EVENT_ALARM_CLEAR);
     prev_alarm_high_ = alarm_high;
 
     bool alarm_low = read_bool("protection.low_temp_alarm", false);
-    if (alarm_low && !prev_alarm_low_) {
-        log_event(EVENT_ALARM_LOW);
-    }
-    // Скидання аварії → EVENT_ALARM_CLEAR
-    if ((prev_alarm_high_ && !alarm_high) || (prev_alarm_low_ && !alarm_low)) {
-        log_event(EVENT_ALARM_CLEAR);
-    }
+    if (alarm_low && !prev_alarm_low_) log_event(EVENT_ALARM_LOW);
+    if (!alarm_low && prev_alarm_low_) log_event(EVENT_ALARM_CLEAR);
     prev_alarm_low_ = alarm_low;
+
+    // Sensor alarms
+    bool s1 = read_bool("protection.sensor1_alarm", false);
+    if (s1 && !prev_sensor1_alarm_) log_event(EVENT_ALARM_SENSOR1);
+    if (!s1 && prev_sensor1_alarm_) log_event(EVENT_ALARM_CLEAR);
+    prev_sensor1_alarm_ = s1;
+
+    bool s2 = read_bool("protection.sensor2_alarm", false);
+    if (s2 && !prev_sensor2_alarm_) log_event(EVENT_ALARM_SENSOR2);
+    if (!s2 && prev_sensor2_alarm_) log_event(EVENT_ALARM_CLEAR);
+    prev_sensor2_alarm_ = s2;
+
+    // Compressor protection alarms
+    bool cont = read_bool("protection.continuous_run_alarm", false);
+    if (cont && !prev_cont_run_alarm_) log_event(EVENT_ALARM_CONT_RUN);
+    if (!cont && prev_cont_run_alarm_) log_event(EVENT_ALARM_CLEAR);
+    prev_cont_run_alarm_ = cont;
+
+    bool pull = read_bool("protection.pulldown_alarm", false);
+    if (pull && !prev_pulldown_alarm_) log_event(EVENT_ALARM_PULLDOWN);
+    if (!pull && prev_pulldown_alarm_) log_event(EVENT_ALARM_CLEAR);
+    prev_pulldown_alarm_ = pull;
+
+    bool sc = read_bool("protection.short_cycle_alarm", false);
+    if (sc && !prev_short_cyc_alarm_) log_event(EVENT_ALARM_SHORT_CYC);
+    if (!sc && prev_short_cyc_alarm_) log_event(EVENT_ALARM_CLEAR);
+    prev_short_cyc_alarm_ = sc;
+
+    bool rc = read_bool("protection.rapid_cycle_alarm", false);
+    if (rc && !prev_rapid_cyc_alarm_) log_event(EVENT_ALARM_RAPID_CYC);
+    if (!rc && prev_rapid_cyc_alarm_) log_event(EVENT_ALARM_CLEAR);
+    prev_rapid_cyc_alarm_ = rc;
+
+    bool rate = read_bool("protection.rate_alarm", false);
+    if (rate && !prev_rate_alarm_) log_event(EVENT_ALARM_RATE_RISE);
+    if (!rate && prev_rate_alarm_) log_event(EVENT_ALARM_CLEAR);
+    prev_rate_alarm_ = rate;
+
+    bool da = read_bool("protection.door_alarm", false);
+    if (da && !prev_door_alarm_) log_event(EVENT_ALARM_DOOR);
+    if (!da && prev_door_alarm_) log_event(EVENT_ALARM_CLEAR);
+    prev_door_alarm_ = da;
 }
 
 // ── Запис події в RAM буфер ──

@@ -56,6 +56,15 @@ enum EventType : uint8_t {
     EVENT_DOOR_OPEN       = 8,
     EVENT_DOOR_CLOSE      = 9,
     EVENT_POWER_ON        = 10,
+    // Phase 17 — protection alarms
+    EVENT_ALARM_SENSOR1   = 11,
+    EVENT_ALARM_SENSOR2   = 12,
+    EVENT_ALARM_CONT_RUN  = 13,
+    EVENT_ALARM_PULLDOWN  = 14,
+    EVENT_ALARM_SHORT_CYC = 15,
+    EVENT_ALARM_RAPID_CYC = 16,
+    EVENT_ALARM_RATE_RISE = 17,
+    EVENT_ALARM_DOOR      = 18,
 };
 
 /// Запис події (8 bytes, aligned)
@@ -91,6 +100,14 @@ private:
     bool prev_door_open_      = false;
     bool prev_alarm_high_     = false;
     bool prev_alarm_low_      = false;
+    bool prev_sensor1_alarm_  = false;
+    bool prev_sensor2_alarm_  = false;
+    bool prev_cont_run_alarm_ = false;
+    bool prev_pulldown_alarm_ = false;
+    bool prev_short_cyc_alarm_= false;
+    bool prev_rapid_cyc_alarm_= false;
+    bool prev_rate_alarm_     = false;
+    bool prev_door_alarm_     = false;
 
     // ── Таймери ──
     uint32_t sample_timer_ms_ = 0;

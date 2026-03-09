@@ -68,6 +68,14 @@ struct DLFixture {
         state.set("defrost.active", false);
         state.set("protection.high_temp_alarm", false);
         state.set("protection.low_temp_alarm", false);
+        state.set("protection.sensor1_alarm", false);
+        state.set("protection.sensor2_alarm", false);
+        state.set("protection.continuous_run_alarm", false);
+        state.set("protection.pulldown_alarm", false);
+        state.set("protection.short_cycle_alarm", false);
+        state.set("protection.rapid_cycle_alarm", false);
+        state.set("protection.rate_alarm", false);
+        state.set("protection.door_alarm", false);
 
         // Settings
         state.set("datalogger.enabled", true);
@@ -235,7 +243,86 @@ TEST_CASE_FIXTURE(DLFixture, "serialize_summary produces valid JSON") {
     CHECK(strstr(buf, "\"channels\"") != nullptr);
 }
 
-// ── 12. append_temp_val helper ──
+// ── 12. Alarm clear generates event on falling edge ──
+
+TEST_CASE_FIXTURE(DLFixture, "alarm clear event on falling edge") {
+    // Activate alarm → rising edge
+    state.set("protection.high_temp_alarm", true);
+    tick();
+    int32_t after_alarm = get_int(state, "datalogger.events_count");
+
+    // Deactivate alarm → falling edge → ALARM_CLEAR
+    state.set("protection.high_temp_alarm", false);
+    tick();
+    CHECK(get_int(state, "datalogger.events_count") == after_alarm + 1);
+}
+
+// ── 13. Protection alarm events (all 10 types) ──
+
+TEST_CASE_FIXTURE(DLFixture, "all protection alarms generate events") {
+    struct AlarmCase {
+        const char* key;
+        const char* name;
+    };
+    AlarmCase alarms[] = {
+        {"protection.high_temp_alarm",       "high_temp"},
+        {"protection.low_temp_alarm",        "low_temp"},
+        {"protection.sensor1_alarm",         "sensor1"},
+        {"protection.sensor2_alarm",         "sensor2"},
+        {"protection.continuous_run_alarm",  "cont_run"},
+        {"protection.pulldown_alarm",        "pulldown"},
+        {"protection.short_cycle_alarm",     "short_cyc"},
+        {"protection.rapid_cycle_alarm",     "rapid_cyc"},
+        {"protection.rate_alarm",            "rate_rise"},
+        {"protection.door_alarm",            "door"},
+    };
+
+    for (auto& a : alarms) {
+        SUBCASE(a.name) {
+            int32_t before = get_int(state, "datalogger.events_count");
+
+            // Rising edge → alarm event
+            state.set(a.key, true);
+            tick();
+            CHECK(get_int(state, "datalogger.events_count") == before + 1);
+
+            // Same state → no event
+            tick();
+            CHECK(get_int(state, "datalogger.events_count") == before + 1);
+
+            // Falling edge → clear event
+            state.set(a.key, false);
+            tick();
+            CHECK(get_int(state, "datalogger.events_count") == before + 2);
+        }
+    }
+}
+
+// ── 14. Multiple alarms don't interfere ──
+
+TEST_CASE_FIXTURE(DLFixture, "simultaneous alarms generate separate events") {
+    int32_t before = get_int(state, "datalogger.events_count");
+
+    // Activate 3 alarms at once
+    state.set("protection.high_temp_alarm", true);
+    state.set("protection.continuous_run_alarm", true);
+    state.set("protection.pulldown_alarm", true);
+    tick();
+
+    // Should have 3 new events
+    CHECK(get_int(state, "datalogger.events_count") == before + 3);
+
+    // Clear all 3
+    state.set("protection.high_temp_alarm", false);
+    state.set("protection.continuous_run_alarm", false);
+    state.set("protection.pulldown_alarm", false);
+    tick();
+
+    // 3 clear events
+    CHECK(get_int(state, "datalogger.events_count") == before + 6);
+}
+
+// ── 15. append_temp_val helper ──
 
 TEST_CASE("TEMP_NO_DATA renders as null in JSON") {
     // Непрямий тест через struct: запис з NO_DATA каналом
