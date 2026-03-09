@@ -2,6 +2,23 @@
 
 > Повний changelog проекту. Останні зміни також дублюються в CLAUDE.md.
 
+## 2026-03-09
+
+- **feat(datalogger): логування всіх 10 типів аварій захисту:**
+  - Додано 8 нових EventType (11-18): sensor1/2, continuous_run, pulldown, short_cycle, rapid_cycle, rate_rise, door
+  - Раніше DataLogger логував тільки high_temp (5) і low_temp (6) — решта 8 аварій губилась
+  - Fix: ALARM_CLEAR (7) ніколи не генерувався для high_temp — prev_ оновлювався ДО clear check
+  - Fix: events_count в on_init() не включав POWER_ON подію
+  - i18n мітки event.11..18 (UK + EN)
+  - 108 host C++ tests, 454 assertions (було 105/370)
+
+- **test(equipment,datalogger):** host unit tests для Equipment (16) та DataLogger (12+3 нових alarm tests):
+  - MockSensorDriver + MockActuatorDriver для Equipment injection testing
+  - Arbitration, anti-short-cycle, interlocks, EMA, has_* keys
+  - Alarm edge-detect (all 10 types), alarm clear, simultaneous alarms
+
+- **Архітектурний аналіз:** DataLogger events захардкоджені в 6 місцях (C++ enum, poll_events, prev_ поля, i18n, ChartWidget). Зафіксовано як ARCH-001 (manifest-driven events) + ARCH-002 (WebUI event labels) в ACTION_PLAN.md. MVP план готовий в plans/snug-fluttering-panda.md.
+
 ## 2026-03-08
 
 - **Phase 17b:** 2-рівнева ескалація continuous run в Protection Module:

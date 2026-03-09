@@ -150,7 +150,8 @@ board.json + bindings.json ─┘
 - **LittleFS storage:** temp.bin + events.bin з rotate при перевищенні ліміту
 - **RAM buffer:** 16 temp + 32 events, flush кожні 10 хвилин
 - **Auto-migration:** старі формати (8/12 bytes) видаляються при boot (st_size % 16 != 0)
-- **10 event types:** compressor on/off, defrost start/end, alarm high/low/clear, door open/close, power_on
+- **18 event types:** compressor on/off, defrost start/end, alarm high/low/clear, door open/close, power_on,
+  + 8 protection alarms: sensor1/2, continuous_run, pulldown, short_cycle, rapid_cycle, rate_rise, door_alarm
 - **JSON v3:** `{"channels":["air","evap","setpoint"],"temp":[[ts,v0,v1,v2],...],"events":[[ts,type],...]}`
   - Dynamic channels: serialize scans files for non-null data, outputs only active channels
   - Values = null якщо TEMP_NO_DATA; GET /api/log?hours=24 — streaming chunked
@@ -162,7 +163,7 @@ board.json + bindings.json ─┘
 - **CSV export:** client-side download (dynamic channels + events), zero ESP32 навантаження
 - **10 state keys** (7 persist: enabled, retention_hours, sample_interval, log_evap, log_cond,
   log_setpoint, log_humidity; 3 readonly: records_count, events_count, flash_used)
-- **264 pytest тестів + 90 host C++ doctest**
+- **264 pytest тестів + 108 host C++ doctest (454 assertions)**
 - **Host C++ tests:** tests/host/ (doctest, thermostat/defrost/protection)
 
 ### KC868-A6 Board Support (Phase 12a)
@@ -461,6 +462,9 @@ feat(module): короткий опис
   _ota.progress, _ota.error) via SYS_KEYS loop in publish_state(). MAX_PUBLISH_KEYS 16→64 fix.
   main.cpp: _ota.status/progress/error state key init. Tested: nourl reject, badurl graceful error,
   atomic guard, MQTT real-time status feedback.
+- 2026-03-09 — feat(datalogger): логування всіх 10 типів аварій (8 нових EventType 11-18).
+  Fix ALARM_CLEAR bug (prev_ before clear check). 108 host tests, 454 assertions.
+  ARCH-001/002: manifest-driven events задокументовано як архітектурний борг.
 - 2026-03-08 — fix(protection): 3 bugfixes — pulldown matched evap baseline (evap_at_start vs evap_now),
   short cycle counter idle reset (10× min_run), alarm_code includes lockout/comp_blocked (highest priority).
   63 host tests, 312 assertions. No manifest/API changes.

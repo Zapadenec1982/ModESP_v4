@@ -15,7 +15,7 @@
 - Runtime UI visibility — visible_when + per-option disabled
 - Svelte WebUI (32 компоненти, Dashboard, premium dark theme, responsive accordions, i18n UA/EN, 63KB JS + 13KB CSS gzipped)
 - MQTT TLS, OTA з rollback, auto-persist NVS
-- 254 pytest + 63 host C++ (doctest) тестів
+- 254 pytest + 108 host C++ (doctest, 454 assertions) тестів
 - KC868-A6 board support (Phase 12a)
 - 126 state keys, 63 STATE_META, 50 MQTT pub, 62 MQTT sub
 
@@ -195,6 +195,12 @@
 | AUDIT-034 | Password protection | Prod (deferred) |
 | AUDIT-035 | °C/°F units | Deferred (не актуально) |
 
+### Архітектурний борг (Production)
+| ID | Опис | Деталі |
+|----|------|--------|
+| ARCH-001 | **Manifest-driven events для DataLogger** | Події захардкоджені в 6 місцях (C++ enum, poll_events, prev_ поля, i18n en/uk, ChartWidget). Порушує Single Source of Truth. **MVP план готовий:** маніфести → генератор → `event_defs.h` → data-driven poll_events(). **WebUI частина потребує окремого рішення** (ui.json vs generated i18n vs hybrid). План: `plans/snug-fluttering-panda.md` |
+| ARCH-002 | **WebUI event labels architecture** | ChartWidget.svelte має hardcoded event type constants + i18n event.1..18. Треба вирішити: labels в ui.json (runtime) чи generated i18n (build-time) чи гібрид. chart_zones теж hardcoded. |
+
 ---
 
 ## Архітектурні рішення (діючі і заплановані)
@@ -257,6 +263,7 @@
 
 ## Changelog
 
+- 2026-03-09 — feat(datalogger): логування всіх 10 типів аварій (було тільки high/low). Fix ALARM_CLEAR bug. 108 host tests, 454 assertions. Архітектурний аналіз: ARCH-001 (manifest-driven events) + ARCH-002 (WebUI event labels) зафіксовано як борг.
 - 2026-03-08 — Phase 17b DONE: 2-рівнева ескалація continuous run + 3 bugfixes (pulldown baseline, short cycle idle, alarm_code). 126 state keys, 63 META, 63 host tests.
 - 2026-03-07 — Ревізія стану проекту: оновлено "Де ми зараз" (122 state keys, 61 META, 63KB bundle), додано завершені фази Phase 17 + WebUI Redesign R1.
 - 2026-03-07 — Додано ЧАСТИНУ 3 (Хмарна інфраструктура): архітектурні рішення tenant_id + версіонування MQTT протоколу + схема БД. Спринти 12-17. Оновлено таблицю архітектурних рішень.
