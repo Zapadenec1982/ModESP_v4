@@ -164,7 +164,10 @@ nvs_handle_t batch_open(const char* ns, bool readonly) {
 
 void batch_close(nvs_handle_t handle) {
     if (!handle) return;
-    nvs_commit(handle);
+    esp_err_t err = nvs_commit(handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "NVS batch commit failed: %s", esp_err_to_name(err));
+    }
     nvs_close(handle);
 }
 

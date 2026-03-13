@@ -23,6 +23,8 @@
 #include "esp_sntp.h"
 #include "modesp/services/nvs_helper.h"
 #include "mbedtls/base64.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #include "state_meta.h"
 #include "jsmn.h"
@@ -44,6 +46,12 @@ static char s_auth_pass[64] = "modesp";
 static bool s_auth_enabled = true;
 static const char* AUTH_NVS_NS = "auth";
 
+// ── Auth rate-limiting (brute force protection) ──────
+static constexpr uint8_t  AUTH_MAX_FAILURES    = 5;
+static constexpr uint32_t AUTH_LOCKOUT_MS      = 30000;  // 30 секунд блокування
+static uint8_t  s_auth_fail_count = 0;
+static uint32_t s_auth_lockout_until = 0;  // xTaskGetTickCount() значення
+
 void HttpService::load_auth_from_nvs() {
     nvs_helper::read_str(AUTH_NVS_NS, "user", s_auth_user, sizeof(s_auth_user));
     nvs_helper::read_str(AUTH_NVS_NS, "pass", s_auth_pass, sizeof(s_auth_pass));
@@ -63,6 +71,23 @@ void HttpService::save_auth_to_nvs() {
 bool HttpService::check_auth(httpd_req_t* req) {
     // Якщо auth вимкнено — пропускаємо
     if (!s_auth_enabled) return true;
+
+    // Rate-limiting: блокування після AUTH_MAX_FAILURES невдалих спроб
+    if (s_auth_fail_count >= AUTH_MAX_FAILURES) {
+        uint32_t now = xTaskGetTickCount();
+        if ((now - s_auth_lockout_until) < pdMS_TO_TICKS(AUTH_LOCKOUT_MS)) {
+            ESP_LOGW(TAG, "Auth locked out (%u failures, %lus remaining)",
+                     s_auth_fail_count,
+                     (unsigned long)((pdMS_TO_TICKS(AUTH_LOCKOUT_MS) - (now - s_auth_lockout_until))
+                                     / configTICK_RATE_HZ));
+            httpd_resp_set_status(req, "429 Too Many Requests");
+            httpd_resp_set_type(req, "text/plain");
+            httpd_resp_send(req, "Too many failed attempts. Try again later.", HTTPD_RESP_USE_STRLEN);
+            return false;
+        }
+        // Lockout минув — скидаємо лічильник
+        s_auth_fail_count = 0;
+    }
 
     // Читаємо Authorization header
     size_t hdr_len = httpd_req_get_hdr_value_len(req, "Authorization");
@@ -122,7 +147,15 @@ bool HttpService::check_auth(httpd_req_t* req) {
     const char* pass = colon + 1;
 
     if (strcmp(user, s_auth_user) == 0 && strcmp(pass, s_auth_pass) == 0) {
+        s_auth_fail_count = 0;  // Успішний логін — скидаємо лічильник
         return true;
+    }
+
+    // Невдала спроба — інкремент лічильника
+    s_auth_fail_count++;
+    if (s_auth_fail_count >= AUTH_MAX_FAILURES) {
+        s_auth_lockout_until = xTaskGetTickCount();
+        ESP_LOGW(TAG, "Auth lockout triggered after %u failures", s_auth_fail_count);
     }
 
     httpd_resp_set_status(req, "401 Unauthorized");
@@ -789,6 +822,7 @@ esp_err_t HttpService::handle_post_factory_reset(httpd_req_t* req) {
 // ── Backup / Restore ────────────────────────────────────────────
 
 esp_err_t HttpService::handle_get_backup(httpd_req_t* req) {
+    if (!check_auth(req)) return ESP_OK;
     auto* self = static_cast<HttpService*>(req->user_ctx);
 
     // Серіалізуємо тільки persist:true ключі з STATE_META
