@@ -10,6 +10,7 @@
 | /api/bindings | GET/POST | Driver bindings (read / save) |
 | /api/modules | GET | Module list + status |
 | /api/settings | POST | Change readwrite state keys (validates via state_meta) |
+| /api/mqtt | GET/POST | MQTT config + status / update (registered by MqttService) |
 | /api/wifi | POST | WiFi credentials |
 | /api/wifi/scan | GET | WiFi scan results |
 | /api/wifi/ap | GET/POST | WiFi AP mode settings |
