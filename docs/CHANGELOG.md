@@ -1,6 +1,6 @@
 # ModESP v4 — Changelog
 
-> Повний changelog проекту. Останні зміни також дублюються в CLAUDE.md.
+> Повний changelog проекту.
 
 ## 2026-03-09
 

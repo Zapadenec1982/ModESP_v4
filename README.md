@@ -4,7 +4,7 @@
 
 ![ESP-IDF](https://img.shields.io/badge/ESP--IDF-v5.5-blue)
 ![C++17](https://img.shields.io/badge/C%2B%2B-17-orange)
-![License](https://img.shields.io/badge/License-GPL--3.0-green)
+![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue)
 ![Platform](https://img.shields.io/badge/Platform-ESP32--WROOM--32-red)
 ![Platform](https://img.shields.io/badge/Platform-KC868--A6-red)
 
@@ -209,7 +209,22 @@ cd tests/host && cmake -B build && cmake --build build && ctest --test-dir build
 
 ## License
 
-This project is licensed under the **GNU General Public License v3.0**.
+This project is licensed under the [**PolyForm Noncommercial License 1.0.0**](LICENSE).
+
+You are free to view, learn from, and use this code for personal and non-commercial purposes.
+**Commercial use requires written permission** from the author.
+
+For commercial licensing inquiries, contact: [github.com/Zapadenec1982](https://github.com/Zapadenec1982)
+
+---
+
+## Author
+
+**Oleksandr Tepliak** — Embedded Systems Engineer, Ukraine
+
+- Industrial refrigeration control systems
+- ESP32 / ESP-IDF / FreeRTOS
+- Full-stack IoT (firmware + cloud + WebUI)
 
 ---
 

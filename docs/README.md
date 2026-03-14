@@ -26,10 +26,9 @@
 
 | Файл | Призначення |
 |------|-------------|
-| `CLAUDE.md` | Як працює проект ЗАРАЗ — читається Claude Code автоматично |
-| `ACTION_PLAN.md` | Чеклісти задач, баги, TODO |
 | `README.md` | Огляд проекту для GitHub |
-| `WISHLIST.md` | Ідеї для майбутніх фаз (weather, Telegram, PID, LCD) |
+| `ARCHITECTURE.md` | Архітектурний огляд системи |
+| `LICENSE` | PolyForm Noncommercial License 1.0.0 |
 
 ## Changelog
 - 2026-03-01 — Рефакторинг: повернено посилання на archive/, додано WISHLIST

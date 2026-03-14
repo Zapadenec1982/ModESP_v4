@@ -43,7 +43,30 @@ first_prompt.md
 next_prompt*.md
 CLAUDE_TASK.md
 CLAUDE_TASK_*.md
+CLAUDE.md
+ACTION_PLAN.md
 test_out.txt
-# /prompts/  — тепер частина проекту (MVP/Production plan)
+prompts/
+
+# === Dev artifacts ===
+build_err*.txt
+gcc_err*.txt
+gcc_out*.txt
+gcc_stdout.txt
+gcc_stderr.txt
+test_err.txt
+commit_msg.txt
+*.ps1
+defrost_test.o
+
+# === Confidential docs ===
+docs/13_monetization_strategy.md
+docs/ModESP_Proposal_UBC_Group.docx
+docs/ubc_pitch_v2.js
+
+# === Misc ===
 .clangd
 nul
+tools/node_modules/
+tools/package-lock.json
+tools/package.json
