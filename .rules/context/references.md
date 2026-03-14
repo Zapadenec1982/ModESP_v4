@@ -7,10 +7,9 @@
 | /api/state | GET | Full SharedState as JSON |
 | /api/ui | GET | UI schema (ui.json) |
 | /api/board | GET | Board config |
-| /api/bindings | GET | Driver bindings |
+| /api/bindings | GET/POST | Driver bindings (read / save) |
 | /api/modules | GET | Module list + status |
 | /api/settings | POST | Change readwrite state keys (validates via state_meta) |
-| /api/mqtt | GET/POST | MQTT config + status / update |
 | /api/wifi | POST | WiFi credentials |
 | /api/wifi/scan | GET | WiFi scan results |
 | /api/wifi/ap | GET/POST | WiFi AP mode settings |
@@ -20,6 +19,9 @@
 | /api/onewire/scan | GET | Scan OneWire bus (SEARCH_ROM) |
 | /api/log | GET | DataLogger: streaming chunked JSON (?hours=24) |
 | /api/log/summary | GET | DataLogger: {hours, temp_count, event_count, flash_kb} |
+| /api/backup | GET | Backup configuration (NVS export) |
+| /api/restore | POST | Restore configuration (NVS import) |
+| /api/auth | GET/POST | Auth settings (read / update) |
 | /api/factory-reset | POST | Factory reset (NVS clear + restart) |
 | /api/restart | POST | ESP restart |
 | /ws | WS | Real-time state broadcast (delta, 1500ms) |

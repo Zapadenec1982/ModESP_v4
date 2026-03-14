@@ -15,7 +15,7 @@
 
 ```cpp
 // Key: etl::string<32>, Value: etl::variant<int32_t, float, bool, etl::string<32>>
-SharedState: etl::unordered_map<StateKey, StateValue, 128>  // MODESP_MAX_STATE_ENTRIES
+SharedState: etl::unordered_map<StateKey, StateValue, 158>  // MODESP_MAX_STATE_ENTRIES (126 manifest + 32 runtime)
 ```
 
 - `set()` increments version counter — WsService compares versions

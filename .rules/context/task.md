@@ -18,7 +18,7 @@
 ## Current state (Phase 18)
 
 - 5 modules, 6 drivers — fully operational
-- 126 state keys, 108 host C++ tests (454 assertions), 254 pytest
+- 134 state keys (63 STATE_META), 108 host C++ tests (454 assertions), 254 pytest
 - KC868-A6 board: I2C PCF8574 expanders (6 relays, 6 inputs)
 - WebUI: 76KB gzipped, premium dark theme, UA/EN
 
