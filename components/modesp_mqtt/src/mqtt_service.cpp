@@ -261,11 +261,11 @@ bool MqttService::start_client() {
 
     mqtt_cfg.network.disable_auto_reconnect = true;
 
-    // Heap optimization: зменшити task stack (default 6144) та буфери (default 1024)
-    // MQTT payloads малі (<600B), 4KB стеку достатньо для publish/subscribe
+    // Heap optimization: зменшити task stack (default 6144)
+    // Буфери 1024B — достатньо для OTA JSON payload (~300B) з запасом
     mqtt_cfg.task.stack_size = 4096;
-    mqtt_cfg.buffer.size     = 768;      // inbound (default 1024)
-    mqtt_cfg.buffer.out_size = 768;      // outbound (default 1024)
+    mqtt_cfg.buffer.size     = 1024;     // inbound
+    mqtt_cfg.buffer.out_size = 1024;     // outbound
 
     client_ = esp_mqtt_client_init(&mqtt_cfg);
     if (!client_) {
