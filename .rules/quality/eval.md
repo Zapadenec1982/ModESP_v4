@@ -10,7 +10,7 @@
 - [ ] New features guarded by `has_feature()` if conditional
 - [ ] Equipment arbitration order preserved (lockout > blocked > defrost > thermostat)
 - [ ] Interlocks respected (defrost_relay + compressor never both ON)
-- [ ] Tests pass: pytest (254) + host doctest (108)
+- [ ] Tests pass: pytest (310) + host doctest (108)
 - [ ] Manifest changes → regenerate (`python tools/generate_ui.py`)
 
 ## Red flags (reject or fix)

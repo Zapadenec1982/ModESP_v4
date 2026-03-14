@@ -60,8 +60,8 @@ ModESP_v4/
 ├── modules/                   # 5 modules (equipment, protection, thermostat, defrost, datalogger)
 ├── tools/
 │   ├── generate_ui.py         # Manifest → UI + C++ headers (~1677 lines)
-│   └── tests/                 # 254 pytest tests
-├── tests/host/                # 108 doctest C++ tests (454 assertions)
+│   └── tests/                 # 310 pytest tests
+├── tests/host/                # 108 doctest C++ tests
 ├── data/
 │   ├── board.json             # Active board (KC868-A6)
 │   ├── bindings.json          # Active driver bindings
