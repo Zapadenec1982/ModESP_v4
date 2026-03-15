@@ -119,6 +119,17 @@ void AwsIotService::on_update(uint32_t dt_ms) {
         }
     }
 
+    // Shadow reported (batch update кожні 5с, тільки при змінах)
+    shadow_timer_ms_ += dt_ms;
+    if (shadow_timer_ms_ >= SHADOW_INTERVAL_MS) {
+        shadow_timer_ms_ = 0;
+        if (shadow_dirty_ || state_->version() != shadow_version_) {
+            publish_shadow_reported();
+            shadow_version_ = state_->version();
+            shadow_dirty_ = false;
+        }
+    }
+
     // Heartbeat
     heartbeat_timer_ms_ += dt_ms;
     if (heartbeat_timer_ms_ >= HEARTBEAT_INTERVAL_MS) {
@@ -222,14 +233,32 @@ void AwsIotService::mqtt_event_handler(void* args, esp_event_base_t base,
             esp_mqtt_client_publish(self->client_, topic, "online", 6, 1, 1);
 
             // Підписуємось на команди: modesp/{device_id}/cmd/+
-            char sub_topic[48];
+            char sub_topic[64];
             snprintf(sub_topic, sizeof(sub_topic), "%s/cmd/+", self->topic_prefix_);
             esp_mqtt_client_subscribe(self->client_, sub_topic, 1);
             ESP_LOGI(TAG, "Subscribed to %s", sub_topic);
 
+            // Підписуємось на Shadow delta
+            char shadow_topic[128];
+            snprintf(shadow_topic, sizeof(shadow_topic),
+                     "$aws/things/%s/shadow/update/delta", self->thing_name_);
+            esp_mqtt_client_subscribe(self->client_, shadow_topic, 1);
+
+            snprintf(shadow_topic, sizeof(shadow_topic),
+                     "$aws/things/%s/shadow/update/accepted", self->thing_name_);
+            esp_mqtt_client_subscribe(self->client_, shadow_topic, 1);
+
+            snprintf(shadow_topic, sizeof(shadow_topic),
+                     "$aws/things/%s/shadow/update/rejected", self->thing_name_);
+            esp_mqtt_client_subscribe(self->client_, shadow_topic, 1);
+
+            ESP_LOGI(TAG, "Subscribed to Shadow topics");
+
             // Clear delta-publish cache — force full publish
             memset(self->last_payloads_, 0, sizeof(self->last_payloads_));
             self->last_version_ = 0;
+            self->shadow_dirty_ = true;  // Force initial shadow reported
+            self->shadow_version_ = 0;
             break;
         }
 
@@ -334,11 +363,164 @@ void AwsIotService::publish_heartbeat() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Device Shadow
+// ═══════════════════════════════════════════════════════════════
+
+void AwsIotService::publish_shadow_reported() {
+    if (!connected_ || !client_ || !state_) return;
+
+    // Формуємо JSON: {"state":{"reported":{"key":value,...}}}
+    // Тільки writable params (MQTT_SUBSCRIBE keys) — не телеметрія
+    static char shadow_buf[2048];
+    int pos = 0;
+    pos += snprintf(shadow_buf + pos, sizeof(shadow_buf) - pos,
+                    "{\"state\":{\"reported\":{");
+
+    bool first = true;
+    for (size_t i = 0; i < gen::MQTT_SUBSCRIBE_COUNT; i++) {
+        auto val = state_->get(gen::MQTT_SUBSCRIBE[i]);
+        if (!val.has_value()) continue;
+
+        char payload[32];
+        int len = format_value(val.value(), payload, sizeof(payload));
+        if (len <= 0) continue;
+
+        if (!first) {
+            pos += snprintf(shadow_buf + pos, sizeof(shadow_buf) - pos, ",");
+        }
+        first = false;
+
+        // Визначаємо тип для правильного JSON
+        if (etl::holds_alternative<float>(val.value()) ||
+            etl::holds_alternative<int32_t>(val.value())) {
+            pos += snprintf(shadow_buf + pos, sizeof(shadow_buf) - pos,
+                            "\"%s\":%s", gen::MQTT_SUBSCRIBE[i], payload);
+        } else if (etl::holds_alternative<bool>(val.value())) {
+            pos += snprintf(shadow_buf + pos, sizeof(shadow_buf) - pos,
+                            "\"%s\":%s", gen::MQTT_SUBSCRIBE[i], payload);
+        } else {
+            pos += snprintf(shadow_buf + pos, sizeof(shadow_buf) - pos,
+                            "\"%s\":\"%s\"", gen::MQTT_SUBSCRIBE[i], payload);
+        }
+
+        if (pos >= (int)sizeof(shadow_buf) - 32) break;  // Захист від overflow
+    }
+
+    pos += snprintf(shadow_buf + pos, sizeof(shadow_buf) - pos, "}}}");
+
+    char topic[96];
+    snprintf(topic, sizeof(topic), "$aws/things/%s/shadow/update", thing_name_);
+    esp_mqtt_client_publish(client_, topic, shadow_buf, pos, 1, 0);
+
+    ESP_LOGI(TAG, "Shadow reported published (%d bytes)", pos);
+}
+
+void AwsIotService::handle_shadow_delta(const char* data, int data_len) {
+    // Delta JSON: {"state":{"key":value,...},"version":N}
+    // Парсимо з jsmn і застосовуємо через STATE_META валідацію
+
+    jsmn_parser parser;
+    jsmntok_t tokens[64];
+    jsmn_init(&parser);
+    int r = jsmn_parse(&parser, data, data_len, tokens, 64);
+    if (r < 2 || tokens[0].type != JSMN_OBJECT) return;
+
+    ESP_LOGI(TAG, "Shadow delta received (%d bytes)", data_len);
+
+    // Шукаємо "state" об'єкт
+    int state_idx = -1;
+    for (int i = 1; i < r - 1; i += 2) {
+        if (tokens[i].type != JSMN_STRING) continue;
+        int klen = tokens[i].end - tokens[i].start;
+        const char* k = data + tokens[i].start;
+        if (klen == 5 && strncmp(k, "state", 5) == 0 &&
+            tokens[i + 1].type == JSMN_OBJECT) {
+            state_idx = i + 1;
+            break;
+        }
+    }
+
+    if (state_idx < 0) return;
+
+    // Ітеруємо key/value всередині state
+    int state_size = tokens[state_idx].size;
+    int idx = state_idx + 1;
+    int applied = 0;
+
+    for (int s = 0; s < state_size && idx < r - 1; s++) {
+        if (tokens[idx].type != JSMN_STRING) { idx += 2; continue; }
+
+        int klen = tokens[idx].end - tokens[idx].start;
+        const char* key_ptr = data + tokens[idx].start;
+        int vlen = tokens[idx + 1].end - tokens[idx + 1].start;
+        const char* val_ptr = data + tokens[idx + 1].start;
+
+        char key[32], val_buf[32];
+        int kl = (klen < 31) ? klen : 31;
+        int vl = (vlen < 31) ? vlen : 31;
+        strncpy(key, key_ptr, kl); key[kl] = '\0';
+        strncpy(val_buf, val_ptr, vl); val_buf[vl] = '\0';
+
+        // Валідація через STATE_META
+        const gen::StateMeta* meta = nullptr;
+        for (size_t m = 0; m < gen::STATE_META_COUNT; m++) {
+            if (strcmp(gen::STATE_META[m].key, key) == 0) {
+                meta = &gen::STATE_META[m];
+                break;
+            }
+        }
+
+        if (meta && meta->writable) {
+            if (strcmp(meta->type, "float") == 0) {
+                float fval = strtof(val_buf, nullptr);
+                if (fval < meta->min_val) fval = meta->min_val;
+                if (fval > meta->max_val) fval = meta->max_val;
+                state_->set(key, fval);
+                applied++;
+            } else if (strcmp(meta->type, "int") == 0) {
+                int32_t ival = strtol(val_buf, nullptr, 10);
+                if (ival < (int32_t)meta->min_val) ival = (int32_t)meta->min_val;
+                if (ival > (int32_t)meta->max_val) ival = (int32_t)meta->max_val;
+                state_->set(key, ival);
+                applied++;
+            } else if (strcmp(meta->type, "bool") == 0) {
+                bool bval = (val_buf[0] == 't' || val_buf[0] == '1');
+                state_->set(key, bval);
+                applied++;
+            }
+        }
+
+        idx += 2;
+    }
+
+    if (applied > 0) {
+        ESP_LOGI(TAG, "Shadow delta: applied %d settings", applied);
+        shadow_dirty_ = true;  // Оновити reported щоб очистити delta
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
 // Subscribe — incoming commands
 // ═══════════════════════════════════════════════════════════════
 
 void AwsIotService::handle_incoming(const char* topic, int topic_len,
                                      const char* data, int data_len) {
+    // Shadow delta: $aws/things/{thing}/shadow/update/delta
+    if (topic_len > 10 && strstr(topic, "/shadow/update/delta") != nullptr) {
+        handle_shadow_delta(data, data_len);
+        return;
+    }
+
+    // Shadow accepted/rejected — просто логуємо
+    if (topic_len > 10 && strstr(topic, "/shadow/update/accepted") != nullptr) {
+        ESP_LOGD(TAG, "Shadow update accepted");
+        return;
+    }
+    if (topic_len > 10 && strstr(topic, "/shadow/update/rejected") != nullptr) {
+        ESP_LOGW(TAG, "Shadow update REJECTED: %.*s", data_len, data);
+        return;
+    }
+
     // Topic format: modesp/{device_id}/cmd/{key}
     // Шукаємо "/cmd/" в топіку
     const char* cmd = nullptr;

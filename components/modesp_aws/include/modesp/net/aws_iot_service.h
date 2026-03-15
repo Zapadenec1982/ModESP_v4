@@ -82,12 +82,20 @@ private:
     void stop_client();
     void publish_state();
     void publish_heartbeat();
+    void publish_shadow_reported();
+    void handle_shadow_delta(const char* data, int data_len);
     void handle_incoming(const char* topic, int topic_len,
                          const char* data, int data_len);
     void register_http_handlers();
 
     // Topic prefix: "modesp/{device_id}"
     char topic_prefix_[24] = {};
+
+    // Shadow
+    uint32_t shadow_timer_ms_ = 0;
+    static constexpr uint32_t SHADOW_INTERVAL_MS = 5000;  // batch update кожні 5с
+    bool shadow_dirty_ = false;       // є зміни для shadow reported
+    uint32_t shadow_version_ = 0;     // останній відомий version SharedState для shadow
 
     // Static callbacks
     static void mqtt_event_handler(void* args, esp_event_base_t base,
