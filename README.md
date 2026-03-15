@@ -128,6 +128,28 @@ cd webui && npm install && npm run build && npm run deploy
 
 ---
 
+## Board Configuration
+
+One firmware codebase — different hardware via JSON config files:
+
+```
+data/
+├── board.json       # PCB definition: GPIO pins, buses, expanders
+└── bindings.json    # Role mapping: compressor → relay on GPIO 14
+```
+
+**board.json** describes physical hardware — which GPIOs, OneWire buses, I2C expanders, ADC channels the PCB has. **bindings.json** maps logical roles (compressor, evap_fan, air_temp) to specific drivers and pins.
+
+Switch board → rebuild → same firmware runs on different hardware. No code changes.
+
+| Board | GPIO | I2C | Sensors | Relays |
+|-------|------|-----|---------|--------|
+| ESP32-DevKit (direct GPIO) | 4 relay + 1 OW + 1 DI + 2 ADC | — | DS18B20, NTC, DI | GPIO relay |
+| KC868-A6 (I2C expander) | — | PCF8574 ×2 | DS18B20, NTC | PCF8574 relay |
+| Custom board | Any combination | Optional | Any supported driver | Any supported driver |
+
+---
+
 ## Project Structure
 
 ```
