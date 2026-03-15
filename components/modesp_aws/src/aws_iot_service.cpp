@@ -21,6 +21,7 @@
 #include "esp_wifi.h"
 #include "esp_app_desc.h"
 #include "esp_heap_caps.h"
+#define JSMN_STATIC
 #include "jsmn.h"
 
 #include <cstring>
@@ -58,7 +59,8 @@ bool AwsIotService::on_init() {
 
     if (enabled_ && endpoint_[0] != '\0' && cert_loaded_) {
         ESP_LOGI(TAG, "Endpoint: %s, Thing: %s", endpoint_, thing_name_);
-        start_client();
+        ESP_LOGI(TAG, "Will connect after WiFi is ready");
+        // start_client() відкладений до on_update() — WiFi ще не готовий при on_init()
     } else {
         if (!enabled_) {
             ESP_LOGI(TAG, "AWS IoT Core disabled");
@@ -73,15 +75,33 @@ bool AwsIotService::on_init() {
 }
 
 void AwsIotService::on_update(uint32_t dt_ms) {
-    // Reconnect logic (якщо ще не підключені але enabled)
-    if (enabled_ && !connected_ && client_ && !reconnect_requested_) {
+    if (!enabled_ || !cert_loaded_ || endpoint_[0] == '\0') return;
+
+    // Deferred start: чекаємо WiFi перед першим підключенням
+    if (!client_) {
+        // Перевіряємо чи WiFi з'єднаний через SharedState
+        if (state_) {
+            auto wifi_ip = state_->get("wifi.ip");
+            if (!wifi_ip.has_value()) return;  // WiFi ще не готовий
+            // Є IP — можемо підключатись
+            if (etl::holds_alternative<StringValue>(wifi_ip.value())) {
+                const auto& ip = etl::get<StringValue>(wifi_ip.value());
+                if (ip.empty() || ip == "0.0.0.0") return;
+            }
+        }
+        ESP_LOGI(TAG, "WiFi ready — starting MQTT client");
+        start_client();
+        return;
+    }
+
+    // Reconnect logic (якщо ще не підключені)
+    if (!connected_) {
         reconnect_timer_ms_ += dt_ms;
         if (reconnect_timer_ms_ >= reconnect_delay_ms_) {
             reconnect_timer_ms_ = 0;
             ESP_LOGI(TAG, "Reconnecting (backoff %lu ms)...",
                      (unsigned long)reconnect_delay_ms_);
             esp_mqtt_client_reconnect(client_);
-            // Exponential backoff
             reconnect_delay_ms_ = (reconnect_delay_ms_ * 2 > MAX_RECONNECT_MS)
                                   ? MAX_RECONNECT_MS : reconnect_delay_ms_ * 2;
         }
@@ -457,6 +477,25 @@ esp_err_t AwsIotService::handle_get_cloud(httpd_req_t* req) {
     return httpd_resp_send(req, buf, len);
 }
 
+// Unescape JSON string in-place: \n → newline, \\ → backslash, \" → quote
+static size_t json_unescape(char* dst, const char* src, size_t src_len) {
+    size_t j = 0;
+    for (size_t i = 0; i < src_len; i++) {
+        if (src[i] == '\\' && i + 1 < src_len) {
+            char next = src[i + 1];
+            if (next == 'n') { dst[j++] = '\n'; i++; }
+            else if (next == '\\') { dst[j++] = '\\'; i++; }
+            else if (next == '"') { dst[j++] = '"'; i++; }
+            else if (next == 'r') { dst[j++] = '\r'; i++; }
+            else { dst[j++] = src[i]; }
+        } else {
+            dst[j++] = src[i];
+        }
+    }
+    dst[j] = '\0';
+    return j;
+}
+
 esp_err_t AwsIotService::handle_post_cloud(httpd_req_t* req) {
     auto* self = static_cast<AwsIotService*>(req->user_ctx);
     set_cors_headers(req);
@@ -509,17 +548,18 @@ esp_err_t AwsIotService::handle_post_cloud(httpd_req_t* req) {
             nvs_helper::write_bool("awscert", "enabled", self->enabled_);
             config_changed = true;
         } else if (klen == 4 && strncmp(k, "cert", 4) == 0 && vlen > 10) {
-            nvs_helper::write_blob("awscert", "cert", v, vlen);
-            strncpy(s_device_cert_pem_, v, CERT_BUF_SIZE - 1);
-            s_device_cert_pem_[CERT_BUF_SIZE - 1] = '\0';
+            // Unescape JSON \n → real newlines для PEM
+            size_t real_len = json_unescape(s_device_cert_pem_, v, vlen);
+            nvs_helper::write_blob("awscert", "cert", s_device_cert_pem_, real_len);
             cert_uploaded = true;
-            ESP_LOGI(TAG, "Device certificate saved (%d bytes)", vlen);
+            ESP_LOGI(TAG, "Device certificate saved (%u bytes, was %d in JSON)",
+                     (unsigned)real_len, vlen);
         } else if (klen == 3 && strncmp(k, "key", 3) == 0 && vlen > 10) {
-            nvs_helper::write_blob("awscert", "key", v, vlen);
-            strncpy(s_device_key_pem_, v, CERT_BUF_SIZE - 1);
-            s_device_key_pem_[CERT_BUF_SIZE - 1] = '\0';
+            size_t real_len = json_unescape(s_device_key_pem_, v, vlen);
+            nvs_helper::write_blob("awscert", "key", s_device_key_pem_, real_len);
             cert_uploaded = true;
-            ESP_LOGI(TAG, "Private key saved (%d bytes)", vlen);
+            ESP_LOGI(TAG, "Private key saved (%u bytes, was %d in JSON)",
+                     (unsigned)real_len, vlen);
         }
 
         body[tokens[i + 1].end] = saved;
