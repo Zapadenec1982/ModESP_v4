@@ -70,3 +70,5 @@ nul
 tools/node_modules/
 tools/package-lock.json
 tools/package.json
+ota_test/
+sdkconfig.esp32.bak

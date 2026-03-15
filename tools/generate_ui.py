@@ -724,7 +724,8 @@ class UIJsonGenerator:
                 bindings, board, driver_manifests or {},
                 equip_requires))
         if sys_pages.get("network", True):
-            pages.append(self._network_page())
+            cloud_provider = sys_cfg.get("cloud_provider", "mqtt")
+            pages.append(self._network_page(cloud_provider))
         # firmware cards merged into _system_page
         if sys_pages.get("system", True):
             pages.append(self._system_page())
@@ -863,8 +864,146 @@ class UIJsonGenerator:
             "cards": cards,
         }
 
-    def _network_page(self):
-        """Network page: combined status + WiFi/AP/MQTT settings."""
+    def _network_page(self, cloud_provider="mqtt"):
+        """Network page: combined status + WiFi/AP + cloud settings (MQTT or AWS)."""
+
+        # Спільні cards: WiFi status, WiFi settings, AP settings
+        wifi_status_widgets = [
+            {"key": "wifi.ssid", "widget": "value",
+             "description": "Мережа"},
+            {"key": "wifi.ip", "widget": "value",
+             "description": "IP адреса"},
+            {"key": "wifi.rssi", "widget": "value",
+             "unit": "dBm", "description": "Сигнал"},
+        ]
+
+        wifi_card = {
+            "title": "WiFi",
+            "icon": "wifi",
+            "group": "settings",
+            "collapsible": True,
+            "widgets": [
+                {"key": "_action.wifi_scan", "widget": "wifi_scan",
+                 "label": "Сканувати мережі"},
+                {"key": "wifi.ssid", "widget": "text_input",
+                 "editable": True, "description": "SSID",
+                 "api_endpoint": "/api/wifi"},
+                {"key": "wifi.password", "widget": "password_input",
+                 "editable": True, "description": "Пароль",
+                 "api_endpoint": "/api/wifi"},
+                {"key": "_action.wifi_save", "widget": "wifi_save",
+                 "label": "Зберегти",
+                 "api_endpoint": "/api/wifi"},
+            ],
+        }
+
+        ap_card = {
+            "title": "Точка доступу",
+            "icon": "wifi",
+            "group": "settings",
+            "collapsible": True,
+            "defaultOpen": False,
+            "widgets": [
+                {"key": "wifi.ap_ssid", "widget": "text_input",
+                 "editable": True, "description": "SSID точки доступу",
+                 "form_only": True},
+                {"key": "wifi.ap_password", "widget": "password_input",
+                 "editable": True, "description": "Пароль (мін. 8 символів або порожній)",
+                 "form_only": True},
+                {"key": "wifi.ap_channel", "widget": "number_input",
+                 "editable": True, "description": "Канал",
+                 "min": 1, "max": 13, "step": 1,
+                 "form_only": True},
+                {"key": "_action.ap_save", "widget": "ap_save",
+                 "label": "Зберегти AP"},
+            ],
+        }
+
+        # Cloud-specific: status widgets + settings card
+        if cloud_provider == "aws":
+            cloud_status_widgets = [
+                {"key": "cloud.connected", "widget": "indicator",
+                 "description": "AWS IoT",
+                 "on_label": "Підключено", "off_label": "Відключено",
+                 "on_color": "#22c55e", "off_color": "#64748b"},
+                {"key": "cloud.endpoint", "widget": "value",
+                 "description": "Endpoint"},
+                {"key": "cloud.thing_name", "widget": "value",
+                 "description": "Thing Name"},
+            ]
+            cloud_card = {
+                "title": "AWS IoT Core",
+                "icon": "cloud",
+                "group": "settings",
+                "collapsible": True,
+                "wide": True,
+                "widgets": [
+                    {"key": "cloud.endpoint", "widget": "text_input",
+                     "editable": True, "description": "Endpoint",
+                     "api_endpoint": "/api/cloud"},
+                    {"key": "cloud.thing_name", "widget": "text_input",
+                     "editable": True, "description": "Thing Name",
+                     "api_endpoint": "/api/cloud"},
+                    {"key": "cloud.cert_loaded", "widget": "indicator",
+                     "description": "Сертифікат",
+                     "on_label": "Завантажено", "off_label": "Відсутній",
+                     "on_color": "#22c55e", "off_color": "#ef4444"},
+                    {"key": "_action.cert_upload", "widget": "cert_upload",
+                     "label": "Завантажити сертифікат",
+                     "api_endpoint": "/api/cloud"},
+                    {"key": "cloud.enabled", "widget": "toggle",
+                     "editable": True, "description": "Увімкнути AWS IoT",
+                     "form_only": True},
+                    {"key": "_action.cloud_save", "widget": "cloud_save",
+                     "label": "Зберегти",
+                     "api_endpoint": "/api/cloud"},
+                ],
+            }
+            subtitle = "WiFi та AWS IoT"
+        else:
+            cloud_status_widgets = [
+                {"key": "mqtt.connected", "widget": "indicator",
+                 "description": "MQTT",
+                 "on_label": "Підключено", "off_label": "Відключено",
+                 "on_color": "#22c55e", "off_color": "#64748b"},
+                {"key": "mqtt.status", "widget": "status_text",
+                 "description": "Стан MQTT"},
+                {"key": "mqtt.broker", "widget": "value",
+                 "description": "Брокер"},
+            ]
+            cloud_card = {
+                "title": "MQTT",
+                "icon": "link",
+                "group": "settings",
+                "collapsible": True,
+                "wide": True,
+                "widgets": [
+                    {"key": "mqtt.broker", "widget": "text_input",
+                     "editable": True, "description": "Адреса брокера",
+                     "api_endpoint": "/api/mqtt"},
+                    {"key": "mqtt.port", "widget": "number_input",
+                     "editable": True, "description": "Порт",
+                     "min": 1, "max": 65535, "step": 1,
+                     "form_only": True},
+                    {"key": "mqtt.user", "widget": "text_input",
+                     "editable": True, "description": "Логін",
+                     "api_endpoint": "/api/mqtt"},
+                    {"key": "mqtt.password", "widget": "password_input",
+                     "editable": True, "description": "Пароль",
+                     "api_endpoint": "/api/mqtt"},
+                    {"key": "mqtt.prefix", "widget": "text_input",
+                     "editable": True, "description": "Префікс топіків",
+                     "api_endpoint": "/api/mqtt"},
+                    {"key": "mqtt.enabled", "widget": "toggle",
+                     "editable": True, "description": "Увімкнути MQTT",
+                     "form_only": True},
+                    {"key": "_action.mqtt_save", "widget": "mqtt_save",
+                     "label": "Зберегти",
+                     "api_endpoint": "/api/mqtt"},
+                ],
+            }
+            subtitle = "WiFi та MQTT"
+
         return {
             "id": "network",
             "title": "Мережа",
@@ -875,96 +1014,13 @@ class UIJsonGenerator:
                 {
                     "title": "Стан мережі",
                     "icon": "activity",
-                    "subtitle": "WiFi та MQTT",
+                    "subtitle": subtitle,
                     "wide": True,
-                    "widgets": [
-                        {"key": "wifi.ssid", "widget": "value",
-                         "description": "Мережа"},
-                        {"key": "wifi.ip", "widget": "value",
-                         "description": "IP адреса"},
-                        {"key": "wifi.rssi", "widget": "value",
-                         "unit": "dBm", "description": "Сигнал"},
-                        {"key": "mqtt.connected", "widget": "indicator",
-                         "description": "MQTT",
-                         "on_label": "Підключено", "off_label": "Відключено",
-                         "on_color": "#22c55e", "off_color": "#64748b"},
-                        {"key": "mqtt.status", "widget": "status_text",
-                         "description": "Стан MQTT"},
-                        {"key": "mqtt.broker", "widget": "value",
-                         "description": "Брокер"},
-                    ],
+                    "widgets": wifi_status_widgets + cloud_status_widgets,
                 },
-                {
-                    "title": "WiFi",
-                    "icon": "wifi",
-                    "group": "settings",
-                    "collapsible": True,
-                    "widgets": [
-                        {"key": "_action.wifi_scan", "widget": "wifi_scan",
-                         "label": "Сканувати мережі"},
-                        {"key": "wifi.ssid", "widget": "text_input",
-                         "editable": True, "description": "SSID",
-                         "api_endpoint": "/api/wifi"},
-                        {"key": "wifi.password", "widget": "password_input",
-                         "editable": True, "description": "Пароль",
-                         "api_endpoint": "/api/wifi"},
-                        {"key": "_action.wifi_save", "widget": "wifi_save",
-                         "label": "Зберегти",
-                         "api_endpoint": "/api/wifi"},
-                    ],
-                },
-                {
-                    "title": "Точка доступу",
-                    "icon": "wifi",
-                    "group": "settings",
-                    "collapsible": True,
-                    "defaultOpen": False,
-                    "widgets": [
-                        {"key": "wifi.ap_ssid", "widget": "text_input",
-                         "editable": True, "description": "SSID точки доступу",
-                         "form_only": True},
-                        {"key": "wifi.ap_password", "widget": "password_input",
-                         "editable": True, "description": "Пароль (мін. 8 символів або порожній)",
-                         "form_only": True},
-                        {"key": "wifi.ap_channel", "widget": "number_input",
-                         "editable": True, "description": "Канал",
-                         "min": 1, "max": 13, "step": 1,
-                         "form_only": True},
-                        {"key": "_action.ap_save", "widget": "ap_save",
-                         "label": "Зберегти AP"},
-                    ],
-                },
-                {
-                    "title": "MQTT",
-                    "icon": "link",
-                    "group": "settings",
-                    "collapsible": True,
-                    "wide": True,
-                    "widgets": [
-                        {"key": "mqtt.broker", "widget": "text_input",
-                         "editable": True, "description": "Адреса брокера",
-                         "api_endpoint": "/api/mqtt"},
-                        {"key": "mqtt.port", "widget": "number_input",
-                         "editable": True, "description": "Порт",
-                         "min": 1, "max": 65535, "step": 1,
-                         "form_only": True},
-                        {"key": "mqtt.user", "widget": "text_input",
-                         "editable": True, "description": "Логін",
-                         "api_endpoint": "/api/mqtt"},
-                        {"key": "mqtt.password", "widget": "password_input",
-                         "editable": True, "description": "Пароль",
-                         "api_endpoint": "/api/mqtt"},
-                        {"key": "mqtt.prefix", "widget": "text_input",
-                         "editable": True, "description": "Префікс топіків",
-                         "api_endpoint": "/api/mqtt"},
-                        {"key": "mqtt.enabled", "widget": "toggle",
-                         "editable": True, "description": "Увімкнути MQTT",
-                         "form_only": True},
-                        {"key": "_action.mqtt_save", "widget": "mqtt_save",
-                         "label": "Зберегти",
-                         "api_endpoint": "/api/mqtt"},
-                    ],
-                },
+                wifi_card,
+                ap_card,
+                cloud_card,
             ],
         }
 

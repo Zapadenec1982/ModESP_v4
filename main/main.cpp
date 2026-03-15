@@ -37,8 +37,14 @@
 #include "modesp/net/wifi_service.h"
 #include "modesp/net/http_service.h"
 #include "modesp/net/ws_service.h"
-#include "modesp/net/mqtt_service.h"
 #include "modesp/services/nvs_helper.h"
+
+// Cloud backend (compile-time Kconfig choice)
+#if defined(CONFIG_MODESP_CLOUD_AWS)
+  #include "modesp/net/aws_iot_service.h"
+#else
+  #include "modesp/net/mqtt_service.h"
+#endif
 
 // Equipment Layer + Business modules
 #include "equipment_module.h"
@@ -78,7 +84,13 @@ static modesp::DriverManager   driver_manager;
 static modesp::WiFiService     wifi_service;
 static modesp::HttpService     http_service;
 static modesp::WsService       ws_service;
-static modesp::MqttService     mqtt_service;
+
+// Cloud backend (compile-time Kconfig choice)
+#if defined(CONFIG_MODESP_CLOUD_AWS)
+static modesp::AwsIotService   cloud_service;
+#else
+static modesp::MqttService     cloud_service;
+#endif
 
 // Equipment Layer (CRITICAL priority — owns all HAL drivers)
 static EquipmentModule         equipment;
@@ -180,8 +192,8 @@ extern "C" void app_main(void)
 
     // ── Step 4: Register WiFi + MQTT (HIGH priority) ──
     app.modules().register_module(wifi_service);
-    mqtt_service.set_state(&app.state());
-    app.modules().register_module(mqtt_service);
+    cloud_service.set_state(&app.state());
+    app.modules().register_module(cloud_service);
 
     // ── Step 5: Initialize HAL (GPIO setup) ──
     if (!hal.init(board_cfg)) {
@@ -263,7 +275,7 @@ extern "C" void app_main(void)
     // considers /* as already matching /ws for HTTP_GET.
     if (http_service.server()) {
         ws_service.set_http_server(http_service.server());
-        mqtt_service.set_http_server(http_service.server());
+        cloud_service.set_http_server(http_service.server());
         http_service.register_static_handler();  // Must be last (wildcard catch-all)
     } else {
         ESP_LOGW(TAG, "HTTP server not started, WebSocket unavailable");

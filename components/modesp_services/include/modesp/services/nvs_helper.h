@@ -45,6 +45,12 @@ bool write_bool(const char* ns, const char* key, bool value);
 /// Erase a single key from NVS. Returns false on error.
 bool erase_key(const char* ns, const char* key);
 
+/// Read a blob (binary data) from NVS. Returns actual size in out_len. Returns false if not found.
+bool read_blob(const char* ns, const char* key, void* out, size_t max_len, size_t& out_len);
+
+/// Write a blob (binary data) to NVS. Returns false on error.
+bool write_blob(const char* ns, const char* key, const void* data, size_t len);
+
 // --- Batch API: один open/close для множинних операцій ---
 
 /// Відкрити NVS handle для batch операцій. Повертає 0 при помилці.

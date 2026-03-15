@@ -7,7 +7,7 @@
  * і перезавантаження. Модулі продовжують працювати під час download.
  */
 
-#include "modesp/net/ota_handler.h"
+#include "modesp/services/ota_handler.h"
 #include "modesp/shared_state.h"
 
 #include "esp_log.h"

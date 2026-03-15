@@ -211,5 +211,42 @@ bool batch_erase_key(nvs_handle_t handle, const char* key) {
     return err == ESP_OK || err == ESP_ERR_NVS_NOT_FOUND;
 }
 
+bool read_blob(const char* ns, const char* key, void* out, size_t max_len, size_t& out_len) {
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(ns, NVS_READONLY, &handle);
+    if (err != ESP_OK) return false;
+
+    size_t len = max_len;
+    err = nvs_get_blob(handle, key, out, &len);
+    nvs_close(handle);
+
+    if (err == ESP_OK) {
+        out_len = len;
+        return true;
+    }
+    return false;
+}
+
+bool write_blob(const char* ns, const char* key, const void* data, size_t len) {
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open(ns, NVS_READWRITE, &handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "NVS open '%s' failed: %s", ns, esp_err_to_name(err));
+        return false;
+    }
+
+    err = nvs_set_blob(handle, key, data, len);
+    if (err == ESP_OK) {
+        err = nvs_commit(handle);
+    }
+    nvs_close(handle);
+
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "NVS write blob '%s.%s' (%u bytes) failed: %s",
+                 ns, key, (unsigned)len, esp_err_to_name(err));
+    }
+    return err == ESP_OK;
+}
+
 } // namespace nvs_helper
 } // namespace modesp
