@@ -1,9 +1,9 @@
 /**
  * @file aws_iot_service.h
- * @brief AWS IoT Core cloud service — mTLS, Device Shadow, IoT Jobs
+ * @brief AWS IoT Core cloud service — mTLS via ESP-IDF MQTT client
  *
  * Compile-time alternative to MqttService (Kconfig MODESP_CLOUD_AWS).
- * Uses esp-aws-iot SDK (coreMQTT, Shadow, Fleet Provisioning, OTA).
+ * Uses ESP-IDF esp_mqtt for mTLS connection to AWS IoT Core.
  *
  * Certificates stored in NVS namespace "awscert" (PEM blobs).
  * AWS Root CA (AmazonRootCA1) embedded in firmware.
@@ -15,6 +15,7 @@
 
 #include "modesp/base_module.h"
 #include "esp_http_server.h"
+#include "mqtt_client.h"
 
 namespace modesp {
 
@@ -37,6 +38,8 @@ public:
     bool is_enabled() const { return enabled_; }
 
 private:
+    // ESP-MQTT client
+    esp_mqtt_client_handle_t client_ = nullptr;
     SharedState* state_ = nullptr;
     httpd_handle_t server_ = nullptr;
     bool http_registered_ = false;
@@ -48,6 +51,7 @@ private:
     bool enabled_ = false;
     bool connected_ = false;
     bool cert_loaded_ = false;
+    bool reconnect_requested_ = false;
 
     // Сертифікати (статичні буфери в .bss, не heap)
     static constexpr size_t CERT_BUF_SIZE = 2048;
@@ -61,6 +65,11 @@ private:
     uint32_t heartbeat_timer_ms_ = 0;
     static constexpr uint32_t HEARTBEAT_INTERVAL_MS = 30000;
 
+    // Reconnect з exponential backoff
+    uint32_t reconnect_timer_ms_ = 0;
+    uint32_t reconnect_delay_ms_ = 5000;
+    static constexpr uint32_t MAX_RECONNECT_MS = 300000; // 5 min
+
     // Delta-publish cache (аналогічно MqttService)
     static constexpr size_t MAX_PUBLISH_KEYS = 56;
     char last_payloads_[MAX_PUBLISH_KEYS][16] = {};
@@ -69,7 +78,23 @@ private:
     // Internal methods
     void load_config();
     bool load_certificates();
+    bool start_client();
+    void stop_client();
+    void publish_state();
+    void publish_heartbeat();
+    void handle_incoming(const char* topic, int topic_len,
+                         const char* data, int data_len);
     void register_http_handlers();
+
+    // Topic prefix: "modesp/{device_id}"
+    char topic_prefix_[24] = {};
+
+    // Static callbacks
+    static void mqtt_event_handler(void* args, esp_event_base_t base,
+                                    int32_t event_id, void* event_data);
+
+    // Форматування значення для MQTT payload
+    static int format_value(const StateValue& val, char* buf, size_t buf_size);
 
     // HTTP handlers
     static esp_err_t handle_get_cloud(httpd_req_t* req);

@@ -1,19 +1,26 @@
 /**
  * @file aws_iot_service.cpp
- * @brief AWS IoT Core cloud service — skeleton implementation
+ * @brief AWS IoT Core cloud service — mTLS via ESP-IDF MQTT client
  *
- * Phase 3: mTLS connection + telemetry publish.
- * Phase 5: Device Shadow (desired/reported).
- * Phase 6: IoT Jobs (OTA).
- * Phase 7: Fleet Provisioning by Claim.
+ * Phase 5: mTLS connection + delta-publish telemetry + subscribe commands.
+ * Phase 6: Device Shadow (desired/reported) — TODO.
+ * Phase 7: IoT Jobs (OTA) — TODO.
+ * Phase 8: Fleet Provisioning by Claim — TODO.
  */
 
 #include "modesp/net/aws_iot_service.h"
 #include "modesp/shared_state.h"
 #include "modesp/services/nvs_helper.h"
+#include "aws_root_ca.h"
+
+#include "mqtt_topics.h"
+#include "state_meta.h"
 
 #include "esp_log.h"
 #include "esp_mac.h"
+#include "esp_wifi.h"
+#include "esp_app_desc.h"
+#include "esp_heap_caps.h"
 #include "jsmn.h"
 
 #include <cstring>
@@ -46,18 +53,19 @@ bool AwsIotService::on_init() {
     // Завантажуємо сертифікати
     cert_loaded_ = load_certificates();
 
+    // Формуємо topic prefix
+    snprintf(topic_prefix_, sizeof(topic_prefix_), "modesp/%s", device_id_);
+
     if (enabled_ && endpoint_[0] != '\0' && cert_loaded_) {
-        ESP_LOGI(TAG, "AWS IoT Core endpoint: %s, thing: %s",
-                 endpoint_, thing_name_);
-        // TODO Phase 3: coreMQTT connect з mTLS
-        ESP_LOGW(TAG, "coreMQTT connection not implemented yet (skeleton)");
+        ESP_LOGI(TAG, "Endpoint: %s, Thing: %s", endpoint_, thing_name_);
+        start_client();
     } else {
         if (!enabled_) {
             ESP_LOGI(TAG, "AWS IoT Core disabled");
         } else if (endpoint_[0] == '\0') {
-            ESP_LOGW(TAG, "No endpoint configured — set via /api/cloud");
+            ESP_LOGW(TAG, "No endpoint — set via /api/cloud");
         } else if (!cert_loaded_) {
-            ESP_LOGW(TAG, "No certificates loaded — upload via /api/cloud");
+            ESP_LOGW(TAG, "No certificates — upload via /api/cloud");
         }
     }
 
@@ -65,18 +73,312 @@ bool AwsIotService::on_init() {
 }
 
 void AwsIotService::on_update(uint32_t dt_ms) {
-    if (!enabled_ || !connected_) return;
+    // Reconnect logic (якщо ще не підключені але enabled)
+    if (enabled_ && !connected_ && client_ && !reconnect_requested_) {
+        reconnect_timer_ms_ += dt_ms;
+        if (reconnect_timer_ms_ >= reconnect_delay_ms_) {
+            reconnect_timer_ms_ = 0;
+            ESP_LOGI(TAG, "Reconnecting (backoff %lu ms)...",
+                     (unsigned long)reconnect_delay_ms_);
+            esp_mqtt_client_reconnect(client_);
+            // Exponential backoff
+            reconnect_delay_ms_ = (reconnect_delay_ms_ * 2 > MAX_RECONNECT_MS)
+                                  ? MAX_RECONNECT_MS : reconnect_delay_ms_ * 2;
+        }
+        return;
+    }
 
-    // TODO Phase 3: delta-publish telemetry via coreMQTT
-    // TODO Phase 5: Device Shadow sync
-    // TODO Phase 6: IoT Jobs polling
-    (void)dt_ms;
+    if (!enabled_ || !connected_ || !state_) return;
+
+    // Delta-publish telemetry
+    publish_timer_ += dt_ms;
+    if (publish_timer_ >= PUBLISH_INTERVAL_MS) {
+        publish_timer_ = 0;
+        if (state_->version() != last_version_) {
+            publish_state();
+        }
+    }
+
+    // Heartbeat
+    heartbeat_timer_ms_ += dt_ms;
+    if (heartbeat_timer_ms_ >= HEARTBEAT_INTERVAL_MS) {
+        heartbeat_timer_ms_ = 0;
+        publish_heartbeat();
+    }
 }
 
 void AwsIotService::on_stop() {
-    // TODO Phase 3: disconnect coreMQTT
-    connected_ = false;
+    stop_client();
     ESP_LOGI(TAG, "AWS IoT Core service stopped");
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MQTT Client (ESP-IDF esp_mqtt з mTLS)
+// ═══════════════════════════════════════════════════════════════
+
+bool AwsIotService::start_client() {
+    if (client_) {
+        stop_client();
+    }
+
+    // URI: mqtts://{endpoint}:8883
+    char uri[192];
+    snprintf(uri, sizeof(uri), "mqtts://%s:8883", endpoint_);
+
+    // LWT topic: modesp/{device_id}/status
+    char lwt_topic[48];
+    snprintf(lwt_topic, sizeof(lwt_topic), "%s/status", topic_prefix_);
+
+    esp_mqtt_client_config_t cfg = {};
+    cfg.broker.address.uri = uri;
+
+    // mTLS: Root CA + client cert + client key
+    cfg.broker.verification.certificate = AWS_ROOT_CA_PEM;
+    cfg.credentials.authentication.certificate = s_device_cert_pem_;
+    cfg.credentials.authentication.key = s_device_key_pem_;
+
+    // Client ID = thing name
+    cfg.credentials.client_id = thing_name_;
+
+    // LWT
+    cfg.session.last_will.topic = lwt_topic;
+    cfg.session.last_will.msg = "offline";
+    cfg.session.last_will.msg_len = 7;
+    cfg.session.last_will.qos = 1;
+    cfg.session.last_will.retain = 1;
+
+    // Buffer sizes
+    cfg.buffer.size = 2048;
+    cfg.buffer.out_size = 2048;
+
+    client_ = esp_mqtt_client_init(&cfg);
+    if (!client_) {
+        ESP_LOGE(TAG, "MQTT client init failed");
+        return false;
+    }
+
+    esp_mqtt_client_register_event(client_, MQTT_EVENT_ANY,
+                                    mqtt_event_handler, this);
+
+    esp_err_t err = esp_mqtt_client_start(client_);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "MQTT start failed: %s", esp_err_to_name(err));
+        esp_mqtt_client_destroy(client_);
+        client_ = nullptr;
+        return false;
+    }
+
+    ESP_LOGI(TAG, "Connecting to %s...", uri);
+    return true;
+}
+
+void AwsIotService::stop_client() {
+    if (client_) {
+        esp_mqtt_client_stop(client_);
+        esp_mqtt_client_destroy(client_);
+        client_ = nullptr;
+    }
+    connected_ = false;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MQTT Event Handler
+// ═══════════════════════════════════════════════════════════════
+
+void AwsIotService::mqtt_event_handler(void* args, esp_event_base_t base,
+                                        int32_t event_id, void* event_data) {
+    auto* self = static_cast<AwsIotService*>(args);
+    auto* event = static_cast<esp_mqtt_event_handle_t>(event_data);
+
+    switch (event_id) {
+        case MQTT_EVENT_CONNECTED: {
+            ESP_LOGI(TAG, "Connected to AWS IoT Core");
+            self->connected_ = true;
+            self->reconnect_delay_ms_ = 5000;  // Reset backoff
+
+            // Публікуємо online статус
+            char topic[48];
+            snprintf(topic, sizeof(topic), "%s/status", self->topic_prefix_);
+            esp_mqtt_client_publish(self->client_, topic, "online", 6, 1, 1);
+
+            // Підписуємось на команди: modesp/{device_id}/cmd/+
+            char sub_topic[48];
+            snprintf(sub_topic, sizeof(sub_topic), "%s/cmd/+", self->topic_prefix_);
+            esp_mqtt_client_subscribe(self->client_, sub_topic, 1);
+            ESP_LOGI(TAG, "Subscribed to %s", sub_topic);
+
+            // Clear delta-publish cache — force full publish
+            memset(self->last_payloads_, 0, sizeof(self->last_payloads_));
+            self->last_version_ = 0;
+            break;
+        }
+
+        case MQTT_EVENT_DISCONNECTED:
+            ESP_LOGW(TAG, "Disconnected from AWS IoT Core");
+            self->connected_ = false;
+            break;
+
+        case MQTT_EVENT_DATA:
+            if (event->topic && event->topic_len > 0) {
+                self->handle_incoming(event->topic, event->topic_len,
+                                      event->data, event->data_len);
+            }
+            break;
+
+        case MQTT_EVENT_ERROR:
+            if (event->error_handle->error_type == MQTT_ERROR_TYPE_TCP_TRANSPORT) {
+                ESP_LOGE(TAG, "Transport error: esp_tls=%d, tls_stack=%d",
+                         event->error_handle->esp_tls_last_esp_err,
+                         event->error_handle->esp_tls_stack_err);
+            }
+            break;
+
+        default:
+            break;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Publish (delta-publish аналогічно MqttService)
+// ═══════════════════════════════════════════════════════════════
+
+int AwsIotService::format_value(const StateValue& val, char* buf, size_t buf_size) {
+    if (etl::holds_alternative<float>(val)) {
+        return snprintf(buf, buf_size, "%.2f",
+                        static_cast<double>(etl::get<float>(val)));
+    } else if (etl::holds_alternative<int32_t>(val)) {
+        return snprintf(buf, buf_size, "%ld",
+                        (long)etl::get<int32_t>(val));
+    } else if (etl::holds_alternative<bool>(val)) {
+        return snprintf(buf, buf_size, "%s",
+                        etl::get<bool>(val) ? "true" : "false");
+    } else if (etl::holds_alternative<StringValue>(val)) {
+        return snprintf(buf, buf_size, "%s",
+                        etl::get<StringValue>(val).c_str());
+    }
+    return 0;
+}
+
+void AwsIotService::publish_state() {
+    if (!client_ || !state_) return;
+
+    for (size_t i = 0; i < gen::MQTT_PUBLISH_COUNT && i < MAX_PUBLISH_KEYS; i++) {
+        auto val = state_->get(gen::MQTT_PUBLISH[i]);
+        if (!val.has_value()) continue;
+
+        char payload[32];
+        int len = format_value(val.value(), payload, sizeof(payload));
+        if (len <= 0) continue;
+
+        // Delta-publish: порівнюємо з кешем
+        if (strncmp(payload, last_payloads_[i], sizeof(last_payloads_[i])) == 0) {
+            continue;
+        }
+
+        char topic[128];
+        snprintf(topic, sizeof(topic), "%s/state/%s",
+                 topic_prefix_, gen::MQTT_PUBLISH[i]);
+
+        esp_mqtt_client_publish(client_, topic, payload, len, 0, 0);
+
+        strncpy(last_payloads_[i], payload, sizeof(last_payloads_[i]) - 1);
+        last_payloads_[i][sizeof(last_payloads_[i]) - 1] = '\0';
+    }
+
+    last_version_ = state_->version();
+}
+
+void AwsIotService::publish_heartbeat() {
+    if (!connected_ || !client_) return;
+
+    char topic[48];
+    snprintf(topic, sizeof(topic), "%s/heartbeat", topic_prefix_);
+
+    int rssi = 0;
+    wifi_ap_record_t ap_info;
+    if (esp_wifi_sta_get_ap_info(&ap_info) == ESP_OK) {
+        rssi = ap_info.rssi;
+    }
+
+    const esp_app_desc_t* desc = esp_app_get_description();
+    char payload[192];
+    int len = snprintf(payload, sizeof(payload),
+        "{\"proto\":1,\"fw\":\"%s\",\"up\":%lu,\"heap\":%lu,\"rssi\":%d,\"thing\":\"%s\"}",
+        desc->version,
+        (unsigned long)(xTaskGetTickCount() * portTICK_PERIOD_MS / 1000),
+        (unsigned long)esp_get_free_heap_size(),
+        rssi,
+        thing_name_);
+
+    esp_mqtt_client_publish(client_, topic, payload, len, 0, 0);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Subscribe — incoming commands
+// ═══════════════════════════════════════════════════════════════
+
+void AwsIotService::handle_incoming(const char* topic, int topic_len,
+                                     const char* data, int data_len) {
+    // Topic format: modesp/{device_id}/cmd/{key}
+    // Шукаємо "/cmd/" в топіку
+    const char* cmd = nullptr;
+    int prefix_len = strlen(topic_prefix_);
+
+    if (topic_len > prefix_len + 5 &&
+        strncmp(topic, topic_prefix_, prefix_len) == 0 &&
+        strncmp(topic + prefix_len, "/cmd/", 5) == 0) {
+        cmd = topic + prefix_len + 5;
+    }
+
+    if (!cmd) return;
+
+    // Формуємо state key
+    int key_len = topic_len - (cmd - topic);
+    if (key_len <= 0 || key_len > 31) return;
+
+    char key[32];
+    strncpy(key, cmd, key_len);
+    key[key_len] = '\0';
+
+    // Формуємо значення
+    char val_buf[32];
+    int vlen = (data_len < (int)sizeof(val_buf) - 1) ? data_len : (int)sizeof(val_buf) - 1;
+    strncpy(val_buf, data, vlen);
+    val_buf[vlen] = '\0';
+
+    ESP_LOGI(TAG, "CMD: %s = %s", key, val_buf);
+
+    // Валідація через STATE_META (аналогічно MqttService)
+    if (!state_) return;
+
+    const gen::StateMeta* meta = nullptr;
+    for (size_t i = 0; i < gen::STATE_META_COUNT; i++) {
+        if (strcmp(gen::STATE_META[i].key, key) == 0) {
+            meta = &gen::STATE_META[i];
+            break;
+        }
+    }
+
+    if (!meta || !meta->writable) {
+        ESP_LOGW(TAG, "CMD rejected: key '%s' not writable", key);
+        return;
+    }
+
+    // Парсимо і записуємо відповідний тип
+    if (strcmp(meta->type, "float") == 0) {
+        float fval = strtof(val_buf, nullptr);
+        if (fval < meta->min_val) fval = meta->min_val;
+        if (fval > meta->max_val) fval = meta->max_val;
+        state_->set(key, fval);
+    } else if (strcmp(meta->type, "int") == 0) {
+        int32_t ival = strtol(val_buf, nullptr, 10);
+        if (ival < (int32_t)meta->min_val) ival = (int32_t)meta->min_val;
+        if (ival > (int32_t)meta->max_val) ival = (int32_t)meta->max_val;
+        state_->set(key, ival);
+    } else if (strcmp(meta->type, "bool") == 0) {
+        bool bval = (val_buf[0] == 't' || val_buf[0] == '1');
+        state_->set(key, bval);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -88,7 +390,6 @@ void AwsIotService::load_config() {
     nvs_helper::read_str("awscert", "thing", thing_name_, sizeof(thing_name_));
     nvs_helper::read_bool("awscert", "enabled", enabled_);
 
-    // Якщо thing_name не заданий — генеруємо з device_id
     if (thing_name_[0] == '\0') {
         snprintf(thing_name_, sizeof(thing_name_), "modesp-%s", device_id_);
     }
@@ -103,10 +404,9 @@ bool AwsIotService::load_certificates() {
                                          s_device_key_pem_, CERT_BUF_SIZE - 1, key_len);
 
     if (cert_ok && key_ok && cert_len > 0 && key_len > 0) {
-        // Null-terminate PEM strings
         s_device_cert_pem_[cert_len] = '\0';
         s_device_key_pem_[key_len] = '\0';
-        ESP_LOGI(TAG, "Certificates loaded: cert=%u bytes, key=%u bytes",
+        ESP_LOGI(TAG, "Certificates loaded: cert=%u, key=%u bytes",
                  (unsigned)cert_len, (unsigned)key_len);
         return true;
     }
@@ -161,7 +461,6 @@ esp_err_t AwsIotService::handle_post_cloud(httpd_req_t* req) {
     auto* self = static_cast<AwsIotService*>(req->user_ctx);
     set_cors_headers(req);
 
-    // Читаємо body (до 4KB — сертифікати можуть бути великими)
     static char body[4096];
     int received = httpd_req_recv(req, body, sizeof(body) - 1);
     if (received <= 0) {
@@ -172,7 +471,6 @@ esp_err_t AwsIotService::handle_post_cloud(httpd_req_t* req) {
 
     ESP_LOGI(TAG, "POST /api/cloud: %d bytes", received);
 
-    // Parse JSON з jsmn
     jsmn_parser parser;
     jsmntok_t tokens[32];
     jsmn_init(&parser);
@@ -193,7 +491,6 @@ esp_err_t AwsIotService::handle_post_cloud(httpd_req_t* req) {
         const char* k = body + tokens[i].start;
         const char* v = body + tokens[i + 1].start;
 
-        // Null-terminate value тимчасово
         char saved = body[tokens[i + 1].end];
         body[tokens[i + 1].end] = '\0';
 
@@ -212,14 +509,12 @@ esp_err_t AwsIotService::handle_post_cloud(httpd_req_t* req) {
             nvs_helper::write_bool("awscert", "enabled", self->enabled_);
             config_changed = true;
         } else if (klen == 4 && strncmp(k, "cert", 4) == 0 && vlen > 10) {
-            // Зберігаємо PEM сертифікат у NVS як blob
             nvs_helper::write_blob("awscert", "cert", v, vlen);
             strncpy(s_device_cert_pem_, v, CERT_BUF_SIZE - 1);
             s_device_cert_pem_[CERT_BUF_SIZE - 1] = '\0';
             cert_uploaded = true;
             ESP_LOGI(TAG, "Device certificate saved (%d bytes)", vlen);
         } else if (klen == 3 && strncmp(k, "key", 3) == 0 && vlen > 10) {
-            // Зберігаємо PEM private key у NVS як blob
             nvs_helper::write_blob("awscert", "key", v, vlen);
             strncpy(s_device_key_pem_, v, CERT_BUF_SIZE - 1);
             s_device_key_pem_[CERT_BUF_SIZE - 1] = '\0';
@@ -260,7 +555,6 @@ void AwsIotService::register_http_handlers() {
     post_cloud.user_ctx = this;
     httpd_register_uri_handler(server_, &post_cloud);
 
-    // OPTIONS для CORS preflight
     httpd_uri_t options = {};
     options.uri      = "/api/cloud";
     options.method   = HTTP_OPTIONS;
