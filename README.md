@@ -67,7 +67,7 @@ Business modules publish requests to SharedState. Equipment Manager arbitrates a
 
 ## Refrigeration Features
 
-**Thermostat** — 8-state FSM, asymmetric differential, night setback (4 modes), safety run on sensor failure, configurable min on/off times
+**Thermostat** — 4-state FSM, asymmetric differential, night setback (4 modes), safety run on sensor failure, configurable min on/off times
 
 **Defrost** — 7-phase FSM (pre-drip → defrost → drip → equalize → fan delay → stabilize → normal), 3 types (natural, electric, hot-gas), 4 initiations (timer, demand, manual, digital input)
 
@@ -201,7 +201,7 @@ components/
 └── modesp_json/        # JSON serialization (jsmn-based)
 modules/
 ├── equipment/          # HAL owner, arbitration, interlocks
-├── thermostat/         # 8-state FSM, fan control, night setback
+├── thermostat/         # 4-state FSM, fan control, night setback
 ├── defrost/            # 7-phase FSM, 3 types, 4 initiations
 ├── protection/         # 10 monitors, CompressorTracker, motor hours
 └── datalogger/         # 6-ch temperature + 18 event types (LittleFS)
@@ -248,7 +248,7 @@ This project demonstrates production-grade embedded engineering across the full 
 - Equipment arbitration with safety interlocks — Protection always overrides Thermostat and Defrost
 
 **Refrigeration Domain:**
-- 8-state thermostat FSM with asymmetric differential, anti-short-cycle, and safety run on sensor failure
+- 4-state thermostat FSM (startup → idle → cooling → safety_run) with asymmetric differential, anti-short-cycle, and safety run on sensor failure
 - 7-phase defrost FSM supporting natural, electric, and hot-gas defrost with 4 initiation modes
 - 10 independent alarm monitors with 2-level escalation (compressor blocked → system lockout)
 - CompressorTracker: motor hours, start counting, continuous-run detection

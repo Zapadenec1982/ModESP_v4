@@ -39,7 +39,7 @@ All UI, state, MQTT topics, and C++ headers generated from JSON manifests — ze
 Industrial thermostat and defrost logic purpose-built for commercial refrigeration applications.
 
 ### Thermostat
-- **8-state FSM** — idle, cooling, satisfied, pulldown, safety run, night setback, manual override, error
+- **4-state FSM** — startup, idle, cooling, safety_run
 - **Asymmetric differential** — separate high/low differential values around setpoint for precise temperature band control
 - **Night setback** — scheduled setpoint offset reduces energy consumption during off-hours
 - **Safety run** — timed compressor cycling on sensor failure to prevent product loss
@@ -267,7 +267,7 @@ From manifest edit to running firmware in three commands — no manual wiring of
                     │                                              │
   ┌──────────┐     │  ┌──────────┐  ┌───────────┐  ┌──────────┐  │
   │ DS18B20  │◄───►│  │Equipment │  │Thermostat │  │ Defrost  │  │
-  │ NTC      │     │  │ Manager  │  │  8-state  │  │ 7-phase  │  │
+  │ NTC      │     │  │ Manager  │  │  4-state  │  │ 7-phase  │  │
   └──────────┘     │  │  (HAL)   │  │   FSM     │  │   FSM    │  │
                    │  └────┬─────┘  └─────┬─────┘  └────┬─────┘  │
   ┌──────────┐     │       │              │              │        │
