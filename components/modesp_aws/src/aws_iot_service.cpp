@@ -16,6 +16,8 @@
 #include "mqtt_topics.h"
 #include "state_meta.h"
 
+#include "modesp/services/ota_handler.h"
+
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_wifi.h"
@@ -254,6 +256,12 @@ void AwsIotService::mqtt_event_handler(void* args, esp_event_base_t base,
 
             ESP_LOGI(TAG, "Subscribed to Shadow topics");
 
+            // Підписуємось на IoT Jobs
+            snprintf(shadow_topic, sizeof(shadow_topic),
+                     "$aws/things/%s/jobs/notify-next", self->thing_name_);
+            esp_mqtt_client_subscribe(self->client_, shadow_topic, 1);
+            ESP_LOGI(TAG, "Subscribed to Jobs topics");
+
             // Clear delta-publish cache — force full publish
             memset(self->last_payloads_, 0, sizeof(self->last_payloads_));
             self->last_version_ = 0;
@@ -360,6 +368,106 @@ void AwsIotService::publish_heartbeat() {
         thing_name_);
 
     esp_mqtt_client_publish(client_, topic, payload, len, 0, 0);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// IoT Jobs (OTA)
+// ═══════════════════════════════════════════════════════════════
+
+void AwsIotService::handle_job_notify(const char* data, int data_len) {
+    // Job notification JSON:
+    // {"execution":{"jobId":"xxx","status":"QUEUED",
+    //   "jobDocument":{"url":"https://...","version":"1.0.2","checksum":"sha256:..."}}}
+
+    if (data_len < 10) {
+        ESP_LOGD(TAG, "Jobs: no pending jobs");
+        return;
+    }
+
+    jsmn_parser parser;
+    jsmntok_t tokens[48];
+    jsmn_init(&parser);
+    int r = jsmn_parse(&parser, data, data_len, tokens, 48);
+    if (r < 2) return;
+
+    ESP_LOGI(TAG, "Job notification received (%d bytes)", data_len);
+
+    // Шукаємо jobId та jobDocument
+    char job_id[64] = {};
+    char url[256] = {};
+    char version[32] = {};
+    char checksum[80] = {};
+
+    for (int i = 1; i < r - 1; i++) {
+        if (tokens[i].type != JSMN_STRING) continue;
+
+        int klen = tokens[i].end - tokens[i].start;
+        const char* k = data + tokens[i].start;
+        int vlen = tokens[i + 1].end - tokens[i + 1].start;
+        const char* v = data + tokens[i + 1].start;
+
+        if (klen == 5 && strncmp(k, "jobId", 5) == 0 && tokens[i + 1].type == JSMN_STRING) {
+            int l = (vlen < 63) ? vlen : 63;
+            strncpy(job_id, v, l); job_id[l] = '\0';
+        } else if (klen == 3 && strncmp(k, "url", 3) == 0 && tokens[i + 1].type == JSMN_STRING) {
+            int l = (vlen < 255) ? vlen : 255;
+            strncpy(url, v, l); url[l] = '\0';
+        } else if (klen == 7 && strncmp(k, "version", 7) == 0 && tokens[i + 1].type == JSMN_STRING) {
+            int l = (vlen < 31) ? vlen : 31;
+            strncpy(version, v, l); version[l] = '\0';
+        } else if (klen == 8 && strncmp(k, "checksum", 8) == 0 && tokens[i + 1].type == JSMN_STRING) {
+            int l = (vlen < 79) ? vlen : 79;
+            strncpy(checksum, v, l); checksum[l] = '\0';
+        }
+    }
+
+    if (job_id[0] == '\0' || url[0] == '\0') {
+        ESP_LOGW(TAG, "Job missing jobId or url");
+        return;
+    }
+
+    ESP_LOGI(TAG, "OTA Job: id=%s, version=%s", job_id, version);
+    ESP_LOGI(TAG, "OTA URL: %s", url);
+
+    // Зберігаємо job ID для статус-апдейтів
+    strncpy(current_job_id_, job_id, sizeof(current_job_id_) - 1);
+
+    // Повідомляємо AWS: IN_PROGRESS
+    update_job_status(job_id, "IN_PROGRESS", "Starting download");
+
+    // Делегуємо до існуючого ota_handler
+    ota_handler::OtaParams params = {};
+    strncpy(params.url, url, sizeof(params.url) - 1);
+    strncpy(params.version, version, sizeof(params.version) - 1);
+    strncpy(params.checksum, checksum, sizeof(params.checksum) - 1);
+
+    if (ota_handler::start_ota(params, state_)) {
+        ESP_LOGI(TAG, "OTA task started for job %s", job_id);
+    } else {
+        ESP_LOGW(TAG, "OTA already in progress — rejecting job");
+        update_job_status(job_id, "FAILED", "OTA already in progress");
+    }
+}
+
+void AwsIotService::update_job_status(const char* job_id, const char* status, const char* detail) {
+    if (!connected_ || !client_) return;
+
+    char topic[128];
+    snprintf(topic, sizeof(topic),
+             "$aws/things/%s/jobs/%s/update", thing_name_, job_id);
+
+    char payload[256];
+    int len;
+    if (detail) {
+        len = snprintf(payload, sizeof(payload),
+            "{\"status\":\"%s\",\"statusDetails\":{\"message\":\"%s\"}}", status, detail);
+    } else {
+        len = snprintf(payload, sizeof(payload),
+            "{\"status\":\"%s\"}", status);
+    }
+
+    esp_mqtt_client_publish(client_, topic, payload, len, 1, 0);
+    ESP_LOGI(TAG, "Job %s status: %s", job_id, status);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -505,6 +613,12 @@ void AwsIotService::handle_shadow_delta(const char* data, int data_len) {
 
 void AwsIotService::handle_incoming(const char* topic, int topic_len,
                                      const char* data, int data_len) {
+    // IoT Jobs: $aws/things/{thing}/jobs/notify-next
+    if (topic_len > 10 && strstr(topic, "/jobs/notify-next") != nullptr) {
+        handle_job_notify(data, data_len);
+        return;
+    }
+
     // Shadow delta: $aws/things/{thing}/shadow/update/delta
     if (topic_len > 10 && strstr(topic, "/shadow/update/delta") != nullptr) {
         handle_shadow_delta(data, data_len);

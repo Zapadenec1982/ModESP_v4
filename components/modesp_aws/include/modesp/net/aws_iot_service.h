@@ -97,6 +97,11 @@ private:
     bool shadow_dirty_ = false;       // є зміни для shadow reported
     uint32_t shadow_version_ = 0;     // останній відомий version SharedState для shadow
 
+    // IoT Jobs (OTA)
+    void handle_job_notify(const char* data, int data_len);
+    void update_job_status(const char* job_id, const char* status, const char* detail = nullptr);
+    char current_job_id_[64] = {};    // ID поточного Job
+
     // Static callbacks
     static void mqtt_event_handler(void* args, esp_event_base_t base,
                                     int32_t event_id, void* event_data);
