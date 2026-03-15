@@ -5,7 +5,7 @@
 ![ESP-IDF](https://img.shields.io/badge/ESP--IDF-v5.5-blue)
 ![C++17](https://img.shields.io/badge/C%2B%2B-17-orange)
 ![Tests](https://img.shields.io/badge/Tests-491%20passed-brightgreen)
-![License](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue)
+![License](https://img.shields.io/badge/License-Source%20Available-blue)
 
 Manifest-driven firmware that generates UI, state metadata, MQTT topics, and feature flags from JSON — zero manual sync between firmware, WebUI, and cloud.
 
@@ -190,9 +190,10 @@ tests/host/             # 181 C++ doctest tests (418 assertions)
 
 ## License
 
-[**PolyForm Noncommercial License 1.0.0**](LICENSE)
+**Source-available** under [PolyForm Noncommercial License 1.0.0](LICENSE).
 
-Free for personal and non-commercial use. Commercial licensing available — contact via [GitHub](https://github.com/Zapadenec1982) or [email](mailto:tepliuk.yurii@gmail.com).
+Free to use, study, and modify for personal and non-commercial purposes.
+Commercial use requires a separate license — contact via [GitHub](https://github.com/Zapadenec1982) or [email](mailto:tepliuk.yurii@gmail.com).
 
 ---
 
