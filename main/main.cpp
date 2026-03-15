@@ -43,7 +43,7 @@
 #if defined(CONFIG_MODESP_CLOUD_AWS)
   #include "modesp/net/aws_iot_service.h"
 #else
-  #include "modesp/net/cloud_service.h"
+  #include "modesp/net/mqtt_service.h"
 #endif
 
 // Equipment Layer + Business modules
