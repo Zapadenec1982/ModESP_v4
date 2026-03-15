@@ -14,6 +14,7 @@
 
 #include "esp_log.h"
 #include "esp_mac.h"
+#include "jsmn.h"
 
 #include <cstring>
 #include <cstdio>
@@ -160,8 +161,8 @@ esp_err_t AwsIotService::handle_post_cloud(httpd_req_t* req) {
     auto* self = static_cast<AwsIotService*>(req->user_ctx);
     set_cors_headers(req);
 
-    // Читаємо body
-    char body[2048];
+    // Читаємо body (до 4KB — сертифікати можуть бути великими)
+    static char body[4096];
     int received = httpd_req_recv(req, body, sizeof(body) - 1);
     if (received <= 0) {
         httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty body");
@@ -169,9 +170,74 @@ esp_err_t AwsIotService::handle_post_cloud(httpd_req_t* req) {
     }
     body[received] = '\0';
 
-    // TODO: parse JSON (endpoint, cert, key, enabled) та зберегти в NVS
-    // Для skeleton — просто логуємо
-    ESP_LOGI(TAG, "POST /api/cloud: %d bytes received", received);
+    ESP_LOGI(TAG, "POST /api/cloud: %d bytes", received);
+
+    // Parse JSON з jsmn
+    jsmn_parser parser;
+    jsmntok_t tokens[32];
+    jsmn_init(&parser);
+    int r = jsmn_parse(&parser, body, received, tokens, 32);
+    if (r < 2 || tokens[0].type != JSMN_OBJECT) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+        return ESP_FAIL;
+    }
+
+    bool config_changed = false;
+    bool cert_uploaded = false;
+
+    for (int i = 1; i < r - 1; i += 2) {
+        if (tokens[i].type != JSMN_STRING) continue;
+
+        int klen = tokens[i].end - tokens[i].start;
+        int vlen = tokens[i + 1].end - tokens[i + 1].start;
+        const char* k = body + tokens[i].start;
+        const char* v = body + tokens[i + 1].start;
+
+        // Null-terminate value тимчасово
+        char saved = body[tokens[i + 1].end];
+        body[tokens[i + 1].end] = '\0';
+
+        if (klen == 8 && strncmp(k, "endpoint", 8) == 0) {
+            strncpy(self->endpoint_, v, sizeof(self->endpoint_) - 1);
+            self->endpoint_[sizeof(self->endpoint_) - 1] = '\0';
+            nvs_helper::write_str("awscert", "endpoint", self->endpoint_);
+            config_changed = true;
+        } else if (klen == 10 && strncmp(k, "thing_name", 10) == 0) {
+            strncpy(self->thing_name_, v, sizeof(self->thing_name_) - 1);
+            self->thing_name_[sizeof(self->thing_name_) - 1] = '\0';
+            nvs_helper::write_str("awscert", "thing", self->thing_name_);
+            config_changed = true;
+        } else if (klen == 7 && strncmp(k, "enabled", 7) == 0) {
+            self->enabled_ = (v[0] == 't' || v[0] == '1');
+            nvs_helper::write_bool("awscert", "enabled", self->enabled_);
+            config_changed = true;
+        } else if (klen == 4 && strncmp(k, "cert", 4) == 0 && vlen > 10) {
+            // Зберігаємо PEM сертифікат у NVS як blob
+            nvs_helper::write_blob("awscert", "cert", v, vlen);
+            strncpy(s_device_cert_pem_, v, CERT_BUF_SIZE - 1);
+            s_device_cert_pem_[CERT_BUF_SIZE - 1] = '\0';
+            cert_uploaded = true;
+            ESP_LOGI(TAG, "Device certificate saved (%d bytes)", vlen);
+        } else if (klen == 3 && strncmp(k, "key", 3) == 0 && vlen > 10) {
+            // Зберігаємо PEM private key у NVS як blob
+            nvs_helper::write_blob("awscert", "key", v, vlen);
+            strncpy(s_device_key_pem_, v, CERT_BUF_SIZE - 1);
+            s_device_key_pem_[CERT_BUF_SIZE - 1] = '\0';
+            cert_uploaded = true;
+            ESP_LOGI(TAG, "Private key saved (%d bytes)", vlen);
+        }
+
+        body[tokens[i + 1].end] = saved;
+    }
+
+    if (cert_uploaded) {
+        self->cert_loaded_ = (s_device_cert_pem_[0] != '\0' && s_device_key_pem_[0] != '\0');
+    }
+
+    if (config_changed) {
+        ESP_LOGI(TAG, "Config saved: endpoint=%s, thing=%s, enabled=%d",
+                 self->endpoint_, self->thing_name_, self->enabled_);
+    }
 
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_send(req, "{\"ok\":true}", 11);
