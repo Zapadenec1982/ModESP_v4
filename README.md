@@ -192,7 +192,7 @@ tests/host/             # 181 C++ doctest tests (418 assertions)
 
 [**PolyForm Noncommercial License 1.0.0**](LICENSE)
 
-Free for personal and non-commercial use. Commercial licensing available — contact via [GitHub](https://github.com/Zapadenec1982) or [LinkedIn](https://www.linkedin.com/in/yurii-tepliuk/).
+Free for personal and non-commercial use. Commercial licensing available — contact via [GitHub](https://github.com/Zapadenec1982) or [email](mailto:tepliuk.yurii@gmail.com).
 
 ---
 
