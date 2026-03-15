@@ -89,6 +89,19 @@ Equipment(0) → Protection(1) → Thermostat(2) + Defrost(2)
 | pcf8574_relay | actuator | I2C PCF8574 relay (8-bit port expander) |
 | pcf8574_input | sensor | I2C PCF8574 digital input |
 
+## AWS IoT Core (feature/aws-iot branch)
+
+Compile-time alternative to Mosquitto via Kconfig `MODESP_CLOUD_BACKEND`.
+
+- **Component:** `components/modesp_aws/` — AwsIotService (BaseModule)
+- **mTLS:** AmazonRootCA1 embedded + client cert/key from NVS
+- **Topics:** `modesp/{device_id}/state/{key}`, `cmd/{key}`, `status`, `heartbeat`
+- **Shadow:** reported (62 writable params) + delta (desired → validate → apply)
+- **OTA:** IoT Jobs → ota_handler::start_ota() (provider-agnostic)
+- **HTTP:** GET/POST `/api/cloud` (endpoint, thing_name, cert upload)
+- **NVS:** 32KB partition, certs in namespace "awscert"
+- Docs: [docs/12_aws_iot.md](docs/12_aws_iot.md)
+
 ## Svelte WebUI
 
 - Svelte 4, Rollup bundler, Light/Dark theme, UA/EN i18n

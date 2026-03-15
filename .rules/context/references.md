@@ -23,6 +23,7 @@
 | /api/backup | GET | Backup configuration (NVS export) |
 | /api/restore | POST | Restore configuration (NVS import) |
 | /api/auth | GET/POST | Auth settings (read / update) |
+| /api/cloud | GET/POST | AWS IoT Core config + cert upload (CONFIG_MODESP_CLOUD_AWS only) |
 | /api/factory-reset | POST | Factory reset (NVS clear + restart) |
 | /api/restart | POST | ESP restart |
 | /ws | WS | Real-time state broadcast (delta, 1500ms) |
