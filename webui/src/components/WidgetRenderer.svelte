@@ -22,6 +22,8 @@
   import ChartWidget from './widgets/ChartWidget.svelte';
   import AuthSave from './widgets/AuthSave.svelte';
   import ActionsGrid from './widgets/ActionsGrid.svelte';
+  import CloudSave from './widgets/CloudSave.svelte';
+  import CertUpload from './widgets/CertUpload.svelte';
 
   export let widget;
   export let value;
@@ -49,7 +51,9 @@
     file_upload: FileUploadWidget,
     chart: ChartWidget,
     auth_save: AuthSave,
-    actions_grid: ActionsGrid
+    actions_grid: ActionsGrid,
+    cloud_save: CloudSave,
+    cert_upload: CertUpload
   };
 
   $: component = widgetMap[widget.widget] || ValueWidget;
