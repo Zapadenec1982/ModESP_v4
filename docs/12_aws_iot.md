@@ -43,11 +43,62 @@ endchoice
 
 ### Як переключити
 
+**Спосіб 1: menuconfig (інтерактивний)**
 ```bash
 idf.py menuconfig
-# → ModESP Configuration → Cloud backend → AWS IoT Core
+# → ModESP Configuration → Cloud backend → AWS IoT Core (або Mosquitto)
 idf.py build
 ```
+
+**Спосіб 2: sdkconfig (ручний)**
+```bash
+# Переключити на AWS:
+sed -i 's/CONFIG_MODESP_CLOUD_MQTT=y/# CONFIG_MODESP_CLOUD_MQTT is not set/' sdkconfig
+sed -i 's/# CONFIG_MODESP_CLOUD_AWS is not set/CONFIG_MODESP_CLOUD_AWS=y/' sdkconfig
+idf.py build
+
+# Переключити назад на Mosquitto:
+sed -i 's/CONFIG_MODESP_CLOUD_AWS=y/# CONFIG_MODESP_CLOUD_AWS is not set/' sdkconfig
+sed -i 's/# CONFIG_MODESP_CLOUD_MQTT is not set/CONFIG_MODESP_CLOUD_MQTT=y/' sdkconfig
+idf.py build
+```
+
+**PowerShell (Windows):**
+```powershell
+# На AWS:
+(Get-Content sdkconfig) -replace 'CONFIG_MODESP_CLOUD_MQTT=y','# CONFIG_MODESP_CLOUD_MQTT is not set' `
+                         -replace '# CONFIG_MODESP_CLOUD_AWS is not set','CONFIG_MODESP_CLOUD_AWS=y' |
+Set-Content sdkconfig
+
+# На Mosquitto:
+(Get-Content sdkconfig) -replace 'CONFIG_MODESP_CLOUD_AWS=y','# CONFIG_MODESP_CLOUD_AWS is not set' `
+                         -replace '# CONFIG_MODESP_CLOUD_MQTT is not set','CONFIG_MODESP_CLOUD_MQTT=y' |
+Set-Content sdkconfig
+```
+
+### Перевірка поточного backend
+
+```bash
+grep CONFIG_MODESP_CLOUD sdkconfig
+# CONFIG_MODESP_CLOUD_MQTT=y  → Mosquitto
+# CONFIG_MODESP_CLOUD_AWS=y   → AWS IoT Core
+```
+
+### Що змінюється при переключенні
+
+| | Mosquitto (default) | AWS IoT Core |
+|---|---|---|
+| Сервіс | MqttService | AwsIotService |
+| Бібліотека | ESP-IDF mqtt | ESP-IDF mqtt + mbedtls mTLS |
+| Порт | 1883 / 8883 | 8883 (тільки TLS) |
+| Аутентифікація | user/password | X.509 сертифікат |
+| Конфігурація | /api/mqtt | /api/cloud |
+| Shadow | — | ✅ Device Shadow |
+| OTA | /api/ota (HTTP upload) | IoT Jobs |
+| Розмір binary | ~1.0 MB | ~1.2 MB (+200KB TLS) |
+| RAM при init | ~167 KB free | ~124 KB free (~43KB TLS) |
+
+> **Важливо:** fullclean не потрібен при переключенні. Звичайний `idf.py build` перекомпілює тільки змінені файли. Але якщо build cache зіпсований — `idf.py fullclean && idf.py build`.
 
 Default build (без menuconfig) = **Mosquitto** — binary ідентичний поточному.
 
