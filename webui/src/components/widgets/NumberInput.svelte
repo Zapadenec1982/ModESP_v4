@@ -197,7 +197,7 @@
   }
 
   .st-val {
-    width: 64px;
+    width: 52px;
     text-align: center;
     font-size: 16px;
     font-weight: 600;
