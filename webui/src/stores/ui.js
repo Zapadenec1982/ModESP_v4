@@ -24,9 +24,6 @@ export async function loadLanguagePack(lang) {
     const resp = await fetch(`/i18n/${lang}.json`);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const pack = await resp.json();
-    // Language pack now includes flat UA→EN reverse map (built by generator)
-    // No complex matching needed — just use pack.strings[uaText]
-    reverseLookup = {};  // not needed separately, pack.strings already has it
     langPack.set(pack);
   } catch (e) {
     console.warn(`Failed to load language pack '${lang}':`, e.message);

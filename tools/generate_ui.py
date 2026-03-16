@@ -1755,38 +1755,94 @@ def main():
         chrome_path = PROJECT_ROOT / "webui" / "src" / "i18n" / f"{lang}.js"
         # Chrome strings stay in JS files (imported by Svelte), not merged here
 
-        # Build flat reverse map: UA text → EN translation
-        # This allows frontend to translate any UA string without knowing its key
+        # Build flat reverse map: every EN value keyed by its UA original
         reverse = {}
-        # From structured keys: extract UA original from ui.json, map to EN
+
+        # Simple approach: scan ALL values in merged dict
+        # and create reverse entries for any value found in ui.json
+        all_ua_texts = set()
         for page in ui_schema.get("pages", []):
-            pid = page.get("id", "")
-            # Page title
-            pk = f"page.{pid}.title"
-            if pk in merged and page.get("title"):
-                reverse[page["title"]] = merged[pk]
-            # Cards
-            for ci, card in enumerate(page.get("cards", [])):
+            if page.get("title"): all_ua_texts.add(page["title"])
+            for card in page.get("cards", []):
+                for f in ("title", "subtitle"):
+                    if card.get(f): all_ua_texts.add(card[f])
+                for w in card.get("widgets", []):
+                    for f in ("description", "unit", "on_label", "off_label", "label", "confirm", "disabled_hint"):
+                        if w.get(f): all_ua_texts.add(w[f])
+                    for opt in w.get("options", []):
+                        if opt.get("label"): all_ua_texts.add(opt["label"])
+                        if opt.get("disabled_hint"): all_ua_texts.add(opt["disabled_hint"])
+                    if w.get("actions"):
+                        for a in w["actions"]:
+                            if a.get("label"): all_ua_texts.add(a["label"])
+                            if a.get("confirm"): all_ua_texts.add(a["confirm"])
+
+        # For each UA text in ui.json, find ANY value in merged that matches
+        # Build inverted index: EN value → structured key
+        en_to_ua = {}  # structured_key → EN value
+        for k, v in merged.items():
+            en_to_ua[k] = v
+
+        # Now: for each UA text, search module i18n files for a match
+        # Module i18n files map structured_key → EN, and we know the UA text
+        # We need: UA text → EN text
+        # Strategy: for each module, load its i18n and its manifest to build UA→EN
+        for mod_name in project.get("modules", []):
+            mf_path = args.modules_dir / mod_name / "manifest.json"
+            i18n_file = args.modules_dir / mod_name / "i18n" / f"{lang}.json"
+            if not mf_path.is_file() or not i18n_file.is_file():
+                continue
+            with open(mf_path, "r", encoding="utf-8") as f:
+                mf = json.load(f)
+            with open(i18n_file, "r", encoding="utf-8") as f:
+                mod_en = json.load(f)
+
+            # State descriptions
+            for key, info in mf.get("state", {}).items():
+                for field in ("description", "unit", "on_label", "off_label"):
+                    ua = info.get(field, "")
+                    ek = f"state.{key}.{field}"
+                    if ua and ek in mod_en:
+                        reverse[ua] = mod_en[ek]
+                # Options
+                for opt in info.get("options", []):
+                    ua = opt.get("label", "")
+                    ek = f"state.{key}.options.{opt.get('value','')}"
+                    if ua and ek in mod_en:
+                        reverse[ua] = mod_en[ek]
+
+            # UI page/card titles
+            ui = mf.get("ui", {})
+            pk = f"page.{mod_name}.title"
+            if ui.get("page") and pk in mod_en:
+                reverse[ui["page"]] = mod_en[pk]
+            for ci, card in enumerate(ui.get("cards", [])):
                 cid = card.get("id", f"card{ci}")
                 for field in ("title", "subtitle"):
-                    ck = f"card.{pid}.{cid}.{field}"
-                    if ck in merged and card.get(field):
-                        reverse[card[field]] = merged[ck]
-                # Widgets
+                    ua = card.get(field, "")
+                    ek = f"card.{mod_name}.{cid}.{field}"
+                    if ua and ek in mod_en:
+                        reverse[ua] = mod_en[ek]
+                # Widget labels
                 for w in card.get("widgets", []):
-                    ik = w.get("i18n_key", "")
-                    for field in ("description", "unit", "on_label", "off_label", "label", "confirm", "disabled_hint"):
-                        sk = f"{ik}.{field}" if ik else ""
-                        if sk in merged and w.get(field):
-                            reverse[w[field]] = merged[sk]
-                    # Options
-                    for opt in w.get("options", []):
-                        ok = f"{ik}.options.{opt.get('value', '')}" if ik else ""
-                        if ok in merged and opt.get("label"):
-                            reverse[opt["label"]] = merged[ok]
-        # From system strings
-        for ua_key, en_val in (sys_i18n if sys_i18n_path.is_file() else {}).items():
-            reverse[ua_key] = en_val
+                    for field in ("label", "confirm"):
+                        ua = w.get(field, "")
+                        ek = f"widget.{w.get('key','')}.{field}"
+                        if ua and ek in mod_en:
+                            reverse[ua] = mod_en[ek]
+
+            # Constraints disabled_hint
+            for key, c in mf.get("constraints", {}).items():
+                for val_str, rule in c.get("values", {}).items():
+                    ua = rule.get("disabled_hint", "")
+                    ek = f"constraint.{key}.{val_str}.disabled_hint"
+                    if ua and ek in mod_en:
+                        reverse[ua] = mod_en[ek]
+
+        # System strings (UA key → EN value)
+        if sys_i18n_path.is_file():
+            for ua_key, en_val in sys_i18n.items():
+                reverse[ua_key] = en_val
         # Merge reverse into strings (frontend uses this for card/page titles)
         merged.update(reverse)
 
