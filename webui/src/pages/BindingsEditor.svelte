@@ -128,8 +128,8 @@
   $: assignedActuators = roles.filter(r => r.type === 'actuator' && assignedRoles.has(r.role));
 
   $: hasNtc = !!$state['equipment.has_ntc_driver'];
-  $: unassignedOptional = roles
-    .filter(r => r.optional && !assignedRoles.has(r.role))
+  $: unassignedRoles = roles
+    .filter(r => !assignedRoles.has(r.role))
     .filter(r => availableHw(r).length > 0);
 
   // ── Save / Restart ──
@@ -252,9 +252,9 @@
     {/if}
 
     <!-- Add optional roles -->
-    {#if unassignedOptional.length > 0}
+    {#if unassignedRoles.length > 0}
       <Card title={$t['bind.add_equip']}>
-        {#each unassignedOptional as roleDef}
+        {#each unassignedRoles as roleDef}
           <button class="add-role-btn" on:click={() => addRole(roleDef)}>
             + {roleDef.label}
           </button>
