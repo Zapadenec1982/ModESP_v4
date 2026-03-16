@@ -121,7 +121,7 @@ Embedded Svelte 4 SPA served from flash — 80KB gzipped (64KB JS + 16KB CSS).
 - **Dark / Light theme** — CSS custom properties, user preference persisted
 - **WebSocket real-time** — state updates pushed to browser without polling
 - **Responsive** — mobile-optimized layout for on-site technicians
-- **Bilingual** — Ukrainian + English, i18n keys for all labels
+- **4 languages** — Ukrainian, English, German, Polish. Lazy-loaded language packs from LittleFS (~8KB gzip each). Adding a new language requires only translation files — no code changes
 
 ---
 

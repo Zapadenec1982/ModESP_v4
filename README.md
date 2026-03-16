@@ -23,7 +23,7 @@
 | Drivers | 6 (DS18B20, NTC, relay, digital input, PCF8574 relay/input) |
 | HTTP endpoints | 23 REST + WebSocket + OTA upload |
 | Tests | 491 (310 pytest + 181 C++ host / 418 assertions) |
-| WebUI | 80 KB gzipped, Svelte 4, dark/light theme, UA/EN |
+| WebUI | 80 KB gzipped, Svelte 4, dark/light theme, 4 languages (UK/EN/DE/PL) |
 | Firmware binary | ~1.2 MB, free heap 77–90 KB operational |
 | Target | ESP32-WROOM-32, 4 MB flash, ESP-IDF v5.5 |
 
@@ -104,9 +104,10 @@ Svelte 4 SPA — 80 KB gzipped, served from ESP32 LittleFS.
 - Bento-card dashboard with grouped parameters
 - Real-time updates via WebSocket (no polling)
 - Light / dark theme, responsive layout
-- UA / EN localization
+- **4 languages:** Ukrainian, English, German, Polish (lazy-load language packs from LittleFS)
 - Progressive disclosure — UI shows only settings for connected hardware
 - GroupAccordion with expand/collapse, parameter validation
+- Adding a new language = translation files only, no code changes
 
 <!-- TODO: Screenshots -->
 
@@ -255,6 +256,7 @@ This project demonstrates production-grade embedded engineering across the full 
 
 **Embedded Web & Connectivity:**
 - Svelte 4 SPA served from ESP32 LittleFS — 80 KB gzipped with real-time WebSocket updates
+- 4-language i18n (UK/EN/DE/PL) with lazy-loaded language packs from LittleFS (~8KB gzip each)
 - 23 REST endpoints with JSON validation via jsmn (zero-alloc parser)
 - MQTT over TLS with delta-publish (only changed values), heartbeat, LWT, and tenant-aware topics
 - WiFi STA + AP with intelligent AP→STA probe (exponential backoff, heap guard, timeout)
