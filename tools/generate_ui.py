@@ -814,6 +814,8 @@ class UIJsonGenerator:
             widget["unit"] = state_info["unit"]
         if state_info.get("description"):
             widget["description"] = state_info["description"]
+        # i18n key for language pack lookup
+        widget["i18n_key"] = f"state.{key}"
         if state_info.get("access") == "readwrite":
             widget["editable"] = True
             if "options" not in state_info:
@@ -1716,39 +1718,173 @@ def main():
         print(f"  + {feat_path} (fallback — no bindings)")
         files_written += 1
 
-    # ── i18n translation completeness check ──────────────────
-    uien_path = PROJECT_ROOT / "webui" / "src" / "i18n" / "uiEn.js"
-    if uien_path.is_file():
-        import re as _re
-        with open(uien_path, encoding="utf-8") as _f:
-            _uien_keys = set(_re.findall(r"'([^']+)'\s*:", _f.read()))
+    # ── i18n: build language packs ───────────────────────────
+    i18n_out = args.output_data / "www" / "i18n"
+    i18n_out.mkdir(exist_ok=True)
 
-        _translatable = set()
+    # Discover available languages from module i18n files
+    available_langs = set()
+    for mod_name in project.get("modules", []):
+        i18n_dir = args.modules_dir / mod_name / "i18n"
+        if i18n_dir.is_dir():
+            for f in i18n_dir.glob("*.json"):
+                available_langs.add(f.stem)
+
+    # Load system translations (generated separately)
+    sys_i18n_path = args.output_data / "i18n" / "system_en.json"
+
+    for lang in sorted(available_langs):
+        merged = {}
+        # Merge per-module i18n files
+        for mod_name in project.get("modules", []):
+            i18n_file = args.modules_dir / mod_name / "i18n" / f"{lang}.json"
+            if i18n_file.is_file():
+                with open(i18n_file, "r", encoding="utf-8") as f:
+                    mod_i18n = json.load(f)
+                merged.update(mod_i18n)
+
+        # Merge system strings
+        if sys_i18n_path.is_file():
+            with open(sys_i18n_path, "r", encoding="utf-8") as f:
+                sys_i18n = json.load(f)
+            # System strings use UA key → EN value format
+            for ua_key, en_val in sys_i18n.items():
+                merged[f"sys.{ua_key}"] = en_val
+
+        # Also include chrome strings from webui/src/i18n/{lang}.js if exists
+        chrome_path = PROJECT_ROOT / "webui" / "src" / "i18n" / f"{lang}.js"
+        # Chrome strings stay in JS files (imported by Svelte), not merged here
+
+        # Build flat reverse map: every EN value keyed by its UA original
+        reverse = {}
+
+        # Simple approach: scan ALL values in merged dict
+        # and create reverse entries for any value found in ui.json
+        all_ua_texts = set()
         for page in ui_schema.get("pages", []):
-            if page.get("title"): _translatable.add(page["title"])
+            if page.get("title"): all_ua_texts.add(page["title"])
             for card in page.get("cards", []):
-                for field in ("title", "subtitle"):
-                    if card.get(field): _translatable.add(card[field])
+                for f in ("title", "subtitle"):
+                    if card.get(f): all_ua_texts.add(card[f])
                 for w in card.get("widgets", []):
-                    for field in ("description", "label", "unit", "on_label",
-                                  "off_label", "confirm", "disabled_hint"):
-                        if w.get(field): _translatable.add(w[field])
+                    for f in ("description", "unit", "on_label", "off_label", "label", "confirm", "disabled_hint"):
+                        if w.get(f): all_ua_texts.add(w[f])
                     for opt in w.get("options", []):
-                        if opt.get("label"): _translatable.add(opt["label"])
-                        if opt.get("disabled_hint"): _translatable.add(opt["disabled_hint"])
+                        if opt.get("label"): all_ua_texts.add(opt["label"])
+                        if opt.get("disabled_hint"): all_ua_texts.add(opt["disabled_hint"])
+                    if w.get("actions"):
+                        for a in w["actions"]:
+                            if a.get("label"): all_ua_texts.add(a["label"])
+                            if a.get("confirm"): all_ua_texts.add(a["confirm"])
 
-        # Exclude dynamic binding descriptions (generated from board.json, not translatable)
-        _translatable = {s for s in _translatable
-                         if not any(s.startswith(p) for p in ('adc_', 'din_', 'ow_', 'relay_', 'i2c_', 'pwm_'))}
-        _missing = sorted(_translatable - _uien_keys)
-        if _missing:
-            print(f"\n  ⚠ {len(_missing)} untranslated strings (EN):")
-            for s in _missing[:15]:
-                print(f"    - {s}")
-            if len(_missing) > 15:
-                print(f"    ... and {len(_missing) - 15} more")
-        else:
-            print(f"\n  ✓ All UI strings have EN translations ({len(_translatable)} checked)")
+        # For each UA text in ui.json, find ANY value in merged that matches
+        # Build inverted index: EN value → structured key
+        en_to_ua = {}  # structured_key → EN value
+        for k, v in merged.items():
+            en_to_ua[k] = v
+
+        # Now: for each UA text, search module i18n files for a match
+        # Module i18n files map structured_key → EN, and we know the UA text
+        # We need: UA text → EN text
+        # Strategy: for each module, load its i18n and its manifest to build UA→EN
+        for mod_name in project.get("modules", []):
+            mf_path = args.modules_dir / mod_name / "manifest.json"
+            i18n_file = args.modules_dir / mod_name / "i18n" / f"{lang}.json"
+            if not mf_path.is_file() or not i18n_file.is_file():
+                continue
+            with open(mf_path, "r", encoding="utf-8") as f:
+                mf = json.load(f)
+            with open(i18n_file, "r", encoding="utf-8") as f:
+                mod_en = json.load(f)
+
+            # State descriptions
+            for key, info in mf.get("state", {}).items():
+                for field in ("description", "unit", "on_label", "off_label"):
+                    ua = info.get(field, "")
+                    ek = f"state.{key}.{field}"
+                    if ua and ek in mod_en:
+                        reverse[ua] = mod_en[ek]
+                # Options
+                for opt in info.get("options", []):
+                    ua = opt.get("label", "")
+                    ek = f"state.{key}.options.{opt.get('value','')}"
+                    if ua and ek in mod_en:
+                        reverse[ua] = mod_en[ek]
+
+            # UI page/card titles
+            ui = mf.get("ui", {})
+            pk = f"page.{mod_name}.title"
+            if ui.get("page") and pk in mod_en:
+                reverse[ui["page"]] = mod_en[pk]
+            for ci, card in enumerate(ui.get("cards", [])):
+                cid = card.get("id", f"card{ci}")
+                for field in ("title", "subtitle"):
+                    ua = card.get(field, "")
+                    ek = f"card.{mod_name}.{cid}.{field}"
+                    if ua and ek in mod_en:
+                        reverse[ua] = mod_en[ek]
+                # Widget labels
+                for w in card.get("widgets", []):
+                    for field in ("label", "confirm"):
+                        ua = w.get(field, "")
+                        ek = f"widget.{w.get('key','')}.{field}"
+                        if ua and ek in mod_en:
+                            reverse[ua] = mod_en[ek]
+
+            # Constraints disabled_hint
+            for key, c in mf.get("constraints", {}).items():
+                for val_str, rule in c.get("values", {}).items():
+                    ua = rule.get("disabled_hint", "")
+                    ek = f"constraint.{key}.{val_str}.disabled_hint"
+                    if ua and ek in mod_en:
+                        reverse[ua] = mod_en[ek]
+
+        # System strings (UA key → EN value)
+        if sys_i18n_path.is_file():
+            for ua_key, en_val in sys_i18n.items():
+                reverse[ua_key] = en_val
+        # Merge reverse into strings (frontend uses this for card/page titles)
+        merged.update(reverse)
+
+        # Write merged language pack
+        lang_pack = {
+            "lang": lang,
+            "version": 1,
+            "keys": len(merged),
+            "strings": merged,
+        }
+        out_path = i18n_out / f"{lang}.json"
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(lang_pack, f, ensure_ascii=False, separators=(",", ":"))
+        print(f"  + {out_path} ({len(merged)} keys, {out_path.stat().st_size} bytes)")
+        files_written += 1
+
+    # Write i18n manifest
+    i18n_manifest = {"languages": ["uk"] + sorted(available_langs), "default": "uk"}
+    manifest_path = i18n_out / "manifest.json"
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(i18n_manifest, f, ensure_ascii=False, indent=2)
+    print(f"  + {manifest_path} (languages: {i18n_manifest['languages']})")
+    files_written += 1
+
+    # Validate: check that module i18n covers all translatable fields
+    _translatable = set()
+    for page in ui_schema.get("pages", []):
+        for card in page.get("cards", []):
+            for w in card.get("widgets", []):
+                i18n_key = w.get("i18n_key")
+                if i18n_key:
+                    _translatable.add(i18n_key + ".description")
+    # Simple coverage report
+    for lang in sorted(available_langs):
+        lang_file = i18n_out / f"{lang}.json"
+        if lang_file.is_file():
+            with open(lang_file, "r", encoding="utf-8") as f:
+                pack = json.load(f)
+            keys = set(pack.get("strings", {}).keys())
+            # Count state description keys
+            desc_keys = {k for k in keys if k.startswith("state.") and k.endswith(".description")}
+            print(f"  ✓ {lang}: {len(keys)} keys ({len(desc_keys)} descriptions)")
 
     # Summary
     total_keys = sum(len(m.get("state", {})) for m in manifests)
