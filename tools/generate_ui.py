@@ -1719,7 +1719,7 @@ def main():
         files_written += 1
 
     # ── i18n: build language packs ───────────────────────────
-    i18n_out = args.output_data / "i18n"
+    i18n_out = args.output_data / "www" / "i18n"
     i18n_out.mkdir(exist_ok=True)
 
     # Discover available languages from module i18n files
@@ -1731,7 +1731,7 @@ def main():
                 available_langs.add(f.stem)
 
     # Load system translations (generated separately)
-    sys_i18n_path = i18n_out / "system_en.json"
+    sys_i18n_path = args.output_data / "i18n" / "system_en.json"
 
     for lang in sorted(available_langs):
         merged = {}

@@ -4,7 +4,7 @@
   import { pages, deviceName } from "../stores/ui.js";
   import { wsConnected, state } from "../stores/state.js";
   import { theme, toggleTheme } from "../stores/theme.js";
-  import { t, language, toggleLanguage } from "../stores/i18n.js";
+  import { t, language, cycleLanguage } from "../stores/i18n.js";
   import { toastSuccess } from "../stores/toast.js";
   import Icon from "./Icon.svelte";
   import Clock from "./Clock.svelte";
@@ -147,8 +147,8 @@
             >
           {/if}
         </button>
-        <button class="topbar-btn" on:click={toggleLanguage} title="Language">
-          {$language === "uk" ? "UA" : "EN"}
+        <button class="topbar-btn" on:click={cycleLanguage} title="Language">
+          {$language.toUpperCase()}
         </button>
         <div class="ws-badge" class:connected={$wsConnected}>
           <span class="ws-dot"></span>
