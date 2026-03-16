@@ -256,6 +256,7 @@ void ThermostatModule::on_update(uint32_t dt_ms) {
             request_cond_fan(false);
             // Фіксуємо T для display_defrost mode=1 (заморожена T)
             frozen_temp_ = current_temp_;
+            state_set("thermostat.state", "paused");
             ESP_LOGI(TAG, "Defrost active — paused (frozen_temp=%.1f°C)", frozen_temp_);
         }
         // Дисплей під час відтайки

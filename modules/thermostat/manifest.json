@@ -282,7 +282,7 @@
     "thermostat.state": {
       "type": "string",
       "access": "read",
-      "enum": ["startup", "idle", "cooling", "safety_run"],
+      "enum": ["startup", "idle", "cooling", "safety_run", "paused"],
       "description": "Стан модуля"
     },
     "thermostat.comp_on_time": {
