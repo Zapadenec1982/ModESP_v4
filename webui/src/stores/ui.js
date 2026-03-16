@@ -1,4 +1,4 @@
-import { writable, derived, get } from 'svelte/store';
+import { writable, derived } from 'svelte/store';
 import { apiGet } from '../lib/api.js';
 import { language } from './i18n.js';
 
@@ -13,8 +13,6 @@ const rawPages = derived(uiConfig, $ui => $ui?.pages || []);
 /** Currently loaded language pack (null = Ukrainian default) */
 const langPack = writable(null);
 
-/** Reverse lookup: Ukrainian text → English translation (built from pack) */
-let reverseLookup = {};
 
 /** Load a language pack from ESP32 LittleFS */
 export async function loadLanguagePack(lang) {
@@ -26,39 +24,9 @@ export async function loadLanguagePack(lang) {
     const resp = await fetch(`/i18n/${lang}.json`);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const pack = await resp.json();
-    // Build reverse lookup: scan all strings values and map UA originals
-    // For card/page titles that don't have i18n_key, we need UA→EN mapping
-    reverseLookup = {};
-    const strings = pack.strings || {};
-    for (const [key, val] of Object.entries(strings)) {
-      // sys.{UA} = EN → map UA → EN
-      if (key.startsWith('sys.')) {
-        reverseLookup[key.slice(4)] = val;
-      }
-    }
-    // Also build from structured keys: find UA text in rawPages and map
-    const raw = get(uiConfig)?.pages || [];
-    for (const page of raw) {
-      // Page title
-      if (page.title && strings[`page.${page.id}.title`]) {
-        reverseLookup[page.title] = strings[`page.${page.id}.title`];
-      }
-      for (const card of (page.cards || [])) {
-        const cardId = card.id || '';
-        const modId = page.id || page.page_id || '';
-        // Try card.{module}.{cardId}.title
-        for (const field of ['title', 'subtitle']) {
-          if (!card[field]) continue;
-          const candidates = [
-            `card.${modId}.${cardId}.${field}`,
-            `card.${page.page_id || modId}.${cardId}.${field}`,
-          ];
-          for (const ck of candidates) {
-            if (strings[ck]) { reverseLookup[card[field]] = strings[ck]; break; }
-          }
-        }
-      }
-    }
+    // Language pack now includes flat UA→EN reverse map (built by generator)
+    // No complex matching needed — just use pack.strings[uaText]
+    reverseLookup = {};  // not needed separately, pack.strings already has it
     langPack.set(pack);
   } catch (e) {
     console.warn(`Failed to load language pack '${lang}':`, e.message);
@@ -86,9 +54,7 @@ function tr(text, i18nKey, field, pack) {
     const fullKey = `${i18nKey}.${field}`;
     if (strings[fullKey]) return strings[fullKey];
   }
-  // Fallback: reverse lookup (UA text → EN from pre-built map)
-  if (reverseLookup[text]) return reverseLookup[text];
-  // Last resort: try UA text directly as key
+  // Fallback: UA text as direct key (flat reverse map built by generator)
   return strings[text] || text;
 }
 

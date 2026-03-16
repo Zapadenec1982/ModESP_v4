@@ -1755,6 +1755,41 @@ def main():
         chrome_path = PROJECT_ROOT / "webui" / "src" / "i18n" / f"{lang}.js"
         # Chrome strings stay in JS files (imported by Svelte), not merged here
 
+        # Build flat reverse map: UA text → EN translation
+        # This allows frontend to translate any UA string without knowing its key
+        reverse = {}
+        # From structured keys: extract UA original from ui.json, map to EN
+        for page in ui_schema.get("pages", []):
+            pid = page.get("id", "")
+            # Page title
+            pk = f"page.{pid}.title"
+            if pk in merged and page.get("title"):
+                reverse[page["title"]] = merged[pk]
+            # Cards
+            for ci, card in enumerate(page.get("cards", [])):
+                cid = card.get("id", f"card{ci}")
+                for field in ("title", "subtitle"):
+                    ck = f"card.{pid}.{cid}.{field}"
+                    if ck in merged and card.get(field):
+                        reverse[card[field]] = merged[ck]
+                # Widgets
+                for w in card.get("widgets", []):
+                    ik = w.get("i18n_key", "")
+                    for field in ("description", "unit", "on_label", "off_label", "label", "confirm", "disabled_hint"):
+                        sk = f"{ik}.{field}" if ik else ""
+                        if sk in merged and w.get(field):
+                            reverse[w[field]] = merged[sk]
+                    # Options
+                    for opt in w.get("options", []):
+                        ok = f"{ik}.options.{opt.get('value', '')}" if ik else ""
+                        if ok in merged and opt.get("label"):
+                            reverse[opt["label"]] = merged[ok]
+        # From system strings
+        for ua_key, en_val in (sys_i18n if sys_i18n_path.is_file() else {}).items():
+            reverse[ua_key] = en_val
+        # Merge reverse into strings (frontend uses this for card/page titles)
+        merged.update(reverse)
+
         # Write merged language pack
         lang_pack = {
             "lang": lang,
