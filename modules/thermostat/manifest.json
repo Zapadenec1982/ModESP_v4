@@ -373,7 +373,7 @@
   },
 
   "ui": {
-    "page": "Холодильна камера",
+    "page": "Охолодження",
     "page_id": "thermostat",
     "icon": "snowflake",
     "order": 1,

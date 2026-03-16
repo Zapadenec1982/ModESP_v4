@@ -6,7 +6,7 @@
 export default {
   // Page titles
   'Dashboard': 'Dashboard',
-  'Холодильна камера': 'Refrigeration',
+  'Охолодження': 'Cooling',
   'Розморозка': 'Defrost',
   'Захист': 'Protection',
   'Логи': 'Logs',
