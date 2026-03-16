@@ -259,4 +259,145 @@ export default {
 
   // DataLogger labels
   'Flash (KB)': 'Flash (KB)',
+
+  // ── Card subtitles ──────────────────────────────────────────
+  'Температура, компресор, таймери': 'Temperature, compressor, timers',
+  'Уставка, диференціал, фільтр': 'Setpoint, differential, filter',
+  'Режим вентиляторів': 'Fan modes',
+  'Фаза, прогрес, статус': 'Phase, progress, status',
+  'Тип, інтервал, тривалість': 'Type, interval, duration',
+  'Фази, стабілізація': 'Phases, stabilization',
+  'Межі, затримки': 'Limits, delays',
+  'Таймінги, циклічність, моніторинг': 'Timing, cycling, monitoring',
+  'Активні аварії': 'Active alarms',
+  'Запуски, наробіток, duty cycle': 'Starts, runtime, duty cycle',
+  'Записів, подій, flash': 'Records, events, flash',
+  'Увімкнення, канали, інтервал': 'Enable, channels, interval',
+  'Стан та прошивка': 'Status and firmware',
+
+  // ── Card titles missing ─────────────────────────────────────
+  'Налаштування температури': 'Temperature Settings',
+  'Стан мережі': 'Network Status',
+  'Діагностика компресора': 'Compressor Diagnostics',
+  'Статус аварій': 'Alarm Status',
+  'Інформація про систему': 'System Information',
+  'Сервіс': 'Service',
+
+  // ── Protection: compressor descriptions ─────────────────────
+  'Мін. час роботи компресора (короткий цикл)': 'Min compressor run time (short cycle)',
+  'Макс. запусків компресора за годину': 'Max compressor starts per hour',
+  'Макс. безперервна робота компресора': 'Max continuous compressor run',
+  'Таймаут pulldown (відсутність зниження T)': 'Pulldown timeout (no temp drop)',
+  'Мін. зниження T за pulldown_timeout': 'Min temp drop in pulldown timeout',
+  'Макс. швидкість росту T при працюючому компресорі': 'Max temp rise rate during compressor run',
+  'Тривалість перевищення rate для аварії': 'Rate exceedance duration for alarm',
+  'Тривалість примусової зупинки компресора': 'Forced compressor stop duration',
+  'Макс. спроб перезапуску до блокіровки': 'Max restart attempts before lockout',
+  'Загальний наробіток компресора (години)': 'Total compressor runtime (hours)',
+  'Примусова зупинка компресора (forced off при continuous run)': 'Forced compressor stop (continuous run)',
+  'Аварійна зупинка (перманентна блокіровка після вичерпання спроб)': 'Emergency stop (permanent lockout)',
+  'Компресор працює безперервно занадто довго': 'Compressor running continuously too long',
+  'Компресор працює занадто короткими циклами': 'Compressor running in short cycles',
+  'Занадто багато запусків компресора за годину': 'Too many compressor starts per hour',
+  'Температура не знижується при працюючому компресорі': 'No temp drop during compressor run',
+  'Температура зростає при працюючому компресорі': 'Temp rising during compressor run',
+  'Лічильник послідовних continuous run спрацювань': 'Consecutive continuous run counter',
+  'Поточний час роботи компресора (сек, 0 якщо вимкнений)': 'Current compressor run time (sec)',
+
+  // ── Protection: alarm indicator labels ──────────────────────
+  'Короткий цикл': 'Short cycle',
+  'Часті запуски': 'Frequent starts',
+  'Безперервна робота': 'Continuous run',
+  'Примусова зупинка': 'Forced off',
+  'Блокіровка': 'Lockout',
+  'Швидкість T': 'Temp rate',
+
+  // ── Protection: diagnostics labels ──────────────────────────
+  'Мотогодини': 'Motor hours',
+  'Запусків/год': 'Starts/hour',
+  'Останній цикл': 'Last run',
+  'Останній простій': 'Last off',
+  'Тривалість останнього циклу роботи (сек)': 'Last run cycle duration (sec)',
+  'Тривалість останнього циклу простою (сек)': 'Last off cycle duration (sec)',
+  'Запусків компресора за останню годину': 'Compressor starts in last hour',
+  'Duty cycle компресора (0-100%)': 'Compressor duty cycle (0-100%)',
+  'Код найвищої аварії': 'Highest alarm code',
+
+  // ── Equipment: NTC/DS18B20 settings ─────────────────────────
+  'B-коефіцієнт NTC': 'NTC B coefficient',
+  'Послідовний резистор NTC': 'NTC series resistor',
+  'Номінальний опір NTC (25°C)': 'NTC nominal resistance (25°C)',
+  'Корекція показань DS18B20': 'DS18B20 offset',
+  'Використовується DS18B20 драйвер': 'Using DS18B20 driver',
+  'Використовується NTC драйвер': 'Using NTC driver',
+
+  // ── Equipment: availability ─────────────────────────────────
+  'Вхід нічного режиму доступний': 'Night mode input available',
+  'Реле відтайки доступне': 'Defrost relay available',
+  'Фактичний стан реле відтайки': 'Defrost relay state',
+
+  // ── Defrost: missing options/descriptions ───────────────────
+  'За температурою': 'By temperature',
+  'Завершення відтайки': 'Defrost termination',
+  'Запит на реле відтайки (до Equipment Manager)': 'Defrost relay request',
+  'Що показувати на дисплеї під час відтайки': 'Display during defrost',
+
+  // ── System/Network page labels ──────────────────────────────
+  'Версія прошивки': 'Firmware version',
+  'Версія плати': 'Board version',
+  'Номер збірки': 'Build number',
+  'Оновити прошивку': 'Update firmware',
+  'Сканувати мережі': 'Scan networks',
+  'Стан MQTT': 'MQTT status',
+  'Брокер': 'Broker',
+  'Аутентифікація': 'Authentication',
+  'Час': 'Time',
+  'Сертифікат': 'Certificate',
+  'Завантажити сертифікат': 'Upload certificate',
+  'Увімкнути AWS IoT': 'Enable AWS IoT',
+  'Завантажено': 'Loaded',
+  'Відсутній': 'Missing',
+  'Номер збірки': 'Build number',
+
+  // ── Units ───────────────────────────────────────────────────
+  'хв': 'min',
+  'с': 's',
+  'сек': 'sec',
+  'год': 'h',
+  '°C': '°C',
+  '°C/хв': '°C/min',
+  'Ом': 'Ohm',
+  'разів': 'times',
+  'B': 'B',
+
+  // ── Misc ────────────────────────────────────────────────────
+  'Датчик 1': 'Sensor 1',
+  'Датчик 2': 'Sensor 2',
+  'Pulldown': 'Pulldown',
+  'Duty cycle': 'Duty cycle',
+  'SSID': 'SSID',
+  'MQTT': 'MQTT',
+  'WiFi': 'WiFi',
+  'AWS IoT': 'AWS IoT',
+  'AWS IoT Core': 'AWS IoT Core',
+  'Endpoint': 'Endpoint',
+  'Thing Name': 'Thing Name',
+  'dBm': 'dBm',
+
+  // ── Indicator state labels ──────────────────────────────────
+  'ОБРИВ': 'BREAK',
+  'ВІДКРИТІ': 'OPEN',
+  'ЗАБЛОКОВАНО': 'LOCKED',
+  'FORCED OFF': 'FORCED OFF',
+
+  // ── Disabled hints ──────────────────────────────────────────
+  'Потрібен датчик випарника (evap_temp)': 'Requires evaporator sensor (evap_temp)',
+  'Потрібен дискретний вхід (night_input)': 'Requires digital input (night_input)',
+  'Потрібне реле відтайки (defrost_relay)': 'Requires defrost relay (defrost_relay)',
+
+  // ── Network subtitle ───────────────────────────────────────
+  'WiFi та MQTT': 'WiFi and MQTT',
+
+  // ── Misc ───────────────────────────────────────────────────
+  '—': '—',
 };

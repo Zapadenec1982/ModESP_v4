@@ -706,6 +706,7 @@ void MqttService::handle_incoming(const char* topic, int topic_len,
         tenant_[sizeof(tenant_) - 1] = '\0';
         nvs_helper::write_str("mqtt", "tenant", tenant_);
         prefix_[0] = '\0';  // Force prefix rebuild
+        nvs_helper::write_str("mqtt", "prefix", "");  // Clear saved prefix so reboot uses tenant
         build_default_prefix();
         ESP_LOGI(TAG, "Tenant set to '%s', reconnecting with prefix '%s'",
                  tenant_, prefix_);

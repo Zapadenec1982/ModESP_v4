@@ -16,7 +16,7 @@ function tr(text) {
 /** Translate widget options labels */
 function trOpts(options) {
   if (!options) return options;
-  return options.map(o => ({ ...o, label: tr(o.label) }));
+  return options.map(o => ({ ...o, label: tr(o.label), disabled_hint: tr(o.disabled_hint) }));
 }
 
 /** Pages array — auto-translated based on current language */
@@ -28,14 +28,19 @@ export const pages = derived([rawPages, language], ([$raw, $lang]) => {
     cards: (page.cards || []).map(card => ({
       ...card,
       title: tr(card.title),
+      subtitle: tr(card.subtitle),
       widgets: (card.widgets || []).map(w => ({
         ...w,
         description: tr(w.description),
         label: tr(w.label),
+        unit: tr(w.unit),
         on_label: tr(w.on_label),
         off_label: tr(w.off_label),
         confirm: tr(w.confirm),
+        disabled_hint: tr(w.disabled_hint),
+        disabled_reason: tr(w.disabled_reason),
         options: trOpts(w.options),
+        actions: w.actions ? w.actions.map(a => ({ ...a, label: tr(a.label), confirm: tr(a.confirm) })) : w.actions,
       }))
     })),
     roles: (page.roles || []).map(r => ({ ...r, label: tr(r.label) })),

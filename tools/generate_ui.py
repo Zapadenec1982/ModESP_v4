@@ -1716,6 +1716,40 @@ def main():
         print(f"  + {feat_path} (fallback — no bindings)")
         files_written += 1
 
+    # ── i18n translation completeness check ──────────────────
+    uien_path = PROJECT_ROOT / "webui" / "src" / "i18n" / "uiEn.js"
+    if uien_path.is_file():
+        import re as _re
+        with open(uien_path, encoding="utf-8") as _f:
+            _uien_keys = set(_re.findall(r"'([^']+)'\s*:", _f.read()))
+
+        _translatable = set()
+        for page in ui_schema.get("pages", []):
+            if page.get("title"): _translatable.add(page["title"])
+            for card in page.get("cards", []):
+                for field in ("title", "subtitle"):
+                    if card.get(field): _translatable.add(card[field])
+                for w in card.get("widgets", []):
+                    for field in ("description", "label", "unit", "on_label",
+                                  "off_label", "confirm", "disabled_hint"):
+                        if w.get(field): _translatable.add(w[field])
+                    for opt in w.get("options", []):
+                        if opt.get("label"): _translatable.add(opt["label"])
+                        if opt.get("disabled_hint"): _translatable.add(opt["disabled_hint"])
+
+        # Exclude dynamic binding descriptions (generated from board.json, not translatable)
+        _translatable = {s for s in _translatable
+                         if not any(s.startswith(p) for p in ('adc_', 'din_', 'ow_', 'relay_', 'i2c_', 'pwm_'))}
+        _missing = sorted(_translatable - _uien_keys)
+        if _missing:
+            print(f"\n  ⚠ {len(_missing)} untranslated strings (EN):")
+            for s in _missing[:15]:
+                print(f"    - {s}")
+            if len(_missing) > 15:
+                print(f"    ... and {len(_missing) - 15} more")
+        else:
+            print(f"\n  ✓ All UI strings have EN translations ({len(_translatable)} checked)")
+
     # Summary
     total_keys = sum(len(m.get("state", {})) for m in manifests)
     total_widgets = sum(
