@@ -1730,9 +1730,6 @@ def main():
             for f in i18n_dir.glob("*.json"):
                 available_langs.add(f.stem)
 
-    # Load system translations (generated separately)
-    sys_i18n_path = args.output_data / "i18n" / "system_en.json"
-
     for lang in sorted(available_langs):
         merged = {}
         # Merge per-module i18n files
@@ -1743,7 +1740,9 @@ def main():
                     mod_i18n = json.load(f)
                 merged.update(mod_i18n)
 
-        # Merge system strings
+        # Merge system strings (per-language)
+        sys_i18n_path = args.output_data / "i18n" / f"system_{lang}.json"
+        sys_i18n = {}
         if sys_i18n_path.is_file():
             with open(sys_i18n_path, "r", encoding="utf-8") as f:
                 sys_i18n = json.load(f)
@@ -1839,10 +1838,9 @@ def main():
                     if ua and ek in mod_en:
                         reverse[ua] = mod_en[ek]
 
-        # System strings (UA key → EN value)
-        if sys_i18n_path.is_file():
-            for ua_key, en_val in sys_i18n.items():
-                reverse[ua_key] = en_val
+        # System strings (UA key → translated value)
+        for ua_key, trans_val in sys_i18n.items():
+            reverse[ua_key] = trans_val
         # Merge reverse into strings (frontend uses this for card/page titles)
         merged.update(reverse)
 

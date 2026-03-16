@@ -1,7 +1,9 @@
 {
   "languages": [
     "uk",
-    "en"
+    "de",
+    "en",
+    "pl"
   ],
   "default": "uk"
 }

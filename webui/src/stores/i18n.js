@@ -1,12 +1,12 @@
 import { writable, derived } from 'svelte/store';
 import uk from '../i18n/uk.js';
 import en from '../i18n/en.js';
-// Future: import de from '../i18n/de.js';
-// Future: import pl from '../i18n/pl.js';
+import de from '../i18n/de.js';
+import pl from '../i18n/pl.js';
 
 const KEY = 'modesp-lang';
-const LANGS = ['uk', 'en'];  // add 'de', 'pl' when chrome dictionaries are ready
-const dicts = { uk, en };
+const LANGS = ['uk', 'en', 'de', 'pl'];
+const dicts = { uk, en, de, pl };
 
 function getInitial() {
   try {
