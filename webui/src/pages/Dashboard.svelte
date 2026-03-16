@@ -107,17 +107,17 @@
         </div>
         <div class="hero-badges">
           <div
-            class="badge {compressor
-              ? 'cyan'
-              : defrostActive
-                ? 'orange'
+            class="badge {defrostActive
+              ? 'orange'
+              : compressor
+                ? 'cyan'
                 : 'neutral'}"
           >
             <span class="bdot"></span>
-            {compressor
-              ? $t['dash.mode_cooling']
-              : defrostActive
-                ? $t['dash.mode_defrost']
+            {defrostActive
+              ? $t['dash.mode_defrost']
+              : compressor
+                ? $t['dash.mode_cooling']
                 : $t['dash.mode_idle']}
           </div>
           {#if nightActive}
