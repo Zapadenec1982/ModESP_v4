@@ -132,6 +132,7 @@ private:
     bool  defrost_active_      = false;
     bool  was_defrost_active_  = false;    // для детекції start/end transition
     bool  protection_lockout_  = false;
+    bool  was_lockout_active_  = false;    // для детекції lockout→clear transition
 
     // Кеш попередніх значень для уникнення зайвих version bumps
     float last_effective_sp_   = -999.0f;

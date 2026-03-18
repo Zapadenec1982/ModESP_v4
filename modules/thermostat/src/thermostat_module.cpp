@@ -305,7 +305,17 @@ void ThermostatModule::on_update(uint32_t dt_ms) {
         request_compressor(false);
         request_evap_fan(false);
         request_cond_fan(false);
+        was_lockout_active_ = true;
         return;
+    }
+
+    // 5a. Lockout щойно знявся — переввійти в поточний стан щоб reassert requests
+    if (was_lockout_active_) {
+        was_lockout_active_ = false;
+        State saved = state_;
+        state_ = State::STARTUP;    // force різний стан щоб enter_state не був no-op
+        enter_state(saved);
+        ESP_LOGI(TAG, "Lockout cleared — re-entered %s", state_name());
     }
 
     // 6. State machine
