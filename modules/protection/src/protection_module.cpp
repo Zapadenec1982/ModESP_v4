@@ -697,23 +697,33 @@ void ProtectionModule::check_reset_command() {
             door_.pending = false;
             door_.pending_ms = 0;
 
-            // Нові аварії
+            // Скидаємо alarm flags
             short_cycle_.active = false;
             rapid_cycle_.active = false;
             continuous_run_.active = false;
             pulldown_.active = false;
             rate_rise_.active = false;
+
+            // Скидаємо tracker state що спричинив аварії
+            // (без цього аварія спрацює повторно в наступному циклі)
+            comp_.current_run_ms = 0;
             comp_.short_cycle_count = 0;
             rate_.rising_duration_ms = 0;
+            rate_.ewma_rate = 0.0f;
+            rate_.initialized = false;
 
-            // Ескалація continuous run — скидаємо все
+            // Скидаємо ескалацію continuous run
             continuous_run_count_ = 0;
             forced_off_active_ = false;
             forced_off_timer_ms_ = 0;
             permanent_lockout_ = false;
             state_set("protection.continuous_run_count", static_cast<int32_t>(0));
 
-            ESP_LOGI(TAG, "All alarms reset (manual)");
+            // Негайно публікуємо зняття блокіровки
+            state_set("protection.compressor_blocked", false);
+            state_set("protection.lockout", false);
+
+            ESP_LOGI(TAG, "All alarms reset — tracker state cleared");
         }
         // Скидаємо trigger
         state_set("protection.reset_alarms", false);
