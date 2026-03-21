@@ -66,3 +66,17 @@ board.json + bindings.json ─┘
 - `generated/features_config.h`
 
 To change UI/state/MQTT: edit the **manifest**, then rebuild.
+
+## Secrets Protection (CRITICAL)
+
+**WHY:** Leaked credentials in git history are permanent — even force-push doesn't remove them from clones.
+
+| NEVER commit | Where it belongs |
+|---|---|
+| WiFi passwords, MQTT credentials | NVS (runtime config via WebUI) |
+| AWS IoT certs/keys (*.pem) | NVS partition "awscert" |
+| API tokens, `.env` files | `.gitignore` (already listed) |
+| Private keys, passwords in code | `Kconfig` with `default ""` + NVS |
+
+**Before every commit:** verify `git diff --cached` contains no secrets.
+If accidentally committed: notify user immediately, do NOT push.

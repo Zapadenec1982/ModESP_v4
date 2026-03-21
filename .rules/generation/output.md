@@ -3,9 +3,12 @@
 ## Git Convention (MANDATORY)
 
 After every completed task:
-1. `git add` — changed files
+1. `git add` — changed files only (never `git add .` blindly)
 2. `git commit` — conventional commits, Ukrainian body
-3. `git push origin main` — ALWAYS push, don't defer
+3. `git push origin main` — after confirmation
+
+### Pre-commit check
+Before EVERY commit: verify `git diff --cached` contains NO secrets (passwords, tokens, keys, certs, .env values).
 
 ### Commit message format
 ```
@@ -25,21 +28,21 @@ feat(module): short description
 | `docs` | Documentation only |
 | `test` | Tests only |
 | `chore` | Build, config, maintenance |
+| `release` | Version bump, release prep |
 
-## Documentation Updates (after each session)
+## Documentation Updates
 
 | File | What | When to update |
 |---|---|---|
-| `CLAUDE.md` | How the project works NOW | Architecture/API/structure changes |
-| `ACTION_PLAN.md` | What to do next | After each session |
-| `docs/CHANGELOG.md` | Full changelog | After each session |
-| `docs/06_roadmap.md` | Where we're going | Phase completion or priority change |
+| `docs/CHANGELOG.md` | Full changelog | After each feature/fix |
+| `docs/*.md` (01-12) | Technical docs per area | When that area changes |
+| `README.md` | Project overview + metrics | Major changes, release |
+| `docs/FEATURES.md` | Feature list | New features |
 
 ### Rule: Documentation = mirror of code
 - If feature works — it's documented
 - If feature doesn't work — not documented as ready
-- Roadmap = FUTURE, CLAUDE.md = PRESENT
-- Don't describe in CLAUDE.md what doesn't exist in code
+- Don't describe in docs what doesn't exist in code
 
 ## Build & Deploy
 
