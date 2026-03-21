@@ -72,10 +72,10 @@
 
 - **Phase 17b:** 2-рівнева ескалація continuous run в Protection Module:
   - Level 1 (compressor_blocked): примусова зупинка компресора, вентилятори продовжують працювати
-  - Level 2 (lockout): перманентна блокіровка після max_continuous_retries спрацювань, manual reset
+  - Level 2 (lockout): перманентна блокіровка після max_retries спрацювань, manual reset
   - Equipment Module: arbitration для compressor_blocked та lockout
-  - 2 нових persist параметри: forced_off_min, max_continuous_retries
-  - 4 нових state keys: lockout, compressor_blocked, continuous_run_count, forced_off_min, max_continuous_retries
+  - 2 нових persist параметри: forced_off_min, max_retries
+  - 4 нових state keys: lockout, compressor_blocked, continuous_run_count, forced_off_min, max_retries
   - 126 state keys, 63 STATE_META, 50 MQTT pub, 62 MQTT sub
   - 9 нових host tests (Phase 17b escalation)
 

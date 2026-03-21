@@ -116,6 +116,7 @@ private:
     BackfillProvider* backfill_provider_ = nullptr;
     bool backfill_active_ = false;
     bool backfill_check_pending_ = false;  // deferred from MQTT callback to on_update
+    bool disconnect_flush_pending_ = false; // flush DataLogger on disconnect
     bool backfill_temp_done_ = false;  // alternate temp/events
     bool backfill_events_done_ = false;
     void publish_backfill();

@@ -90,6 +90,9 @@ public:
     /// Стислі лічильники для /api/log/summary
     bool serialize_summary(char* buf, size_t buf_size) const;
 
+    /// Примусовий flush RAM буферів на flash (виклик при disconnect)
+    void flush_now();
+
     // ── BackfillProvider interface ──
     uint32_t get_unsync_temp_count() override;
     uint32_t read_unsync_temp(void* buf, uint32_t max_count) override;
@@ -97,6 +100,8 @@ public:
     uint32_t get_unsync_event_count() override;
     uint32_t read_unsync_events(void* buf, uint32_t max_count) override;
     void advance_event_sync(uint32_t count) override;
+    void on_disconnect_flush() override;
+    void save_sync_position() override;
 
 private:
     // ── RAM буфери ──

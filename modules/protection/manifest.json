@@ -113,7 +113,7 @@
         "protection.min_compressor_run", "protection.max_starts_hour",
         "protection.max_continuous_run", "protection.pulldown_timeout",
         "protection.pulldown_min_drop",
-        "protection.forced_off_period", "protection.max_continuous_retries"
+        "protection.forced_off_period", "protection.max_retries"
       ]
     },
     "rate_protection": {
@@ -402,7 +402,7 @@
       "persist": true,
       "description": "Тривалість примусової зупинки компресора"
     },
-    "protection.max_continuous_retries": {
+    "protection.max_retries": {
       "type": "int",
       "unit": "разів",
       "access": "readwrite",
@@ -457,7 +457,7 @@
       "protection.rate_duration",
       "protection.compressor_hours",
       "protection.forced_off_period",
-      "protection.max_continuous_retries"
+      "protection.max_retries"
     ]
   },
 
@@ -768,7 +768,7 @@
             "widget": "number_input"
           },
           {
-            "key": "protection.max_continuous_retries",
+            "key": "protection.max_retries",
             "widget": "number_input"
           }
         ]

@@ -597,6 +597,24 @@ void DataLoggerModule::on_stop() {
     ESP_LOGI(TAG, "Зупинено, фінальний flush виконано");
 }
 
+void DataLoggerModule::flush_now() {
+    if (temp_buf_.empty() && event_buf_.empty()) return;
+    ESP_LOGI(TAG, "Disconnect flush: %zu temp, %zu events",
+             temp_buf_.size(), event_buf_.size());
+    flush_to_flash();
+}
+
+void DataLoggerModule::on_disconnect_flush() {
+    flush_now();
+}
+
+void DataLoggerModule::save_sync_position() {
+    save_sync_pos();
+    ESP_LOGI(TAG, "Sync pos saved: temp=f%d@%lu, events=f%d@%lu",
+             temp_sync_file_, (unsigned long)temp_sync_offset_,
+             event_sync_file_, (unsigned long)event_sync_offset_);
+}
+
 // ── Backfill sync position (NVS persistence) ──
 
 void DataLoggerModule::load_sync_pos() {

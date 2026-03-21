@@ -127,6 +127,8 @@ void PersistService::restore_from_nvs() {
                 migrated++;
             } else {
                 ext_state_->set(meta.key, static_cast<int32_t>(meta.default_val));
+                ESP_LOGI(TAG, "Default %s = %ld (not in NVS)",
+                         meta.key, (long)static_cast<int32_t>(meta.default_val));
             }
         } else if (strcmp(meta.type, "bool") == 0) {
             bool val = false;

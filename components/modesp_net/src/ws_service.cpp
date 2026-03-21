@@ -330,6 +330,9 @@ void WsService::send_full_state_to(int fd) {
 
     ctx.pos += snprintf(buf + ctx.pos, ctx.remaining(), "}");
 
+    ESP_LOGI(TAG, "Full state serialized: %d bytes, buf remaining: %d",
+             (int)ctx.pos, (int)ctx.remaining());
+
     auto* send_ctx = static_cast<AsyncSendCtx*>(
         malloc(sizeof(AsyncSendCtx) + ctx.pos));
     if (!send_ctx) {

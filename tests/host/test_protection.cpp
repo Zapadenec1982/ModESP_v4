@@ -635,7 +635,7 @@ static void pr_setup_compressor_settings(modesp::SharedState& state,
     state.set("protection.max_rise_rate",       max_rate);
     state.set("protection.rate_duration",       static_cast<int32_t>(rate_dur_min));
     state.set("protection.forced_off_period",   static_cast<int32_t>(forced_off_min));
-    state.set("protection.max_continuous_retries", static_cast<int32_t>(max_retries));
+    state.set("protection.max_retries", static_cast<int32_t>(max_retries));
 }
 
 // -----------------------------------------------------------------------------

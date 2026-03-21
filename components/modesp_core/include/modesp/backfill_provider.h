@@ -31,6 +31,12 @@ public:
 
     /// Advance event sync position by count records
     virtual void advance_event_sync(uint32_t count) = 0;
+
+    /// Flush RAM buffers to flash (called on disconnect to preserve offline data)
+    virtual void on_disconnect_flush() {}
+
+    /// Persist sync position to NVS (called when backfill completes)
+    virtual void save_sync_position() {}
 };
 
 } // namespace modesp

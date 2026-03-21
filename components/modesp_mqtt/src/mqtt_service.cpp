@@ -204,10 +204,29 @@ void MqttService::on_update(uint32_t dt_ms) {
         publish_state();
     }
 
-    // Backfill: DISABLED for debugging — check if this causes data loss
-    // if (backfill_active_) {
-    //     publish_backfill();
-    // }
+    // Deferred disconnect flush (save RAM data to flash before reconnect)
+    if (disconnect_flush_pending_ && backfill_provider_) {
+        disconnect_flush_pending_ = false;
+        backfill_provider_->on_disconnect_flush();
+    }
+
+    // Deferred backfill check (moved from MQTT callback for stack safety)
+    if (backfill_check_pending_ && backfill_provider_) {
+        backfill_check_pending_ = false;
+        uint32_t unsync = backfill_provider_->get_unsync_temp_count()
+                        + backfill_provider_->get_unsync_event_count();
+        if (unsync > 0) {
+            backfill_active_ = true;
+            backfill_temp_done_ = false;
+            backfill_events_done_ = false;
+            ESP_LOGI(TAG, "Backfill: %lu unsync records to send",
+                     (unsigned long)unsync);
+        }
+    }
+
+    if (backfill_active_) {
+        publish_backfill();
+    }
 
     // One-shot: publish writable params on cloud request
     if (params_publish_requested_) {
@@ -370,6 +389,7 @@ void MqttService::mqtt_event_handler(void* args, esp_event_base_t base,
         case MQTT_EVENT_DISCONNECTED:
             self->connected_ = false;
             self->backfill_active_ = false;
+            self->disconnect_flush_pending_ = true;  // flush DataLogger RAM to flash
             self->reconnect_timer_ms_ = 0;  // Перший reconnect через reconnect_delay_ms_
             self->state_set("mqtt.connected", false);
             self->state_set("mqtt.status", "disconnected");
@@ -629,6 +649,7 @@ void MqttService::publish_backfill() {
     // Check if all done
     if (backfill_temp_done_ && backfill_events_done_) {
         backfill_active_ = false;
+        backfill_provider_->save_sync_position();  // persist to NVS
         // Signal completion to cloud
         char topic[96];
         snprintf(topic, sizeof(topic), "%s/backfill/done", prefix_);
