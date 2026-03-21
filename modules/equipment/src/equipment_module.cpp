@@ -182,13 +182,14 @@ void EquipmentModule::read_sensors() {
         if (sensor_air_->read(temp)) {
             if (!ema_air_init_) { ema_air_ = temp; ema_air_init_ = true; }
             else { ema_air_ += (temp - ema_air_) * alpha; }
-            // Округлення до 0.01°C — зменшує кількість version bumps
             air_temp_ = roundf(ema_air_ * 100.0f) / 100.0f;
             state_set("equipment.air_temp", air_temp_);
+        } else if (!sensor_air_->is_healthy()) {
+            // Sensor failed — publish NaN to prevent stale data in logs
+            // Keep ema_air_ intact for smooth restart when sensor recovers
+            air_temp_ = NAN;
+            state_set("equipment.air_temp", NAN);
         }
-        // is_healthy() враховує consecutive_errors (драйвер відстежує).
-        // read() повертає true з кешованим значенням навіть коли датчик офлайн,
-        // тому для статусу використовуємо is_healthy().
         state_set("equipment.sensor1_ok", sensor_air_->is_healthy());
     }
 
