@@ -80,14 +80,13 @@ bool EquipmentModule::on_init() {
     // Початковий стан в SharedState
     // Оптимістична ініціалізація: sensor_ok = true щоб Protection
     // не спрацьовувала ERR1/ERR2 до першого реального read().
-    // Sensor OK = false until first valid reading proves sensor is alive.
-    // After factory flash: no ROM → ERR1 forces operator to bind sensor manually.
-    // After reboot with bound sensor: ~2s grace → first valid read → OK.
+    // DS18B20 потребує ~750ms на першу конверсію — перші read() фейляться.
+    // Якщо датчик не сконфігурований — теж true (не помилка).
     state_set("equipment.air_temp", 0.0f);
     state_set("equipment.evap_temp", 0.0f);
     state_set("equipment.cond_temp", 0.0f);
-    state_set("equipment.sensor1_ok", false);
-    state_set("equipment.sensor2_ok", sensor_evap_ == nullptr);
+    state_set("equipment.sensor1_ok", true);
+    state_set("equipment.sensor2_ok", true);
     state_set("equipment.compressor", false);
     state_set("equipment.defrost_relay", false);
     state_set("equipment.evap_fan", false);
