@@ -227,6 +227,9 @@ void ThermostatModule::on_update(uint32_t dt_ms) {
     // 3. Дзеркало температури для UI/MQTT
     if (sensor1_ok_) {
         state_set("thermostat.temperature", current_temp_);
+    } else {
+        state_set("thermostat.temperature", NAN);
+        state_set("thermostat.display_temp", NAN);
     }
 
     // 3a. Нічний режим — обчислюємо effective_setpoint
