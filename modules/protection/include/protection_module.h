@@ -84,12 +84,14 @@ private:
         uint32_t pending_ms = 0;  // Час в pending стані
     };
 
-    // ── Існуючі монітори (5) ──
+    // ── Існуючі монітори (7) ──
     AlarmMonitor high_temp_;
     AlarmMonitor low_temp_;
     AlarmMonitor sensor1_;   // ERR1 — instant (без затримки)
     AlarmMonitor sensor2_;   // ERR2 — instant
     AlarmMonitor door_;
+    AlarmMonitor condenser_;        // Condenser high temp alarm
+    AlarmMonitor condenser_block_;  // Condenser block (manual reset)
 
     // ── Компресорні монітори (5) ──
     AlarmMonitor short_cycle_;
@@ -135,6 +137,7 @@ private:
     void update_low_temp(float temp, bool sensor_ok, uint32_t dt_ms);
     void update_sensor_alarm(AlarmMonitor& m, bool sensor_ok, const char* label);
     void update_door_alarm(bool door_open, uint32_t dt_ms);
+    void update_condenser_alarm(float cond_temp, bool has_cond, uint32_t dt_ms);
     void check_reset_command();
     void publish_alarms();
 
@@ -168,7 +171,16 @@ private:
     uint8_t  continuous_run_count_     = 0;          // Лічильник послідовних спрацювань
     bool     permanent_lockout_        = false;      // Перманентна блокіровка
     uint32_t forced_off_period_ms_     = 1200000;    // 20 хв default
-    int32_t  max_continuous_retries_   = 3;          // default 3
+    int32_t  max_retries_   = 3;          // default 3
+
+    // ── Condenser protection ──
+    float    condenser_alarm_limit_    = 80.0f;   // °C — alarm threshold
+    float    condenser_block_limit_    = 85.0f;   // °C — block threshold (manual reset)
+
+    // ── Door → compressor delay ──
+    uint32_t door_comp_delay_ms_      = 900000;   // 900s = 15 min (Danfoss C04 default)
+    bool     door_comp_blocked_       = false;     // compressor blocked by door
+    uint32_t door_comp_timer_ms_      = 0;
 
     // Post-defrost suppression (HAL + Rate alarm)
     bool     was_defrost_active_       = false;

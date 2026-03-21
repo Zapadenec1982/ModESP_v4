@@ -113,6 +113,8 @@ private:
         // Protection
         bool protection_lockout    = false;
         bool compressor_blocked    = false;
+        bool condenser_blocked     = false;
+        bool door_comp_blocked     = false;
     } req_;
 
     // Фінальний вихід (після арбітражу)

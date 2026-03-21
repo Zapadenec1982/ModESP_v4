@@ -70,6 +70,14 @@ void ProtectionModule::sync_settings() {
         read_int("protection.forced_off_period", 20)) * 60000;
     max_retries_ = read_int("protection.max_retries", 3);
 
+    // Condenser protection (like Danfoss A37/A54)
+    condenser_alarm_limit_ = read_float("protection.condenser_alarm_limit", 80.0f);
+    condenser_block_limit_ = read_float("protection.condenser_block_limit", 85.0f);
+
+    // Door → compressor delay (like Danfoss C04, seconds)
+    door_comp_delay_ms_ = static_cast<uint32_t>(
+        read_int("protection.door_comp_delay", 900)) * 1000;
+
     // compressor_hours_ читається ТІЛЬКИ в on_init() —
     // тут не перечитуємо, бо модуль акумулює значення між записами в state
 }
@@ -193,9 +201,32 @@ void ProtectionModule::on_update(uint32_t dt_ms) {
     }
     if (has_feature("door_protection")) {
         update_door_alarm(door_open, dt_ms);
+
+        // Door → compressor delay: block compressor if door open too long
+        if (door_open) {
+            door_comp_timer_ms_ += dt_ms;
+            if (door_comp_timer_ms_ >= door_comp_delay_ms_ && !door_comp_blocked_) {
+                door_comp_blocked_ = true;
+                ESP_LOGW(TAG, "DOOR COMPRESSOR BLOCK — open > %lu s",
+                         door_comp_delay_ms_ / 1000);
+            }
+        } else {
+            door_comp_timer_ms_ = 0;
+            if (door_comp_blocked_) {
+                door_comp_blocked_ = false;
+                ESP_LOGI(TAG, "Door compressor block cleared");
+            }
+        }
+        state_set("protection.door_comp_blocked", door_comp_blocked_);
     }
 
-    // 5. Компресорний захист
+    // 6. Condenser temperature protection
+    if (read_bool("equipment.has_cond_temp")) {
+        float cond_temp = read_float("equipment.cond_temp");
+        update_condenser_alarm(cond_temp, true, dt_ms);
+    }
+
+    // 7. Компресорний захист
     if (has_feature("compressor_protection")) {
         bool compressor_on = read_bool("equipment.compressor");
         update_compressor_tracker(compressor_on, air_temp, defrost, dt_ms);
@@ -680,6 +711,7 @@ void ProtectionModule::check_reset_command() {
         // Скидаємо всі активні аварії
         bool any = high_temp_.active || low_temp_.active || sensor1_.active ||
                    sensor2_.active || door_.active ||
+                   condenser_.active || condenser_block_.active ||
                    short_cycle_.active || rapid_cycle_.active ||
                    continuous_run_.active || pulldown_.active || rate_rise_.active ||
                    permanent_lockout_ || forced_off_active_;
@@ -696,6 +728,8 @@ void ProtectionModule::check_reset_command() {
             door_.active = false;
             door_.pending = false;
             door_.pending_ms = 0;
+            condenser_.active = false;
+            condenser_block_.active = false;
 
             // Скидаємо alarm flags
             short_cycle_.active = false;
@@ -757,12 +791,15 @@ void ProtectionModule::publish_alarms() {
     state_set("protection.continuous_run_alarm", continuous_run_.active);
     state_set("protection.pulldown_alarm", pulldown_.active);
     state_set("protection.rate_alarm", rate_rise_.active);
+    state_set("protection.condenser_alarm", condenser_.active);
+    state_set("protection.condenser_block", condenser_block_.active);
 
     // Зведений статус (включає ескалацію)
     bool any_alarm = high_temp_.active || low_temp_.active ||
                      sensor1_.active || sensor2_.active || door_.active ||
                      short_cycle_.active || rapid_cycle_.active ||
                      continuous_run_.active || pulldown_.active || rate_rise_.active ||
+                     condenser_.active || condenser_block_.active ||
                      permanent_lockout_ || forced_off_active_;
     state_set("protection.alarm_active", any_alarm);
 
@@ -773,8 +810,12 @@ void ProtectionModule::publish_alarms() {
         alarm_code_ = "lockout";
     } else if (forced_off_active_) {
         alarm_code_ = "comp_blocked";
+    } else if (condenser_block_.active) {
+        alarm_code_ = "cond_block";
     } else if (sensor1_.active) {
         alarm_code_ = "err1";
+    } else if (condenser_.active) {
+        alarm_code_ = "condenser";
     } else if (rate_rise_.active) {
         alarm_code_ = "rate_rise";
     } else if (high_temp_.active) {
@@ -797,6 +838,45 @@ void ProtectionModule::publish_alarms() {
         alarm_code_ = "none";
     }
     state_set("protection.alarm_code", alarm_code_);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Condenser temperature protection (like Danfoss A61/A80)
+// Two levels: alarm (warning) + block (compressor OFF, manual reset)
+// ═══════════════════════════════════════════════════════════════
+
+void ProtectionModule::update_condenser_alarm(float cond_temp, bool has_cond,
+                                               uint32_t dt_ms) {
+    if (!has_cond || std::isnan(cond_temp)) {
+        condenser_.active = false;
+        condenser_block_.active = false;
+        return;
+    }
+
+    // Level 1: alarm — condenser temp too high (check airflow)
+    if (cond_temp > condenser_alarm_limit_) {
+        if (!condenser_.active) {
+            condenser_.active = true;
+            ESP_LOGW(TAG, "CONDENSER ALARM — temp %.1f°C > %.1f°C limit",
+                     cond_temp, condenser_alarm_limit_);
+        }
+    } else {
+        if (condenser_.active && !manual_reset_) {
+            condenser_.active = false;
+            ESP_LOGI(TAG, "Condenser alarm cleared (temp %.1f°C)", cond_temp);
+        }
+    }
+
+    // Level 2: block — condenser temp critical (manual reset required)
+    if (cond_temp > condenser_block_limit_) {
+        if (!condenser_block_.active) {
+            condenser_block_.active = true;
+            ESP_LOGW(TAG, "CONDENSER BLOCK — temp %.1f°C > %.1f°C, compressor OFF!",
+                     cond_temp, condenser_block_limit_);
+        }
+    }
+    // Block requires manual reset — never auto-clears
+    // (like Danfoss A80: reset by r12 OFF→ON or power cycle)
 }
 
 // ═══════════════════════════════════════════════════════════════

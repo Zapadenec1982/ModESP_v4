@@ -255,6 +255,8 @@ void EquipmentModule::read_requests() {
     // Protection
     req_.protection_lockout  = read_bool("protection.lockout");
     req_.compressor_blocked  = read_bool("protection.compressor_blocked");
+    req_.condenser_blocked   = read_bool("protection.condenser_block");
+    req_.door_comp_blocked   = read_bool("protection.door_comp_blocked");
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -315,7 +317,7 @@ void EquipmentModule::apply_arbitration() {
 
     // === Protection compressor block (forced off при continuous run) ===
     // Тільки компресор OFF, вентилятори працюють за нормальним арбітражем.
-    if (req_.compressor_blocked) {
+    if (req_.compressor_blocked || req_.condenser_blocked || req_.door_comp_blocked) {
         out_.compressor = false;
     }
 
