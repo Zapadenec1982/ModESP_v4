@@ -191,9 +191,6 @@ void EquipmentModule::read_sensors() {
             state_set("equipment.air_temp", NAN);
         }
         state_set("equipment.sensor1_ok", sensor_air_->is_healthy());
-    } else {
-        // Sensor not bound (driver init failed or not configured)
-        state_set("equipment.sensor1_ok", false);
     }
 
     // Датчик випарника (опціональний)
