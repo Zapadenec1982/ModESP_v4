@@ -184,7 +184,7 @@ bool DS18B20Driver::read(float& value) {
 }
 
 bool DS18B20Driver::is_healthy() const {
-    return has_valid_reading_ && consecutive_errors_ < MAX_CONSECUTIVE_ERRORS;
+    return consecutive_errors_ < MAX_CONSECUTIVE_ERRORS;
 }
 
 // ═══════════════════════════════════════════════════════════════
