@@ -68,7 +68,7 @@ void ProtectionModule::sync_settings() {
     // Ескалація continuous run
     forced_off_period_ms_ = static_cast<uint32_t>(
         read_int("protection.forced_off_period", 20)) * 60000;
-    max_continuous_retries_ = read_int("protection.max_continuous_retries", 3);
+    max_retries_ = read_int("protection.max_retries", 3);
 
     // compressor_hours_ читається ТІЛЬКИ в on_init() —
     // тут не перечитуємо, бо модуль акумулює значення між записами в state
@@ -472,14 +472,14 @@ void ProtectionModule::update_compressor_tracker(bool compressor_on, float temp,
             forced_off_active_ = false;
             continuous_run_count_++;
 
-            if (continuous_run_count_ >= static_cast<uint8_t>(max_continuous_retries_)) {
+            if (continuous_run_count_ >= static_cast<uint8_t>(max_retries_)) {
                 // Рівень 2: перманентна блокіровка
                 permanent_lockout_ = true;
                 ESP_LOGW(TAG, "CONTINUOUS RUN LOCKOUT: %u retries — permanent lockout",
                          continuous_run_count_);
             } else {
                 ESP_LOGI(TAG, "Forced off ended (count=%u/%ld) — releasing",
-                         continuous_run_count_, max_continuous_retries_);
+                         continuous_run_count_, max_retries_);
 
                 // Перевірка обмерзання: якщо T_evap < demand_temp → тригер відтайки
                 if (read_bool("equipment.has_evap_temp")) {
@@ -708,6 +708,11 @@ void ProtectionModule::check_reset_command() {
             // (без цього аварія спрацює повторно в наступному циклі)
             comp_.current_run_ms = 0;
             comp_.short_cycle_count = 0;
+            memset(comp_.start_timestamps, 0, sizeof(comp_.start_timestamps));
+            comp_.start_head = 0;
+            comp_.start_count = 0;
+            comp_.total_on_1h_ms = 0;
+            comp_.window_ms = 0;
             rate_.rising_duration_ms = 0;
             rate_.ewma_rate = 0.0f;
             rate_.initialized = false;
