@@ -179,6 +179,7 @@ void DS18B20Driver::update(uint32_t dt_ms) {
 
 bool DS18B20Driver::read(float& value) {
     if (!has_valid_reading_) return false;
+    if (!is_healthy()) return false;
     value = current_temp_;
     return true;
 }
