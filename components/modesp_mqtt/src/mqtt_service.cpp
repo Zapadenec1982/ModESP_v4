@@ -14,6 +14,7 @@
 #include "mqtt_topics.h"
 #include "state_meta.h"
 
+#include <cmath>
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_crt_bundle.h"
@@ -400,8 +401,9 @@ static bool is_alarm_topic(const char* key) {
 
 int MqttService::format_value(const StateValue& val, char* buf, size_t buf_size) {
     if (etl::holds_alternative<float>(val)) {
-        return snprintf(buf, buf_size, "%.2f",
-                        static_cast<double>(etl::get<float>(val)));
+        float fv = etl::get<float>(val);
+        if (std::isnan(fv) || std::isinf(fv)) return 0;  // skip NaN/Inf
+        return snprintf(buf, buf_size, "%.2f", static_cast<double>(fv));
     } else if (etl::holds_alternative<int32_t>(val)) {
         return snprintf(buf, buf_size, "%ld",
                         (long)etl::get<int32_t>(val));

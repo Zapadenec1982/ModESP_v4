@@ -11,6 +11,7 @@
 
 #include <cstdio>
 #include <cstring>
+#include <cmath>
 
 static const char* TAG = "WS";
 
@@ -53,9 +54,15 @@ static void ws_serialize_entry(const StateKey& key, const StateValue& value, voi
     ctx->first = false;
 
     if (etl::holds_alternative<float>(value)) {
-        ctx->pos += snprintf(ctx->buf + ctx->pos, ctx->remaining(),
-                             "%s\"%s\":%.2f", sep, key.c_str(),
-                             static_cast<double>(etl::get<float>(value)));
+        float fv = etl::get<float>(value);
+        if (std::isnan(fv) || std::isinf(fv)) {
+            ctx->pos += snprintf(ctx->buf + ctx->pos, ctx->remaining(),
+                                 "%s\"%s\":null", sep, key.c_str());
+        } else {
+            ctx->pos += snprintf(ctx->buf + ctx->pos, ctx->remaining(),
+                                 "%s\"%s\":%.2f", sep, key.c_str(),
+                                 static_cast<double>(fv));
+        }
     } else if (etl::holds_alternative<int32_t>(value)) {
         ctx->pos += snprintf(ctx->buf + ctx->pos, ctx->remaining(),
                              "%s\"%s\":%ld", sep, key.c_str(),

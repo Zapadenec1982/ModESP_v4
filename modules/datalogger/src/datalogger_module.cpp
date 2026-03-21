@@ -20,6 +20,7 @@
 #include <sys/stat.h>
 #include <cstdio>
 #include <cstring>
+#include <cmath>
 #include <ctime>
 
 static const char* TAG = "DataLogger";
@@ -201,8 +202,9 @@ void DataLoggerModule::on_update(uint32_t dt_ms) {
         for (int i = 0; i < MAX_CHANNELS; i++) {
             const auto& def = CHANNEL_DEFS[i];
             if (ch_enabled_[i] && def.state_key) {
-                float val = read_float(def.state_key, 0.0f);
-                rec.ch[i] = static_cast<int16_t>(val * 10.0f);
+                float val = read_float(def.state_key, NAN);
+                rec.ch[i] = std::isnan(val) ? TEMP_NO_DATA
+                          : static_cast<int16_t>(val * 10.0f);
             } else {
                 rec.ch[i] = TEMP_NO_DATA;
             }

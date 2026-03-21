@@ -14,6 +14,7 @@
 #include "ds18b20_driver.h"
 #include "datalogger_module.h"
 
+#include <cmath>
 #include "esp_log.h"
 #include "esp_system.h"
 #include "nvs_flash.h"
@@ -231,9 +232,15 @@ static void serialize_state_entry(const StateKey& key, const StateValue& value, 
     ctx->first = false;
 
     if (etl::holds_alternative<float>(value)) {
-        ctx->pos += snprintf(ctx->buf + ctx->pos, ctx->remaining(),
-                             "%s\"%s\":%.2f", sep, key.c_str(),
-                             static_cast<double>(etl::get<float>(value)));
+        float fv = etl::get<float>(value);
+        if (std::isnan(fv) || std::isinf(fv)) {
+            ctx->pos += snprintf(ctx->buf + ctx->pos, ctx->remaining(),
+                                 "%s\"%s\":null", sep, key.c_str());
+        } else {
+            ctx->pos += snprintf(ctx->buf + ctx->pos, ctx->remaining(),
+                                 "%s\"%s\":%.2f", sep, key.c_str(),
+                                 static_cast<double>(fv));
+        }
     } else if (etl::holds_alternative<int32_t>(value)) {
         ctx->pos += snprintf(ctx->buf + ctx->pos, ctx->remaining(),
                              "%s\"%s\":%ld", sep, key.c_str(),
