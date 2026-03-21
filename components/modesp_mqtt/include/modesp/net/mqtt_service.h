@@ -13,6 +13,7 @@
 #pragma once
 
 #include "modesp/base_module.h"
+#include "modesp/backfill_provider.h"
 #include "esp_http_server.h"
 #include "mqtt_client.h"
 
@@ -35,6 +36,9 @@ public:
     // Public API
     bool is_connected() const { return connected_; }
     bool is_enabled() const { return enabled_; }
+
+    /// Register a backfill provider (e.g. DataLogger) for post-reconnect sync
+    void set_backfill_provider(BackfillProvider* p) { backfill_provider_ = p; }
 
     bool save_config(const char* broker, uint16_t port,
                      const char* user, const char* pass,
@@ -107,6 +111,14 @@ private:
 
     // HA Auto-Discovery
     bool ha_discovery_pending_ = false;
+
+    // Backfill (post-reconnect historical data sync)
+    BackfillProvider* backfill_provider_ = nullptr;
+    bool backfill_active_ = false;
+    bool backfill_check_pending_ = false;  // deferred from MQTT callback to on_update
+    bool backfill_temp_done_ = false;  // alternate temp/events
+    bool backfill_events_done_ = false;
+    void publish_backfill();
 
     // Форматування значення для MQTT payload (на стеку)
     static int format_value(const StateValue& val, char* buf, size_t buf_size);

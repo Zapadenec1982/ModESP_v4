@@ -8,6 +8,7 @@
  */
 
 #include "modesp/base_module.h"
+#include "modesp/backfill_provider.h"
 #include <esp_http_server.h>
 #include <etl/vector.h>
 #include <cstdint>
@@ -75,7 +76,7 @@ struct EventRecord {
 };
 static_assert(sizeof(EventRecord) == 8, "EventRecord must be 8 bytes");
 
-class DataLoggerModule : public modesp::BaseModule {
+class DataLoggerModule : public modesp::BaseModule, public modesp::BackfillProvider {
 public:
     DataLoggerModule();
 
@@ -88,6 +89,14 @@ public:
 
     /// Стислі лічильники для /api/log/summary
     bool serialize_summary(char* buf, size_t buf_size) const;
+
+    // ── BackfillProvider interface ──
+    uint32_t get_unsync_temp_count() override;
+    uint32_t read_unsync_temp(void* buf, uint32_t max_count) override;
+    void advance_temp_sync(uint32_t count) override;
+    uint32_t get_unsync_event_count() override;
+    uint32_t read_unsync_events(void* buf, uint32_t max_count) override;
+    void advance_event_sync(uint32_t count) override;
 
 private:
     // ── RAM буфери ──
@@ -122,6 +131,19 @@ private:
     uint32_t temp_count_  = 0;
     uint32_t event_count_ = 0;
     uint32_t flash_used_kb_ = 0;
+
+    // ── Backfill sync state ──
+    uint32_t temp_sync_offset_ = 0;
+    uint8_t  temp_sync_file_ = 1;
+    uint32_t event_sync_offset_ = 0;
+    uint8_t  event_sync_file_ = 1;
+    uint32_t nvs_write_count_ = 0;
+
+    void load_sync_pos();
+    void save_sync_pos();
+    uint32_t count_records_in_file(const char* path, size_t record_size) const;
+    uint32_t read_records_from_file(const char* path, size_t record_size,
+                                     uint32_t byte_offset, void* buf, uint32_t max_count);
 
     // ── Внутрішні методи ──
     void sync_settings();

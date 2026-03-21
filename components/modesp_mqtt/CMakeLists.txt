@@ -7,3 +7,6 @@ idf_component_register(
 
 # Доступ до згенерованих headers (mqtt_topics.h, state_meta.h)
 target_include_directories(${COMPONENT_LIB} PRIVATE "${CMAKE_SOURCE_DIR}/generated")
+
+# DataLogger types (TempRecord, EventRecord) for backfill publish
+target_include_directories(${COMPONENT_LIB} PRIVATE "${CMAKE_SOURCE_DIR}/modules/datalogger/include")

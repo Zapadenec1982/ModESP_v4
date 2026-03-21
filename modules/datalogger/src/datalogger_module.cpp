@@ -14,6 +14,7 @@
  */
 
 #include "datalogger_module.h"
+#include "modesp/services/nvs_helper.h"
 #include <esp_log.h>
 #include <esp_timer.h>
 #include <sys/stat.h>
@@ -101,6 +102,7 @@ bool DataLoggerModule::on_init() {
     migrate_old_format();
 
     sync_settings();
+    load_sync_pos();
 
     // Порахувати існуючі записи після ребуту
     struct stat st;
@@ -589,5 +591,136 @@ bool DataLoggerModule::serialize_summary(char* buf, size_t buf_size) const {
 
 void DataLoggerModule::on_stop() {
     flush_to_flash();
+    save_sync_pos();
     ESP_LOGI(TAG, "Зупинено, фінальний flush виконано");
+}
+
+// ── Backfill sync position (NVS persistence) ──
+
+void DataLoggerModule::load_sync_pos() {
+    int32_t v = 0;
+    if (modesp::nvs_helper::read_i32("dlog", "tsync", v))
+        temp_sync_offset_ = static_cast<uint32_t>(v);
+    int32_t f = 1;
+    if (modesp::nvs_helper::read_i32("dlog", "tsync_f", f))
+        temp_sync_file_ = static_cast<uint8_t>(f);
+
+    if (modesp::nvs_helper::read_i32("dlog", "esync", v))
+        event_sync_offset_ = static_cast<uint32_t>(v);
+    if (modesp::nvs_helper::read_i32("dlog", "esync_f", f))
+        event_sync_file_ = static_cast<uint8_t>(f);
+
+    struct stat st;
+    const char* tfile = (temp_sync_file_ == 0) ? TEMP_OLD_FILE : TEMP_FILE;
+    if (stat(tfile, &st) != 0 || temp_sync_offset_ > static_cast<uint32_t>(st.st_size)) {
+        temp_sync_offset_ = 0;
+        temp_sync_file_ = (stat(TEMP_OLD_FILE, &st) == 0 && st.st_size > 0) ? 0 : 1;
+    }
+
+    const char* efile = (event_sync_file_ == 0) ? EVENT_OLD_FILE : EVENT_FILE;
+    if (stat(efile, &st) != 0 || event_sync_offset_ > static_cast<uint32_t>(st.st_size)) {
+        event_sync_offset_ = 0;
+        event_sync_file_ = (stat(EVENT_OLD_FILE, &st) == 0 && st.st_size > 0) ? 0 : 1;
+    }
+
+    ESP_LOGI(TAG, "Sync pos loaded: temp=f%d@%lu, events=f%d@%lu",
+             temp_sync_file_, (unsigned long)temp_sync_offset_,
+             event_sync_file_, (unsigned long)event_sync_offset_);
+}
+
+void DataLoggerModule::save_sync_pos() {
+    modesp::nvs_helper::write_i32("dlog", "tsync", static_cast<int32_t>(temp_sync_offset_));
+    modesp::nvs_helper::write_i32("dlog", "tsync_f", static_cast<int32_t>(temp_sync_file_));
+    modesp::nvs_helper::write_i32("dlog", "esync", static_cast<int32_t>(event_sync_offset_));
+    modesp::nvs_helper::write_i32("dlog", "esync_f", static_cast<int32_t>(event_sync_file_));
+}
+
+uint32_t DataLoggerModule::count_records_in_file(const char* path, size_t record_size) const {
+    struct stat st;
+    if (stat(path, &st) != 0) return 0;
+    return static_cast<uint32_t>(st.st_size) / record_size;
+}
+
+uint32_t DataLoggerModule::read_records_from_file(const char* path, size_t record_size,
+                                                    uint32_t byte_offset, void* buf,
+                                                    uint32_t max_count) {
+    FILE* fp = fopen(path, "rb");
+    if (!fp) return 0;
+    fseek(fp, 0, SEEK_END);
+    long file_size = ftell(fp);
+    if (byte_offset >= static_cast<uint32_t>(file_size)) { fclose(fp); return 0; }
+    fseek(fp, byte_offset, SEEK_SET);
+    uint32_t available = (static_cast<uint32_t>(file_size) - byte_offset) / record_size;
+    uint32_t to_read = (available < max_count) ? available : max_count;
+    size_t got = fread(buf, record_size, to_read, fp);
+    fclose(fp);
+    return static_cast<uint32_t>(got);
+}
+
+uint32_t DataLoggerModule::get_unsync_temp_count() {
+    uint32_t total = 0;
+    struct stat st;
+    if (temp_sync_file_ == 0) {
+        if (stat(TEMP_OLD_FILE, &st) == 0 && static_cast<uint32_t>(st.st_size) > temp_sync_offset_)
+            total += (static_cast<uint32_t>(st.st_size) - temp_sync_offset_) / sizeof(TempRecord);
+        if (stat(TEMP_FILE, &st) == 0)
+            total += static_cast<uint32_t>(st.st_size) / sizeof(TempRecord);
+    } else {
+        if (stat(TEMP_FILE, &st) == 0 && static_cast<uint32_t>(st.st_size) > temp_sync_offset_)
+            total += (static_cast<uint32_t>(st.st_size) - temp_sync_offset_) / sizeof(TempRecord);
+    }
+    return total;
+}
+
+uint32_t DataLoggerModule::read_unsync_temp(void* buf, uint32_t max_count) {
+    const char* file = (temp_sync_file_ == 0) ? TEMP_OLD_FILE : TEMP_FILE;
+    return read_records_from_file(file, sizeof(TempRecord), temp_sync_offset_, buf, max_count);
+}
+
+void DataLoggerModule::advance_temp_sync(uint32_t count) {
+    temp_sync_offset_ += count * sizeof(TempRecord);
+    struct stat st;
+    const char* file = (temp_sync_file_ == 0) ? TEMP_OLD_FILE : TEMP_FILE;
+    if (stat(file, &st) != 0 || temp_sync_offset_ >= static_cast<uint32_t>(st.st_size)) {
+        if (temp_sync_file_ == 0) {
+            temp_sync_file_ = 1;
+            temp_sync_offset_ = 0;
+            ESP_LOGI(TAG, "Backfill: temp .old complete, switching to current");
+        }
+    }
+    if (++nvs_write_count_ % 10 == 0) save_sync_pos();
+}
+
+uint32_t DataLoggerModule::get_unsync_event_count() {
+    uint32_t total = 0;
+    struct stat st;
+    if (event_sync_file_ == 0) {
+        if (stat(EVENT_OLD_FILE, &st) == 0 && static_cast<uint32_t>(st.st_size) > event_sync_offset_)
+            total += (static_cast<uint32_t>(st.st_size) - event_sync_offset_) / sizeof(EventRecord);
+        if (stat(EVENT_FILE, &st) == 0)
+            total += static_cast<uint32_t>(st.st_size) / sizeof(EventRecord);
+    } else {
+        if (stat(EVENT_FILE, &st) == 0 && static_cast<uint32_t>(st.st_size) > event_sync_offset_)
+            total += (static_cast<uint32_t>(st.st_size) - event_sync_offset_) / sizeof(EventRecord);
+    }
+    return total;
+}
+
+uint32_t DataLoggerModule::read_unsync_events(void* buf, uint32_t max_count) {
+    const char* file = (event_sync_file_ == 0) ? EVENT_OLD_FILE : EVENT_FILE;
+    return read_records_from_file(file, sizeof(EventRecord), event_sync_offset_, buf, max_count);
+}
+
+void DataLoggerModule::advance_event_sync(uint32_t count) {
+    event_sync_offset_ += count * sizeof(EventRecord);
+    struct stat st;
+    const char* file = (event_sync_file_ == 0) ? EVENT_OLD_FILE : EVENT_FILE;
+    if (stat(file, &st) != 0 || event_sync_offset_ >= static_cast<uint32_t>(st.st_size)) {
+        if (event_sync_file_ == 0) {
+            event_sync_file_ = 1;
+            event_sync_offset_ = 0;
+            ESP_LOGI(TAG, "Backfill: events .old complete, switching to current");
+        }
+    }
+    if (++nvs_write_count_ % 10 == 0) save_sync_pos();
 }

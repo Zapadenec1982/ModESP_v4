@@ -193,6 +193,7 @@ extern "C" void app_main(void)
     // ── Step 4: Register WiFi + MQTT (HIGH priority) ──
     app.modules().register_module(wifi_service);
     cloud_service.set_state(&app.state());
+    cloud_service.set_backfill_provider(&datalogger);
     app.modules().register_module(cloud_service);
 
     // ── Step 5: Initialize HAL (GPIO setup) ──

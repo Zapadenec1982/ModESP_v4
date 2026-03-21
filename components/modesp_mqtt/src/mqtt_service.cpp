@@ -9,6 +9,7 @@
 #include "modesp/shared_state.h"
 #include "modesp/services/nvs_helper.h"
 #include "modesp/types.h"
+#include "datalogger_module.h"  // TempRecord, EventRecord for backfill
 
 #include "mqtt_topics.h"
 #include "state_meta.h"
@@ -202,6 +203,11 @@ void MqttService::on_update(uint32_t dt_ms) {
         publish_state();
     }
 
+    // Backfill: DISABLED for debugging — check if this causes data loss
+    // if (backfill_active_) {
+    //     publish_backfill();
+    // }
+
     // One-shot: publish writable params on cloud request
     if (params_publish_requested_) {
         params_publish_requested_ = false;
@@ -354,11 +360,15 @@ void MqttService::mqtt_event_handler(void* args, esp_event_base_t base,
 
             // HA Auto-Discovery — відкладаємо до on_update() (більший стек)
             self->ha_discovery_pending_ = true;
+
+            // Backfill check deferred to on_update() (bigger stack)
+            self->backfill_check_pending_ = true;
             break;
         }
 
         case MQTT_EVENT_DISCONNECTED:
             self->connected_ = false;
+            self->backfill_active_ = false;
             self->reconnect_timer_ms_ = 0;  // Перший reconnect через reconnect_delay_ms_
             self->state_set("mqtt.connected", false);
             self->state_set("mqtt.status", "disconnected");
@@ -548,6 +558,81 @@ void MqttService::publish_heartbeat() {
         rssi);
 
     esp_mqtt_client_publish(client_, topic, buf, len, 0, 0);
+}
+
+// ── Backfill: send historical data after reconnect ─────────────
+
+void MqttService::publish_backfill() {
+    if (!connected_ || !client_ || !backfill_provider_) {
+        backfill_active_ = false;
+        return;
+    }
+
+    // Alternate between temp and events batches for balanced sync
+    if (!backfill_temp_done_) {
+        // ── Temp records batch (10 per batch, ~63B each = ~640B JSON) ──
+        TempRecord batch[10];
+        uint32_t count = backfill_provider_->read_unsync_temp(batch, 10);
+        if (count > 0) {
+            char json[700];
+            int pos = snprintf(json, sizeof(json), "{\"v\":1,\"r\":[");
+            for (uint32_t i = 0; i < count; i++) {
+                if (i > 0) json[pos++] = ',';
+                pos += snprintf(json + pos, sizeof(json) - pos,
+                    "{\"t\":%lu,\"a\":%d,\"e\":%d,\"c\":%d,\"s\":%d}",
+                    (unsigned long)batch[i].timestamp,
+                    (int)batch[i].ch[0], (int)batch[i].ch[1],
+                    (int)batch[i].ch[2], (int)batch[i].ch[3]);
+            }
+            pos += snprintf(json + pos, sizeof(json) - pos, "]}");
+
+            char topic[96];
+            snprintf(topic, sizeof(topic), "%s/backfill", prefix_);
+            esp_mqtt_client_publish(client_, topic, json, pos, 1, 0);
+            backfill_provider_->advance_temp_sync(count);
+
+            ESP_LOGD(TAG, "Backfill: sent %lu temp records", (unsigned long)count);
+        } else {
+            backfill_temp_done_ = true;
+            ESP_LOGI(TAG, "Backfill: temp records complete");
+        }
+    } else if (!backfill_events_done_) {
+        // ── Event records batch (10 per batch, ~35B each = ~370B JSON) ──
+        EventRecord batch[10];
+        uint32_t count = backfill_provider_->read_unsync_events(batch, 10);
+        if (count > 0) {
+            char json[500];
+            int pos = snprintf(json, sizeof(json), "{\"v\":1,\"e\":[");
+            for (uint32_t i = 0; i < count; i++) {
+                if (i > 0) json[pos++] = ',';
+                pos += snprintf(json + pos, sizeof(json) - pos,
+                    "{\"t\":%lu,\"ty\":%u}",
+                    (unsigned long)batch[i].timestamp,
+                    (unsigned)batch[i].event_type);
+            }
+            pos += snprintf(json + pos, sizeof(json) - pos, "]}");
+
+            char topic[96];
+            snprintf(topic, sizeof(topic), "%s/backfill/events", prefix_);
+            esp_mqtt_client_publish(client_, topic, json, pos, 1, 0);
+            backfill_provider_->advance_event_sync(count);
+
+            ESP_LOGD(TAG, "Backfill: sent %lu event records", (unsigned long)count);
+        } else {
+            backfill_events_done_ = true;
+            ESP_LOGI(TAG, "Backfill: event records complete");
+        }
+    }
+
+    // Check if all done
+    if (backfill_temp_done_ && backfill_events_done_) {
+        backfill_active_ = false;
+        // Signal completion to cloud
+        char topic[96];
+        snprintf(topic, sizeof(topic), "%s/backfill/done", prefix_);
+        esp_mqtt_client_publish(client_, topic, "", 0, 1, 0);
+        ESP_LOGI(TAG, "Backfill complete, signal sent");
+    }
 }
 
 // ── Handle incoming commands ────────────────────────────────────

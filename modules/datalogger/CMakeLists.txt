@@ -3,5 +3,5 @@
 idf_component_register(
     SRCS "src/datalogger_module.cpp"
     INCLUDE_DIRS "include"
-    REQUIRES modesp_core esp_http_server esp_timer
+    REQUIRES modesp_core modesp_services esp_http_server esp_timer
 )
