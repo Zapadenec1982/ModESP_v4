@@ -370,9 +370,6 @@ Specializing in industrial IoT: ESP32 firmware, real-time control systems, cloud
 - Full IoT pipeline: firmware → MQTT/TLS → cloud → WebUI
 - 491 firmware tests + 130+ cloud tests in production
 
-[![GitHub](https://img.shields.io/badge/GitHub-Zapadenec1982-181717?logo=github)](https://github.com/Zapadenec1982)
-[![Email](https://img.shields.io/badge/Email-tepliuk.yurii%40gmail.com-D14836?logo=gmail)](mailto:tepliuk.yurii@gmail.com)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-Yurii%20Tepliuk-0A66C2?logo=linkedin)](https://www.linkedin.com/in/yurii-tepliuk/)
 
 ---
 
