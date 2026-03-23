@@ -376,6 +376,4 @@ Specializing in industrial IoT: ESP32 firmware, real-time control systems, cloud
 
 ---
 
-**For partnership inquiries:** [tepliuk.yurii@gmail.com](mailto:tepliuk.yurii@gmail.com)
-
 *ModESP v4 — industrial refrigeration control on a $4 microcontroller.*
