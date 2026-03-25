@@ -412,6 +412,55 @@
       "default": 3,
       "persist": true,
       "description": "Макс. спроб перезапуску до блокіровки"
+    },
+
+    "protection.condenser_alarm": {
+      "type": "bool",
+      "access": "read",
+      "description": "Температура конденсатора занадто висока"
+    },
+    "protection.condenser_block": {
+      "type": "bool",
+      "access": "read",
+      "description": "Блокування компресора — перегрів конденсатора"
+    },
+    "protection.condenser_alarm_limit": {
+      "type": "float",
+      "unit": "°C",
+      "access": "readwrite",
+      "min": 40,
+      "max": 120,
+      "step": 1,
+      "default": 80,
+      "persist": true,
+      "description": "Ліміт аварії конденсатора"
+    },
+    "protection.condenser_block_limit": {
+      "type": "float",
+      "unit": "°C",
+      "access": "readwrite",
+      "min": 50,
+      "max": 130,
+      "step": 1,
+      "default": 85,
+      "persist": true,
+      "description": "Ліміт блокування конденсатора (ручне скидання)"
+    },
+    "protection.door_comp_blocked": {
+      "type": "bool",
+      "access": "read",
+      "description": "Компресор вимкнений — двері відкриті занадто довго"
+    },
+    "protection.door_comp_delay": {
+      "type": "int",
+      "unit": "с",
+      "access": "readwrite",
+      "min": 0,
+      "max": 900,
+      "step": 30,
+      "default": 900,
+      "persist": true,
+      "description": "Затримка вимкнення компресора при відкритих дверях"
     }
   },
 
@@ -437,7 +486,10 @@
       "protection.last_cycle_off",
       "protection.compressor_hours",
       "protection.compressor_blocked",
-      "protection.continuous_run_count"
+      "protection.continuous_run_count",
+      "protection.condenser_alarm",
+      "protection.condenser_block",
+      "protection.door_comp_blocked"
     ],
     "subscribe": [
       "protection.high_limit",
@@ -457,7 +509,10 @@
       "protection.rate_duration",
       "protection.compressor_hours",
       "protection.forced_off_period",
-      "protection.max_retries"
+      "protection.max_retries",
+      "protection.condenser_alarm_limit",
+      "protection.condenser_block_limit",
+      "protection.door_comp_delay"
     ]
   },
 
@@ -615,6 +670,36 @@
             "off_color": "#64748b"
           },
           {
+            "key": "protection.condenser_alarm",
+            "widget": "indicator",
+            "label": "Конденсатор",
+            "on_label": "ПЕРЕГРІВ",
+            "off_label": "Норма",
+            "on_color": "#f59e0b",
+            "off_color": "#64748b",
+            "visible_when": {"key": "equipment.has_cond_temp", "eq": true}
+          },
+          {
+            "key": "protection.condenser_block",
+            "widget": "indicator",
+            "label": "Блок. конденсатора",
+            "on_label": "ЗАБЛОКОВАНО",
+            "off_label": "—",
+            "on_color": "#ef4444",
+            "off_color": "#64748b",
+            "visible_when": {"key": "equipment.has_cond_temp", "eq": true}
+          },
+          {
+            "key": "protection.door_comp_blocked",
+            "widget": "indicator",
+            "label": "Двері → компресор",
+            "on_label": "ВИМКНЕНО",
+            "off_label": "—",
+            "on_color": "#f59e0b",
+            "off_color": "#64748b",
+            "visible_when": {"key": "equipment.has_door_contact", "eq": true}
+          },
+          {
             "key": "protection.reset_alarms",
             "widget": "button",
             "label": "Скинути аварії"
@@ -699,6 +784,21 @@
           {
             "key": "protection.post_defrost_delay",
             "widget": "number_input"
+          },
+          {
+            "key": "protection.condenser_alarm_limit",
+            "widget": "number_input",
+            "visible_when": {"key": "equipment.has_cond_temp", "eq": true}
+          },
+          {
+            "key": "protection.condenser_block_limit",
+            "widget": "number_input",
+            "visible_when": {"key": "equipment.has_cond_temp", "eq": true}
+          },
+          {
+            "key": "protection.door_comp_delay",
+            "widget": "number_input",
+            "visible_when": {"key": "equipment.has_door_contact", "eq": true}
           },
           {
             "key": "protection.manual_reset",
