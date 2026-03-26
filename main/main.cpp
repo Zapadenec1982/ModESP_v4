@@ -51,6 +51,7 @@
 #include "protection_module.h"
 #include "thermostat_module.h"
 #include "defrost_module.h"
+#include "lighting_module.h"
 #include "datalogger_module.h"
 
 #include "esp_log.h"
@@ -101,6 +102,9 @@ static ProtectionModule        protection;
 // Business modules (NORMAL priority — work through SharedState)
 static ThermostatModule        thermostat;
 static DefrostModule           defrost;
+
+// Lighting (NORMAL priority — chamber light control)
+static LightingModule          lighting;
 
 // DataLogger (LOW priority — logging, runs after business logic)
 static DataLoggerModule        datalogger;
@@ -224,6 +228,9 @@ extern "C" void app_main(void)
 
     // Defrost — цикл розморозки (NORMAL priority, EM арбітрує requests)
     app.modules().register_module(defrost);
+
+    // Lighting — освітлення камери (NORMAL priority, reads thermostat.night_active)
+    app.modules().register_module(lighting);
 
     // DataLogger — логування температури та подій (LOW priority)
     app.modules().register_module(datalogger);

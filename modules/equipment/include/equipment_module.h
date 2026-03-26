@@ -71,6 +71,7 @@ private:
     modesp::IActuatorDriver* defrost_relay_ = nullptr;  // Опціональний (тен або клапан ГГ)
     modesp::IActuatorDriver* evap_fan_      = nullptr;  // Опціональний
     modesp::IActuatorDriver* cond_fan_      = nullptr;  // Опціональний
+    modesp::IActuatorDriver* light_         = nullptr;  // Опціональний (освітлення камери)
 
     // === Дискретні входи ===
     modesp::ISensorDriver* door_sensor_  = nullptr;  // Опціональний
@@ -115,6 +116,9 @@ private:
         bool compressor_blocked    = false;
         bool condenser_blocked     = false;
         bool door_comp_blocked     = false;
+
+        // Lighting (незалежний від refrigeration arbitration)
+        bool light_request         = false;
     } req_;
 
     // Фінальний вихід (після арбітражу)
@@ -123,6 +127,7 @@ private:
         bool defrost_relay = false;
         bool evap_fan      = false;
         bool cond_fan      = false;
+        bool light         = false;    // Незалежний від refrigeration
     } out_;
 
     // Defrost transition tracking (логуємо тільки при зміні стану)

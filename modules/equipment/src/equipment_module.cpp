@@ -65,6 +65,9 @@ void EquipmentModule::bind_drivers(modesp::DriverManager& dm) {
     if (cond_fan_)      ESP_LOGI(TAG, "Condenser fan bound");
     if (door_sensor_)   ESP_LOGI(TAG, "Door contact bound");
     if (night_sensor_)  ESP_LOGI(TAG, "Night input bound");
+
+    light_ = dm.find_actuator("light");
+    if (light_) ESP_LOGI(TAG, "Light relay bound");
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -102,6 +105,8 @@ bool EquipmentModule::on_init() {
     state_set("equipment.has_evap_temp", sensor_evap_ != nullptr);
     state_set("equipment.has_cond_temp", sensor_cond_ != nullptr);
     state_set("equipment.has_night_input", night_sensor_ != nullptr);
+    state_set("equipment.light", false);
+    state_set("equipment.has_light", light_ != nullptr);
 
     // Тип драйверів — для visibility карток налаштувань в UI
     // ISensorDriver::type() повертає "ds18b20", "ntc", "digital_input" тощо
@@ -257,6 +262,9 @@ void EquipmentModule::read_requests() {
     req_.compressor_blocked  = read_bool("protection.compressor_blocked");
     req_.condenser_blocked   = read_bool("protection.condenser_block");
     req_.door_comp_blocked   = read_bool("protection.door_comp_blocked");
+
+    // Lighting (незалежний від refrigeration)
+    req_.light_request = read_bool("lighting.req.light");
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -339,6 +347,10 @@ void EquipmentModule::apply_arbitration() {
 
     // Оновлюємо tracking для delta-логування
     prev_defrost_active_ = req_.defrost_active;
+
+    // === Освітлення — незалежне від refrigeration arbitration ===
+    // Не залежить від lockout, defrost, protection
+    out_.light = req_.light_request;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -350,6 +362,7 @@ void EquipmentModule::apply_outputs() {
     if (defrost_relay_) defrost_relay_->set(out_.defrost_relay);
     if (evap_fan_)      evap_fan_->set(out_.evap_fan);
     if (cond_fan_)      cond_fan_->set(out_.cond_fan);
+    if (light_)         light_->set(out_.light);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -371,4 +384,5 @@ void EquipmentModule::publish_state() {
     state_set("equipment.defrost_relay", defrost_relay_ ? defrost_relay_->get_state() : false);
     state_set("equipment.evap_fan",      evap_fan_      ? evap_fan_->get_state()      : false);
     state_set("equipment.cond_fan",      cond_fan_      ? cond_fan_->get_state()      : false);
+    state_set("equipment.light",         light_         ? light_->get_state()         : false);
 }

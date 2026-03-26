@@ -339,12 +339,19 @@ bool WiFiService::start_scan() {
     }
 
     // В AP mode потрібно переключитись в APSTA для сканування.
-    // Порожній STA config щоб STA не почала connecting.
+    // Якщо probe вже запустив APSTA і STA connecting — disconnect спочатку.
     bool was_ap_only = false;
     if (ap_mode_) {
         wifi_mode_t current_mode;
         esp_wifi_get_mode(&current_mode);
-        if (current_mode == WIFI_MODE_AP) {
+
+        if (current_mode == WIFI_MODE_APSTA) {
+            // Probe вже запустив APSTA — STA може бути connecting
+            ESP_LOGI(TAG, "APSTA active (probe?) — disconnecting STA for scan");
+            esp_wifi_disconnect();
+            vTaskDelay(pdMS_TO_TICKS(500));
+            was_ap_only = true;
+        } else if (current_mode == WIFI_MODE_AP) {
             ensure_sta_netif();
             ESP_LOGI(TAG, "Switching AP -> APSTA for scan");
             esp_err_t mode_err = esp_wifi_set_mode(WIFI_MODE_APSTA);
@@ -352,10 +359,21 @@ bool WiFiService::start_scan() {
                 ESP_LOGW(TAG, "Cannot switch to APSTA: %s", esp_err_to_name(mode_err));
                 return false;
             }
-            wifi_config_t sta_cfg = {};
-            esp_wifi_set_config(WIFI_IF_STA, &sta_cfg);
+            // set_mode(APSTA) auto-connects STA з NVS credentials.
+            // ESP32 hardware limitation: scan impossible while STA connecting.
+            // Must disconnect and WAIT for STA_DISCONNECTED event before scan.
+            esp_wifi_disconnect();
+            // Чекаємо достатньо щоб STA повністю зупинила connecting
+            // (ESP-IDF needs time to process disconnect + fire event)
+            for (int i = 0; i < 20; i++) {
+                vTaskDelay(pdMS_TO_TICKS(100));
+                // Перевіряємо чи STA зупинила connecting
+                wifi_ap_record_t ap_info;
+                if (esp_wifi_sta_get_ap_info(&ap_info) != ESP_OK) {
+                    break;  // STA не підключена — можна сканувати
+                }
+            }
             was_ap_only = true;
-            vTaskDelay(pdMS_TO_TICKS(100));
         }
     }
 

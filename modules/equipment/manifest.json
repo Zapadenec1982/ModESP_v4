@@ -12,7 +12,8 @@
     {"role": "evap_fan",       "type": "actuator", "driver": ["relay", "pcf8574_relay"], "label": "Вент. випарника",      "optional": true},
     {"role": "cond_fan",       "type": "actuator", "driver": ["relay", "pcf8574_relay"], "label": "Вент. конденсатора",   "optional": true},
     {"role": "door_contact",   "type": "sensor",   "driver": ["digital_input", "pcf8574_input"], "label": "Контакт дверей",       "optional": true},
-    {"role": "night_input",    "type": "sensor",   "driver": ["digital_input", "pcf8574_input"], "label": "Вхід нічного режиму",  "optional": true}
+    {"role": "night_input",    "type": "sensor",   "driver": ["digital_input", "pcf8574_input"], "label": "Вхід нічного режиму",  "optional": true},
+    {"role": "light",          "type": "actuator", "driver": ["relay", "pcf8574_relay"], "label": "Освітлення камери",    "optional": true}
   ],
 
   "state": {
@@ -33,6 +34,8 @@
     "equipment.has_evap_temp":    {"type": "bool",  "access": "read", "description": "Датчик випарника доступний"},
     "equipment.has_cond_temp":    {"type": "bool",  "access": "read", "description": "Датчик конденсатора доступний"},
     "equipment.has_night_input":  {"type": "bool",  "access": "read", "description": "Вхід нічного режиму доступний"},
+    "equipment.light":            {"type": "bool",  "access": "read", "description": "Фактичний стан освітлення"},
+    "equipment.has_light":        {"type": "bool",  "access": "read", "description": "Реле освітлення доступне"},
     "equipment.has_ntc_driver":   {"type": "bool",  "access": "read", "description": "Використовується NTC драйвер"},
     "equipment.has_ds18b20_driver": {"type": "bool", "access": "read", "description": "Використовується DS18B20 драйвер"},
 
