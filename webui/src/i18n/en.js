@@ -149,6 +149,12 @@ export default {
   'alert.pass_min8': 'Password must be at least 8 characters',
   'alert.confirm_ota': 'Update firmware? Device will restart.',
   'alert.only_bin': 'Only .bin files',
+  'alert.wifi_saved': 'WiFi network saved',
+  'alert.restarting': 'Restarting...',
+  'wifi.restart_title': 'WiFi Saved',
+  'wifi.restart_text': 'Restart device to connect to the new network?',
+  'btn.restart': 'Restart',
+  'btn.cancel': 'Later',
 
   'ota.uploading': 'Uploading...',
   'ota.done': 'Done! Restarting...',

@@ -149,6 +149,12 @@ export default {
   // Alerts
   'alert.saved': 'Збережено!',
   'alert.saved_restart': 'Збережено! Перезавантажте.',
+  'alert.wifi_saved': 'WiFi мережу збережено',
+  'alert.restarting': 'Перезавантаження...',
+  'wifi.restart_title': 'WiFi збережено',
+  'wifi.restart_text': 'Перезавантажити пристрій для підключення до нової мережі?',
+  'btn.restart': 'Перезавантажити',
+  'btn.cancel': 'Пізніше',
   'alert.saved_mqtt': 'Збережено! MQTT перепідключується...',
   'alert.error': 'Помилка збереження',
   'alert.conn_error': 'Помилка з\'єднання',
