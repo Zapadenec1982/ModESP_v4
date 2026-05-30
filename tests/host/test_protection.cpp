@@ -1609,3 +1609,115 @@ TEST_CASE("Protection: condenser block holds on sensor NaN (fail-safe) [protecti
                       "Manual reset must clear the condenser block");
     }
 }
+
+// -----------------------------------------------------------------------------
+// TEST 35: M1 — негативний max_retries клампиться (не вимикає lockout)
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: negative max_retries clamps, still locks out (M1) [escalation]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    // max_cont=10min, forced_off=1min, max_retries=-1 (в обхід UI-валідації)
+    pr_setup_compressor_settings(state, 120, 12, 10, 60, 2.0f, 0.5f, 5, 1, -1);
+    pr_setup_normal(state, 5.0f, true, true, false, false, true);
+    state.set("equipment.has_evap_temp", false);
+
+    prot.on_update(600000u + 1u);          // continuous run → forced_off
+    REQUIRE(pr_get_bool(state, "protection.compressor_blocked") == true);
+    state.set("equipment.compressor", false);
+    prot.on_update(60000u + 1u);           // release → count=1
+
+    // Без clamp: -1 → (uint8_t)255, lockout фактично вимкнено (255 retries).
+    // З clamp: max_retries=1 → 1 >= 1 → lockout.
+    CHECK_MESSAGE(pr_get_bool(state, "protection.lockout") == true,
+                  "negative max_retries must clamp to 1, not disable lockout");
+}
+
+// -----------------------------------------------------------------------------
+// TEST 36: M2 — on_stop флашить compressor_hours у SharedState
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: on_stop flushes compressor_hours (M2) [compressor]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    pr_setup_compressor_settings(state, 120, 12, 360, 60, 2.0f, 0.5f, 5, 20, 3);
+    pr_setup_normal(state, 5.0f, true, true, false, false, true);  // compressor ON
+    state.set("equipment.has_evap_temp", false);
+
+    // 20 діагностичних циклів по 5с — акумулюємо мотогодини (20 × 5/3600 ≈ 0.0278 год).
+    // Періодичний персист спрацьовує лише раз на 720 циклів, тож у state ще 0.
+    for (int i = 0; i < 20; i++) prot.on_update(5001u);
+
+    prot.on_stop();
+    float h = pr_get_float(state, "protection.compressor_hours");
+    CHECK_MESSAGE(h == doctest::Approx(20.0 * 5.0 / 3600.0).epsilon(0.05),
+                  "on_stop must persist accumulated motohours");
+    CHECK(h > 0.0f);
+}
+
+// -----------------------------------------------------------------------------
+// TEST 37: M4 — forced_off release таймер рахується і під час defrost
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: forced_off releases during defrost (M4) [escalation]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    // max_cont=10min, forced_off=1min, max_retries=5
+    pr_setup_compressor_settings(state, 120, 12, 10, 60, 2.0f, 0.5f, 5, 1, 5);
+    pr_setup_normal(state, 5.0f, true, true, false, false, true);
+    state.set("equipment.has_evap_temp", false);
+
+    prot.on_update(600000u + 1u);          // continuous run → forced_off
+    REQUIRE(pr_get_bool(state, "protection.compressor_blocked") == true);
+
+    // Defrost стартує, поки активний forced_off
+    state.set("defrost.active", true);
+    state.set("defrost.phase", modesp::StringValue("active"));
+
+    prot.on_update(60000u + 1u);           // > forced_off_period, під час defrost
+    CHECK_MESSAGE(pr_get_bool(state, "protection.compressor_blocked") == false,
+                  "forced_off must release during defrost (wall-clock timer, M4)");
+}
+
+// -----------------------------------------------------------------------------
+// TEST 38: M3 — відмова датчика не отруює rate-трекер, відновлення без сплеску
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: sensor failure does not poison rate tracker (M3) [compressor]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    pr_setup_compressor_settings(state, 120, 12, 360, 60, 2.0f, 0.5f, 5, 20, 3);
+    pr_setup_normal(state, 5.0f, true, true, false, false, true);  // compressor ON, sensor OK
+    state.set("equipment.has_evap_temp", false);
+
+    prot.on_update(1000u);                  // seed rate tracker нормальною T
+
+    // Датчик повітря виходить з ладу: NaN + sensor1_ok=false
+    state.set("equipment.air_temp", std::nanf(""));
+    state.set("equipment.sensor1_ok", false);
+    prot.on_update(1000u);
+    CHECK(pr_get_bool(state, "protection.rate_alarm") == false);
+
+    // Відновлення зі стрибком на +10°C — re-seed має уникнути хибного сплеску rate
+    state.set("equipment.air_temp", 15.0f);
+    state.set("equipment.sensor1_ok", true);
+    prot.on_update(1000u);
+    CHECK_MESSAGE(pr_get_bool(state, "protection.rate_alarm") == false,
+                  "no spurious rate alarm right after sensor recovery (re-seed)");
+}

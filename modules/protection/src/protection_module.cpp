@@ -68,7 +68,13 @@ void ProtectionModule::sync_settings() {
     // Ескалація continuous run
     forced_off_period_ms_ = static_cast<uint32_t>(
         read_int("protection.forced_off_period", 20)) * 60000;
-    max_retries_ = read_int("protection.max_retries", 3);
+    // Clamp [1,255]: інакше cast у uint8_t на :506 ламає ескалацію
+    // (0 → миттєвий lockout, <0 → 255 = lockout вимкнено) при значенні
+    // в обхід UI-валідації (MQTT/NVS). Маніфест обмежує 1..10.
+    {
+        int32_t mr = read_int("protection.max_retries", 3);
+        max_retries_ = (mr < 1) ? 1 : (mr > 255 ? 255 : mr);
+    }
 
     // Condenser protection (like Danfoss A37/A54)
     condenser_alarm_limit_ = read_float("protection.condenser_alarm_limit", 80.0f);
@@ -106,6 +112,12 @@ bool ProtectionModule::on_init() {
     // Ескалація continuous run
     state_set("protection.compressor_blocked", false);
     state_set("protection.continuous_run_count", static_cast<int32_t>(0));
+
+    // Повний контракт ключів-блокувань (L7-fix): door_comp_blocked
+    // публікується лише під feature-флагом door_protection, а condenser_block —
+    // лише коли є датчик. Ініціалізуємо явно, щоб ключі завжди існували.
+    state_set("protection.door_comp_blocked", false);
+    state_set("protection.condenser_block", false);
 
     // Початковий стан — компресорний захист
     state_set("protection.short_cycle_alarm", false);
@@ -233,16 +245,18 @@ void ProtectionModule::on_update(uint32_t dt_ms) {
 
         // Rate-of-change монітор
         if (has_feature("rate_protection")) {
-            if (compressor_on && !suppress_high) {
+            if (compressor_on && !suppress_high && sensor1_ok) {
                 update_rate_tracker(air_temp, dt_ms);
             } else {
                 rate_.rising_duration_ms = 0;
                 rate_.ewma_rate = 0.0f;
-                if (!compressor_on) rate_.initialized = false;
-                // Auto-clear rate alarm коли компресор вимкнено або defrost
+                // Re-seed при відмові датчика теж (M3-fix): air_temp=NaN отруює
+                // ewma, а stale prev_temp дав би стрибок instant_rate при відновленні.
+                if (!compressor_on || !sensor1_ok) rate_.initialized = false;
+                // Auto-clear rate alarm: компресор off / defrost / sensor fail
                 if (rate_rise_.active && !manual_reset_) {
                     rate_rise_.active = false;
-                    ESP_LOGI(TAG, "Rate alarm cleared (compressor off/defrost)");
+                    ESP_LOGI(TAG, "Rate alarm cleared (compressor off/defrost/sensor)");
                 }
             }
         }
@@ -492,10 +506,8 @@ void ProtectionModule::update_compressor_tracker(bool compressor_on, float temp,
 
     // 8. Continuous Run з ескалацією: forced off → defrost → retry → lockout
 
-    // Guard: не рахуємо continuous run під час defrost (hot gas = нормальна робота)
-    if (!defrost_active) {
-
-    // Forced off таймер: компресор заблоковано, вентилятори працюють
+    // Forced-off RELEASE таймер — wall-clock, рахується і під час defrost,
+    // щоб період блоку не подовжувався на тривалість відтайки (M4-fix).
     if (forced_off_active_) {
         forced_off_timer_ms_ += dt_ms;
         if (forced_off_timer_ms_ >= forced_off_period_ms_) {
@@ -534,35 +546,38 @@ void ProtectionModule::update_compressor_tracker(bool compressor_on, float temp,
             state_set("protection.continuous_run_count",
                        static_cast<int32_t>(continuous_run_count_));
         }
-    } else if (permanent_lockout_) {
-        // Перманентна блокіровка — нічого не робимо (lockout тримається в publish_alarms)
-    } else if (compressor_on && comp_.current_run_ms > max_continuous_run_ms_) {
-        // Рівень 1: тригер forced off
-        if (!continuous_run_.active) {
-            continuous_run_.active = true;
-            forced_off_active_ = true;
-            forced_off_timer_ms_ = 0;
-            ESP_LOGW(TAG, "CONTINUOUS RUN ALARM: %lu min > %lu min — forced off (%lu min)",
-                     comp_.current_run_ms / 60000, max_continuous_run_ms_ / 60000,
-                     forced_off_period_ms_ / 60000);
-        }
-    } else if (!compressor_on && !forced_off_active_) {
-        // Нормальне вимкнення компресора
-        if (continuous_run_.active && !manual_reset_) {
-            continuous_run_.active = false;
-            ESP_LOGI(TAG, "Continuous run alarm cleared (auto)");
-        }
-        // Нормальний цикл завершився — скидаємо лічильник
-        if (comp_.last_run_ms > 0 && comp_.last_run_ms < max_continuous_run_ms_) {
-            if (continuous_run_count_ > 0) {
-                continuous_run_count_ = 0;
-                state_set("protection.continuous_run_count", static_cast<int32_t>(0));
-                ESP_LOGI(TAG, "Continuous run counter reset (normal cycle)");
+    }
+    // Continuous-run ДЕТЕКЦІЯ — лише поза defrost (hot gas = нормальна робота)
+    // і поза forced-off (release обробляється вище).
+    else if (!defrost_active) {
+        if (permanent_lockout_) {
+            // Перманентна блокіровка — нічого (тримається в publish_alarms)
+        } else if (compressor_on && comp_.current_run_ms > max_continuous_run_ms_) {
+            // Рівень 1: тригер forced off
+            if (!continuous_run_.active) {
+                continuous_run_.active = true;
+                forced_off_active_ = true;
+                forced_off_timer_ms_ = 0;
+                ESP_LOGW(TAG, "CONTINUOUS RUN ALARM: %lu min > %lu min — forced off (%lu min)",
+                         comp_.current_run_ms / 60000, max_continuous_run_ms_ / 60000,
+                         forced_off_period_ms_ / 60000);
+            }
+        } else if (!compressor_on) {
+            // Нормальне вимкнення компресора
+            if (continuous_run_.active && !manual_reset_) {
+                continuous_run_.active = false;
+                ESP_LOGI(TAG, "Continuous run alarm cleared (auto)");
+            }
+            // Нормальний цикл завершився — скидаємо лічильник
+            if (comp_.last_run_ms > 0 && comp_.last_run_ms < max_continuous_run_ms_) {
+                if (continuous_run_count_ > 0) {
+                    continuous_run_count_ = 0;
+                    state_set("protection.continuous_run_count", static_cast<int32_t>(0));
+                    ESP_LOGI(TAG, "Continuous run counter reset (normal cycle)");
+                }
             }
         }
     }
-
-    } // end !defrost_active guard
 
     // 9. Pulldown Failure: компресор працює, а температура не падає
     if (compressor_on && !defrost_active &&
@@ -891,9 +906,13 @@ void ProtectionModule::update_condenser_alarm(float cond_temp, bool has_cond,
 // ═══════════════════════════════════════════════════════════════
 
 void ProtectionModule::on_stop() {
+    // Флашимо акумульовані мотогодини в NVS (M2-fix): інакше до ~1 год
+    // напрацювання (між періодичними персистами) втрачається на стоп/ребут.
+    state_set("protection.compressor_hours", compressor_hours_);
+
     state_set("protection.lockout", false);
     state_set("protection.compressor_blocked", false);
     state_set("protection.alarm_active", false);
     state_set("protection.alarm_code", "none");
-    ESP_LOGI(TAG, "Protection stopped");
+    ESP_LOGI(TAG, "Protection stopped (compressor_hours=%.2f saved)", compressor_hours_);
 }
