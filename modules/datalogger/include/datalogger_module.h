@@ -163,7 +163,9 @@ private:
     void sync_settings();
     bool flush_to_flash();
     void rotate_if_needed(const char* path, size_t max_size);
-    void log_event(EventType type);
+    /// detail — для EVENT_ALARM_CLEAR: код SET-події алярму, що скинувся
+    /// (зберігається в EventRecord._pad[0] для звʼязку clear↔source).
+    void log_event(EventType type, uint8_t detail = 0);
     uint32_t current_timestamp() const;
     void update_flash_used();
     void poll_events();

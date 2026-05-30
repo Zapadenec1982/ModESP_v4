@@ -215,9 +215,15 @@
     const ss = String(d.getSeconds()).padStart(2, '0');
     const dd = String(d.getDate()).padStart(2, '0');
     const mo = String(d.getMonth() + 1).padStart(2, '0');
+    let label = $t[`event.${e[1]}`] || `Event #${e[1]}`;
+    // ALARM_CLEAR (7) несе SET-код скинутого алярму в e[2] — показуємо джерело
+    if (e[1] === 7 && e[2]) {
+      const src = $t[`event.${e[2]}`] || `#${e[2]}`;
+      label = `${label} — ${src}`;
+    }
     return {
       time: `${dd}.${mo} ${hh}:${mm}:${ss}`,
-      label: $t[`event.${e[1]}`] || `Event #${e[1]}`,
+      label,
       type: e[1]
     };
   });
@@ -275,7 +281,9 @@
     for (const e of events) {
       const d = new Date(e[0] * 1000);
       const dt = d.toISOString().replace('T', ' ').slice(0, 19);
-      csv += `${e[0]},${dt},${e[1]},${$t[`event.${e[1]}`] || ''}\n`;
+      let desc = $t[`event.${e[1]}`] || '';
+      if (e[1] === 7 && e[2]) desc += ` (${$t[`event.${e[2]}`] || '#' + e[2]})`;
+      csv += `${e[0]},${dt},${e[1]},${desc}\n`;
     }
 
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });

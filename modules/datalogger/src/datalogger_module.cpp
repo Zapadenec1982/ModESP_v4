@@ -261,87 +261,89 @@ void DataLoggerModule::poll_events() {
     // === Аварії: rising edge → event, falling edge → ALARM_CLEAR ===
     // ВАЖЛИВО: зберігаємо prev_ ПІСЛЯ clear check
 
+    // ALARM_CLEAR несе SET-код скинутого алярму в detail (_pad[0]),
+    // інакше generic clear неможливо звʼязати з джерелом при кількох аваріях.
     bool alarm_high = read_bool("protection.high_temp_alarm", false);
     if (alarm_high && !prev_alarm_high_) log_event(EVENT_ALARM_HIGH);
-    if (!alarm_high && prev_alarm_high_) log_event(EVENT_ALARM_CLEAR);
+    if (!alarm_high && prev_alarm_high_) log_event(EVENT_ALARM_CLEAR, EVENT_ALARM_HIGH);
     prev_alarm_high_ = alarm_high;
 
     bool alarm_low = read_bool("protection.low_temp_alarm", false);
     if (alarm_low && !prev_alarm_low_) log_event(EVENT_ALARM_LOW);
-    if (!alarm_low && prev_alarm_low_) log_event(EVENT_ALARM_CLEAR);
+    if (!alarm_low && prev_alarm_low_) log_event(EVENT_ALARM_CLEAR, EVENT_ALARM_LOW);
     prev_alarm_low_ = alarm_low;
 
     // Sensor alarms
     bool s1 = read_bool("protection.sensor1_alarm", false);
     if (s1 && !prev_sensor1_alarm_) log_event(EVENT_ALARM_SENSOR1);
-    if (!s1 && prev_sensor1_alarm_) log_event(EVENT_ALARM_CLEAR);
+    if (!s1 && prev_sensor1_alarm_) log_event(EVENT_ALARM_CLEAR, EVENT_ALARM_SENSOR1);
     prev_sensor1_alarm_ = s1;
 
     bool s2 = read_bool("protection.sensor2_alarm", false);
     if (s2 && !prev_sensor2_alarm_) log_event(EVENT_ALARM_SENSOR2);
-    if (!s2 && prev_sensor2_alarm_) log_event(EVENT_ALARM_CLEAR);
+    if (!s2 && prev_sensor2_alarm_) log_event(EVENT_ALARM_CLEAR, EVENT_ALARM_SENSOR2);
     prev_sensor2_alarm_ = s2;
 
     // Compressor protection alarms
     bool cont = read_bool("protection.continuous_run_alarm", false);
     if (cont && !prev_cont_run_alarm_) log_event(EVENT_ALARM_CONT_RUN);
-    if (!cont && prev_cont_run_alarm_) log_event(EVENT_ALARM_CLEAR);
+    if (!cont && prev_cont_run_alarm_) log_event(EVENT_ALARM_CLEAR, EVENT_ALARM_CONT_RUN);
     prev_cont_run_alarm_ = cont;
 
     bool pull = read_bool("protection.pulldown_alarm", false);
     if (pull && !prev_pulldown_alarm_) log_event(EVENT_ALARM_PULLDOWN);
-    if (!pull && prev_pulldown_alarm_) log_event(EVENT_ALARM_CLEAR);
+    if (!pull && prev_pulldown_alarm_) log_event(EVENT_ALARM_CLEAR, EVENT_ALARM_PULLDOWN);
     prev_pulldown_alarm_ = pull;
 
     bool sc = read_bool("protection.short_cycle_alarm", false);
     if (sc && !prev_short_cyc_alarm_) log_event(EVENT_ALARM_SHORT_CYC);
-    if (!sc && prev_short_cyc_alarm_) log_event(EVENT_ALARM_CLEAR);
+    if (!sc && prev_short_cyc_alarm_) log_event(EVENT_ALARM_CLEAR, EVENT_ALARM_SHORT_CYC);
     prev_short_cyc_alarm_ = sc;
 
     bool rc = read_bool("protection.rapid_cycle_alarm", false);
     if (rc && !prev_rapid_cyc_alarm_) log_event(EVENT_ALARM_RAPID_CYC);
-    if (!rc && prev_rapid_cyc_alarm_) log_event(EVENT_ALARM_CLEAR);
+    if (!rc && prev_rapid_cyc_alarm_) log_event(EVENT_ALARM_CLEAR, EVENT_ALARM_RAPID_CYC);
     prev_rapid_cyc_alarm_ = rc;
 
     bool rate = read_bool("protection.rate_alarm", false);
     if (rate && !prev_rate_alarm_) log_event(EVENT_ALARM_RATE_RISE);
-    if (!rate && prev_rate_alarm_) log_event(EVENT_ALARM_CLEAR);
+    if (!rate && prev_rate_alarm_) log_event(EVENT_ALARM_CLEAR, EVENT_ALARM_RATE_RISE);
     prev_rate_alarm_ = rate;
 
     bool da = read_bool("protection.door_alarm", false);
     if (da && !prev_door_alarm_) log_event(EVENT_ALARM_DOOR);
-    if (!da && prev_door_alarm_) log_event(EVENT_ALARM_CLEAR);
+    if (!da && prev_door_alarm_) log_event(EVENT_ALARM_CLEAR, EVENT_ALARM_DOOR);
     prev_door_alarm_ = da;
 
     // Escalation / condenser — раніше не логувались (audit-gap fix)
     bool lock = read_bool("protection.lockout", false);
     if (lock && !prev_lockout_) log_event(EVENT_ALARM_LOCKOUT);
-    if (!lock && prev_lockout_) log_event(EVENT_ALARM_CLEAR);
+    if (!lock && prev_lockout_) log_event(EVENT_ALARM_CLEAR, EVENT_ALARM_LOCKOUT);
     prev_lockout_ = lock;
 
     bool cblk = read_bool("protection.compressor_blocked", false);
     if (cblk && !prev_comp_block_) log_event(EVENT_ALARM_COMP_BLOCK);
-    if (!cblk && prev_comp_block_) log_event(EVENT_ALARM_CLEAR);
+    if (!cblk && prev_comp_block_) log_event(EVENT_ALARM_CLEAR, EVENT_ALARM_COMP_BLOCK);
     prev_comp_block_ = cblk;
 
     bool cond = read_bool("protection.condenser_alarm", false);
     if (cond && !prev_condenser_) log_event(EVENT_ALARM_CONDENSER);
-    if (!cond && prev_condenser_) log_event(EVENT_ALARM_CLEAR);
+    if (!cond && prev_condenser_) log_event(EVENT_ALARM_CLEAR, EVENT_ALARM_CONDENSER);
     prev_condenser_ = cond;
 
     bool cdbl = read_bool("protection.condenser_block", false);
     if (cdbl && !prev_cond_block_) log_event(EVENT_ALARM_COND_BLOCK);
-    if (!cdbl && prev_cond_block_) log_event(EVENT_ALARM_CLEAR);
+    if (!cdbl && prev_cond_block_) log_event(EVENT_ALARM_CLEAR, EVENT_ALARM_COND_BLOCK);
     prev_cond_block_ = cdbl;
 }
 
 // ── Запис події в RAM буфер ──
 
-void DataLoggerModule::log_event(EventType type) {
+void DataLoggerModule::log_event(EventType type, uint8_t detail) {
     EventRecord rec;
     rec.timestamp = current_timestamp();
     rec.event_type = static_cast<uint8_t>(type);
-    rec._pad[0] = 0;
+    rec._pad[0] = detail;   // ALARM_CLEAR: SET-код скинутого алярму
     rec._pad[1] = 0;
     rec._pad[2] = 0;
 
@@ -578,10 +580,11 @@ esp_err_t DataLoggerModule::serialize_log_chunked(httpd_req_t* req, int hours) c
         EventRecord rec;
         while (fread(&rec, sizeof(rec), 1, f) == 1) {
             if (rec.timestamp < cutoff) continue;
-            len = snprintf(buf, sizeof(buf), "%s[%lu,%d]",
+            len = snprintf(buf, sizeof(buf), "%s[%lu,%d,%d]",
                           first ? "" : ",",
                           (unsigned long)rec.timestamp,
-                          (int)rec.event_type);
+                          (int)rec.event_type,
+                          (int)rec._pad[0]);
             if (httpd_resp_send_chunk(req, buf, len) != ESP_OK) {
                 fclose(f);
                 httpd_resp_send_chunk(req, nullptr, 0);
@@ -596,10 +599,11 @@ esp_err_t DataLoggerModule::serialize_log_chunked(httpd_req_t* req, int hours) c
     for (size_t i = 0; i < event_buf_.size(); i++) {
         const auto& rec = event_buf_[i];
         if (rec.timestamp < cutoff) continue;
-        len = snprintf(buf, sizeof(buf), "%s[%lu,%d]",
+        len = snprintf(buf, sizeof(buf), "%s[%lu,%d,%d]",
                       first ? "" : ",",
                       (unsigned long)rec.timestamp,
-                      (int)rec.event_type);
+                      (int)rec.event_type,
+                      (int)rec._pad[0]);
         httpd_resp_send_chunk(req, buf, len);
         first = false;
     }
