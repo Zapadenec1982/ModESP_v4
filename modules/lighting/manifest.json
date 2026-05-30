@@ -1,8 +1,8 @@
 {
   "manifest_version": 1,
   "module": "lighting",
-  "version": "1.0.0",
-  "description": "Chamber lighting control — OFF/ON/Auto (day-night ECO)",
+  "version": "1.1.0",
+  "description": "Chamber lighting — OFF/ON/Auto/Schedule + door trigger, auto-off, manual override",
   "priority": 2,
 
   "inputs": {
@@ -10,6 +10,12 @@
       "source_module": "thermostat",
       "type": "bool",
       "description": "Night mode active flag from thermostat",
+      "optional": true
+    },
+    "equipment.door_open": {
+      "source_module": "equipment",
+      "type": "bool",
+      "description": "Door contact state — drives door-triggered lighting",
       "optional": true
     },
     "equipment.light": {
@@ -24,7 +30,14 @@
     "basic_lighting": {
       "description": "Керування освітленням камери",
       "requires_roles": ["light"],
-      "controls_settings": ["lighting.mode"]
+      "controls_settings": [
+        "lighting.mode",
+        "lighting.door_trigger",
+        "lighting.auto_off_min",
+        "lighting.sched_start",
+        "lighting.sched_end",
+        "lighting.override"
+      ]
     }
   },
 
@@ -37,9 +50,64 @@
       "options": [
         {"value": 0, "label": "Вимкнено"},
         {"value": 1, "label": "Увімкнено"},
-        {"value": 2, "label": "Авто (день/ніч)"}
+        {"value": 2, "label": "Авто (день/ніч)"},
+        {"value": 3, "label": "Розклад (години)"}
       ],
       "description": "Режим освітлення"
+    },
+    "lighting.door_trigger": {
+      "type": "bool",
+      "access": "readwrite",
+      "default": false,
+      "persist": true,
+      "on_label": "Увімкнено",
+      "off_label": "Вимкнено",
+      "description": "Вмикати світло при відкритті дверей"
+    },
+    "lighting.auto_off_min": {
+      "type": "int",
+      "access": "readwrite",
+      "default": 0,
+      "persist": true,
+      "min": 0,
+      "max": 120,
+      "step": 1,
+      "unit": "хв",
+      "description": "Авто-вимкнення через (0 = вимкнено)"
+    },
+    "lighting.sched_start": {
+      "type": "int",
+      "access": "readwrite",
+      "default": 6,
+      "persist": true,
+      "min": 0,
+      "max": 23,
+      "step": 1,
+      "unit": "год",
+      "description": "Розклад: година ввімкнення"
+    },
+    "lighting.sched_end": {
+      "type": "int",
+      "access": "readwrite",
+      "default": 22,
+      "persist": true,
+      "min": 0,
+      "max": 23,
+      "step": 1,
+      "unit": "год",
+      "description": "Розклад: година вимкнення"
+    },
+    "lighting.override": {
+      "type": "int",
+      "access": "readwrite",
+      "default": 0,
+      "persist": false,
+      "options": [
+        {"value": 0, "label": "Авто"},
+        {"value": 1, "label": "Увімкнути"},
+        {"value": 2, "label": "Вимкнути"}
+      ],
+      "description": "Ручне перекриття (тимчасове, авто-повернення)"
     },
     "lighting.state": {
       "type": "bool",
@@ -58,10 +126,16 @@
   "mqtt": {
     "publish": [
       "lighting.state",
-      "lighting.mode"
+      "lighting.mode",
+      "lighting.override"
     ],
     "subscribe": [
-      "lighting.mode"
+      "lighting.mode",
+      "lighting.door_trigger",
+      "lighting.auto_off_min",
+      "lighting.sched_start",
+      "lighting.sched_end",
+      "lighting.override"
     ]
   },
 
@@ -85,6 +159,35 @@
           {
             "key": "lighting.mode",
             "widget": "select"
+          },
+          {
+            "key": "lighting.override",
+            "widget": "select"
+          }
+        ]
+      },
+      {
+        "title": "Налаштування",
+        "icon": "sliders",
+        "group": "settings",
+        "collapsible": true,
+        "defaultOpen": false,
+        "widgets": [
+          {
+            "key": "lighting.door_trigger",
+            "widget": "toggle"
+          },
+          {
+            "key": "lighting.auto_off_min",
+            "widget": "number_input"
+          },
+          {
+            "key": "lighting.sched_start",
+            "widget": "number_input"
+          },
+          {
+            "key": "lighting.sched_end",
+            "widget": "number_input"
           }
         ]
       }

@@ -43,6 +43,7 @@ include_directories(
     "${ROOT}/modules/protection/include"                    # protection_module.h
     "${ROOT}/modules/equipment/include"                     # equipment_module.h
     "${ROOT}/modules/datalogger/include"                    # datalogger_module.h
+    "${ROOT}/modules/lighting/include"                       # lighting_module.h
     "${CMAKE_SOURCE_DIR}"                                   # for #include "doctest.h"
 )
 
@@ -62,6 +63,7 @@ set(MODULE_SOURCES
     "${ROOT}/modules/protection/src/protection_module.cpp"
     "${ROOT}/modules/equipment/src/equipment_module.cpp"
     "${ROOT}/modules/datalogger/src/datalogger_module.cpp"
+    "${ROOT}/modules/lighting/src/lighting_module.cpp"
 )
 
 # ── Test sources ──
@@ -72,6 +74,7 @@ set(TEST_SOURCES
     "${CMAKE_SOURCE_DIR}/test_protection.cpp"
     "${CMAKE_SOURCE_DIR}/test_equipment.cpp"
     "${CMAKE_SOURCE_DIR}/test_datalogger.cpp"
+    "${CMAKE_SOURCE_DIR}/test_lighting.cpp"
 )
 
 add_executable(test_runner
