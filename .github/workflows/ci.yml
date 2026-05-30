@@ -31,18 +31,27 @@ jobs:
             --ignore=tools/tests/test_hil.py \
             -v
 
-  # ── Firmware build (bootstrap generated/+board.json+ETL) + HOST C++ тести ──
+  # ── WebUI + Firmware build (єдиний пайплайн) + HOST C++ тести ──
   build-and-host-tests:
-    name: Firmware build + host doctest
+    name: WebUI + firmware build + host doctest
     runs-on: ubuntu-latest
     container: espressif/idf:release-v5.5
     steps:
       - uses: actions/checkout@v4
 
+      # Node для інтегрованої збірки WebUI у складі idf.py build.
+      # Без нього CMake gracefully пропустив би webui (закомічений bundle),
+      # але тут хочемо перевірити саме об'єднаний пайплайн.
+      - name: Install Node.js
+        shell: bash
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+          apt-get install -y --no-install-recommends nodejs
+
       # idf.py build: копіює boards/dev/board.json → data/, запускає
-      # generate_ui.py (генерує generated/*.h), завантажує ETL у
-      # managed_components/ і компілює прошивку під ESP32.
-      - name: ESP-IDF build
+      # generate_ui.py (generated/*.h), збирає WebUI (npm ci + rollup →
+      # data/www), завантажує ETL і компілює прошивку під ESP32.
+      - name: ESP-IDF build (incl. WebUI)
         shell: bash
         run: |
           . "$IDF_PATH/export.sh"

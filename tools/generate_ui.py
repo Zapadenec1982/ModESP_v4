@@ -1664,7 +1664,9 @@ def main():
             keys = set(pack.get("strings", {}).keys())
             # Count state description keys
             desc_keys = {k for k in keys if k.startswith("state.") and k.endswith(".description")}
-            print(f"  ✓ {lang}: {len(keys)} keys ({len(desc_keys)} descriptions)")
+            # ASCII-маркер замість ✓ — інакше cp1251-консоль (укр. локаль Windows)
+            # ламає вивід idf.py при configure: UnicodeEncodeError на U+2713.
+            print(f"  + {lang}: {len(keys)} keys ({len(desc_keys)} descriptions)")
 
     # Summary
     total_keys = sum(len(m.get("state", {})) for m in manifests)

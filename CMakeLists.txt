@@ -58,5 +58,52 @@ set(PROJECT_VER "1.0.1")
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(modesp_${_BOARD_NAME})
 
-# Generate LittleFS image from data/ directory and flash to "data" partition
-littlefs_create_partition_image(data data FLASH_IN_PROJECT)
+# ── WebUI: збираємо Svelte-бандл у складі прошивки (єдиний `idf.py build`) ──
+# Раніше WebUI збирався окремо (`npm run deploy`), тому data/www/bundle.*.gz
+# міг застаріти відносно webui/src. Тепер бандл — залежність LittleFS-образу.
+# Gracefully пропускається, якщо npm недоступний (напр. CI/контейнер без node):
+# тоді у прошивку йде закомічений data/www/bundle.*.gz.
+option(MODESP_BUILD_WEBUI "Build Svelte WebUI during firmware build" ON)
+set(_WEBUI_DEP "")
+if(MODESP_BUILD_WEBUI)
+    find_program(NPM_EXECUTABLE NAMES npm npm.cmd)
+    if(NPM_EXECUTABLE)
+        # Перший білд: підтягнути залежності, якщо node_modules відсутній
+        if(NOT EXISTS "${CMAKE_SOURCE_DIR}/webui/node_modules")
+            message(STATUS "WebUI: node_modules відсутній — npm ci (перший білд)")
+            execute_process(
+                COMMAND ${NPM_EXECUTABLE} ci
+                WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/webui"
+                RESULT_VARIABLE _NPM_CI_RES)
+            if(NOT _NPM_CI_RES EQUAL 0)
+                message(WARNING "npm ci failed (${_NPM_CI_RES}) — WebUI може не зібратись")
+            endif()
+        endif()
+
+        file(GLOB_RECURSE _WEBUI_SRCS
+            "${CMAKE_SOURCE_DIR}/webui/src/*")
+        set(_WEBUI_OUTPUTS
+            "${CMAKE_SOURCE_DIR}/data/www/bundle.js.gz"
+            "${CMAKE_SOURCE_DIR}/data/www/bundle.css.gz"
+            "${CMAKE_SOURCE_DIR}/data/www/index.html")
+        add_custom_command(
+            OUTPUT ${_WEBUI_OUTPUTS}
+            COMMAND ${NPM_EXECUTABLE} run deploy
+            WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/webui"
+            DEPENDS ${_WEBUI_SRCS}
+                    "${CMAKE_SOURCE_DIR}/webui/rollup.config.js"
+                    "${CMAKE_SOURCE_DIR}/webui/package.json"
+            COMMENT "Building ModESP WebUI (Svelte → data/www)"
+            VERBATIM)
+        add_custom_target(webui_assets DEPENDS ${_WEBUI_OUTPUTS})
+        set(_WEBUI_DEP webui_assets)
+        message(STATUS "ModESP WebUI: build enabled (npm: ${NPM_EXECUTABLE})")
+    else()
+        message(WARNING "npm not found — WebUI не перебудовується; "
+                        "у прошивку піде закомічений data/www/bundle.*.gz")
+    endif()
+endif()
+
+# Generate LittleFS image from data/ directory and flash to "data" partition.
+# WebUI-бандл — залежність образу, тож пакується свіжим (якщо webui_assets є).
+littlefs_create_partition_image(data data FLASH_IN_PROJECT DEPENDS ${_WEBUI_DEP})
