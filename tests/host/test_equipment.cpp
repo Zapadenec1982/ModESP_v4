@@ -395,8 +395,10 @@ TEST_CASE("init fails without air sensor") {
     // Не прив'язуємо air sensor — on_init повертає false
 
     mgr.init_all(state);
-    // Модуль в стані ERROR (on_init returned false)
-    // Перевіримо що air_temp не публікується як 0.0
+    // Модуль має бути в стані ERROR (on_init повернув false)
+    CHECK(em.state() == modesp::BaseModule::State::ERROR);
+    // air_temp НЕ публікується (failure стається до state_set) → лишається default
+    CHECK(get_float(state, "equipment.air_temp") == doctest::Approx(-999.0f));
 }
 
 TEST_CASE("init fails without compressor") {
@@ -410,7 +412,9 @@ TEST_CASE("init fails without compressor") {
     air.set_value(5.0f);
 
     mgr.init_all(state);
-    // Модуль в стані ERROR
+    // Модуль має бути в стані ERROR (on_init повернув false без compressor)
+    CHECK(em.state() == modesp::BaseModule::State::ERROR);
+    CHECK(get_float(state, "equipment.air_temp") == doctest::Approx(-999.0f));
 }
 
 // ── 14. Condenser temp reading ──

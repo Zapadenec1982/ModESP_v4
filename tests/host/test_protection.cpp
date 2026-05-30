@@ -57,6 +57,8 @@
 #include "modesp/module_manager.h"
 #include "protection_module.h"
 
+#include <cmath>  // std::nanf — симуляція відмови датчика конденсатора
+
 // ── Small dt used for "setup" ticks that must not accumulate alarm timers ────
 static constexpr uint32_t SETUP_MS = 1u;
 
@@ -1570,5 +1572,40 @@ TEST_CASE("Protection: alarm_code includes lockout and comp_blocked [escalation]
         CHECK(pr_get_bool(state, "protection.sensor1_alarm") == true);
         CHECK_MESSAGE(pr_get_str(state, "protection.alarm_code") == "lockout",
                       "lockout must have highest priority over err1");
+    }
+}
+
+// -----------------------------------------------------------------------------
+// TEST 34: Condenser block is fail-safe — NOT cleared by sensor fault (NaN)
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Protection: condenser block holds on sensor NaN (fail-safe) [protection]") {
+    modesp::SharedState state;
+    ProtectionModule prot;
+    modesp::ModuleManager mgr;
+    mgr.register_module(prot);
+    mgr.init_all(state);
+
+    pr_setup_normal(state, 5.0f, true, true, false, false, false);
+    state.set("equipment.has_cond_temp", true);
+
+    // Температура конденсатора > block_limit (default 85°C) → block активний
+    state.set("equipment.cond_temp", 90.0f);
+    prot.on_update(SETUP_MS);
+    REQUIRE_MESSAGE(pr_get_bool(state, "protection.condenser_block") == true,
+                    "Condenser block must engage above block limit");
+
+    // Датчик виходить з ладу → cond_temp = NaN.
+    // Block НЕ повинен зніматись — інакше відмова датчика вмикає компресор під перегрівом.
+    state.set("equipment.cond_temp", std::nanf(""));
+    prot.on_update(SETUP_MS);
+    CHECK_MESSAGE(pr_get_bool(state, "protection.condenser_block") == true,
+                  "Condenser block must HOLD when sensor reads NaN (fail-safe)");
+
+    SUBCASE("block clears only by manual reset") {
+        state.set("protection.reset_alarms", true);
+        prot.on_update(SETUP_MS);
+        CHECK_MESSAGE(pr_get_bool(state, "protection.condenser_block") == false,
+                      "Manual reset must clear the condenser block");
     }
 }

@@ -37,6 +37,7 @@ include_directories(
     "${ROOT}/components/modesp_core/include"                # modesp/shared_state.h, base_module.h, types.h
     "${ROOT}/generated"                                     # features_config.h, state_meta.h, etc.
     "${ROOT}/components/modesp_hal/include"                  # modesp/hal/driver_interfaces.h, hal_types.h
+    "${ROOT}/components/modesp_services/include"             # modesp/services/nvs_helper.h (datalogger persist)
     "${ROOT}/modules/thermostat/include"                    # thermostat_module.h
     "${ROOT}/modules/defrost/include"                       # defrost_module.h
     "${ROOT}/modules/protection/include"                    # protection_module.h
@@ -51,6 +52,7 @@ set(CORE_SOURCES
     "${CMAKE_SOURCE_DIR}/base_module_host.cpp"
     "${CMAKE_SOURCE_DIR}/module_manager_host.cpp"
     "${CMAKE_SOURCE_DIR}/driver_manager_host.cpp"
+    "${CMAKE_SOURCE_DIR}/nvs_helper_host.cpp"
 )
 
 # ── Business module sources (compile directly — only need esp_log.h which is mocked) ──

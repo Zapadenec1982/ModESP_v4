@@ -3,6 +3,9 @@
 tests/host/build/
 *.elf
 *.map
+build_log.txt
+build_output.txt
+build_exit.txt
 
 # === Generated (regenerated on every build) ===
 /generated/
