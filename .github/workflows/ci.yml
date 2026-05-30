@@ -1,0 +1,60 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Скасовувати застарілі запуски на тій самій гілці/PR
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ── Python: генератор UI + валідація маніфестів (швидко, без ESP-IDF) ──
+  py-tests:
+    name: Python (generator + manifests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install pytest
+        run: pip install pytest
+      - name: Run pytest
+        # Виключаємо HOST C++ міст (test_cpp_host — Windows-only шляхи)
+        # та HIL (потребує реального ESP32 у мережі).
+        run: |
+          python -m pytest tools/tests \
+            --ignore=tools/tests/test_cpp_host.py \
+            --ignore=tools/tests/test_hil.py \
+            -v
+
+  # ── Firmware build (bootstrap generated/+board.json+ETL) + HOST C++ тести ──
+  build-and-host-tests:
+    name: Firmware build + host doctest
+    runs-on: ubuntu-latest
+    container: espressif/idf:release-v5.5
+    steps:
+      - uses: actions/checkout@v4
+
+      # idf.py build: копіює boards/dev/board.json → data/, запускає
+      # generate_ui.py (генерує generated/*.h), завантажує ETL у
+      # managed_components/ і компілює прошивку під ESP32.
+      - name: ESP-IDF build
+        shell: bash
+        run: |
+          . "$IDF_PATH/export.sh"
+          idf.py build
+
+      # HOST doctest suite (109 тестів) — використовує generated/ та ETL,
+      # створені кроком вище. Збірка нативним g++ (не xtensa).
+      - name: Host C++ tests
+        shell: bash
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends g++
+          . "$IDF_PATH/export.sh"   # cmake + ninja з ESP-IDF tools
+          cmake -G Ninja -S tests/host -B tests/host/build
+          cmake --build tests/host/build
+          ./tests/host/build/test_runner
