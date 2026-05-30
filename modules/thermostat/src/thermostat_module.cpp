@@ -302,6 +302,11 @@ void ThermostatModule::on_update(uint32_t dt_ms) {
     } else {
         comp_off_time_ms_ += dt_ms;
     }
+    // Сатурація (BUG-2): як в equipment — уникаємо uint32 overflow на довгому
+    // утриманні стану. min_on/min_off < TIMER_SATISFIED, тож насичення тримає
+    // їх «виконаними», а не дає таймеру обнулитись через ~49 діб.
+    if (comp_on_time_ms_  > modesp::TIMER_SATISFIED) comp_on_time_ms_  = modesp::TIMER_SATISFIED;
+    if (comp_off_time_ms_ > modesp::TIMER_SATISFIED) comp_off_time_ms_ = modesp::TIMER_SATISFIED;
 
     // 5. Protection lockout — все вимкнути, не змінюємо state
     if (protection_lockout_) {
