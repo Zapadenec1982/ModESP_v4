@@ -417,7 +417,25 @@ void DataLoggerModule::rotate_if_needed(const char* path, size_t max_size) {
 
     remove(old_path);
     rename(path, old_path);
-    ESP_LOGI(TAG, "Ротація %s (%lu bytes)", path, (unsigned long)st.st_size);
+
+    // ── Координація sync-курсора з ротацією (C2/C3-fix) ──
+    // Після rename дані, що були в current, тепер у .old. Якщо курсор стояв на
+    // current (file=1), його незасинхронений хвіст переїхав у .old — переводимо
+    // курсор на file=0 зі збереженням offset. Якщо курсор стояв на старій .old
+    // (file=0, яку щойно видалили), її незасинхронений залишок втрачено за
+    // ретенцією — нова .old (=старий current) ще не синкалась, тож читаємо з 0.
+    // Без цього ротація під час MQTT-offline «осиротила» б увесь offline-період.
+    if (strcmp(path, TEMP_FILE) == 0) {
+        if (temp_sync_file_ == 0) temp_sync_offset_ = 0;
+        temp_sync_file_ = 0;
+        save_sync_pos();
+    } else if (strcmp(path, EVENT_FILE) == 0) {
+        if (event_sync_file_ == 0) event_sync_offset_ = 0;
+        event_sync_file_ = 0;
+        save_sync_pos();
+    }
+
+    ESP_LOGI(TAG, "Ротація %s (%lu bytes), sync→.old", path, (unsigned long)st.st_size);
 }
 
 // ── Підрахунок flash ──
