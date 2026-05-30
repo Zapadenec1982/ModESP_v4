@@ -104,6 +104,43 @@ class TestUIJsonGenerator:
 
 
 # ═══════════════════════════════════════════════════════════════
+#  System pages SSoT (network/system з data/system_pages.json)
+# ═══════════════════════════════════════════════════════════════
+
+class TestSystemPagesSSoT:
+    """system/network сторінки беруться з JSON, а не з хардкоду в Python."""
+
+    def test_source_json_exists_and_has_pages(self):
+        """data/system_pages.json існує та містить network + system."""
+        spec = json.load(open(UIJsonGenerator.SYSTEM_PAGES_PATH, encoding="utf-8"))
+        assert "network" in spec and "system" in spec
+        assert spec["network"]["cloud"].keys() >= {"mqtt", "aws"}
+
+    def test_default_load_matches_file(self, valid_project):
+        """Без явного system_pages генератор вантажить data/system_pages.json."""
+        spec = json.load(open(UIJsonGenerator.SYSTEM_PAGES_PATH, encoding="utf-8"))
+        result = UIJsonGenerator().generate(valid_project, [])
+        sysp = next(p for p in result["pages"] if p["id"] == "system")
+        assert sysp == spec["system"]
+
+    def test_override_is_honored(self, valid_project):
+        """Переданий system_pages override відбивається у ui.json (доказ SSoT)."""
+        custom = json.load(open(UIJsonGenerator.SYSTEM_PAGES_PATH, encoding="utf-8"))
+        custom["system"]["title"] = "CUSTOM_TITLE"
+        result = UIJsonGenerator().generate(valid_project, [], system_pages=custom)
+        sysp = next(p for p in result["pages"] if p["id"] == "system")
+        assert sysp["title"] == "CUSTOM_TITLE"
+
+    def test_network_cloud_variant_selected(self, valid_project):
+        """cloud_provider у project.system обирає mqtt/aws картку."""
+        proj = dict(valid_project)
+        proj["system"] = {**proj.get("system", {}), "cloud_provider": "aws"}
+        result = UIJsonGenerator().generate(proj, [])
+        net = next(p for p in result["pages"] if p["id"] == "network")
+        assert net["cards"][-1]["title"] == "AWS IoT Core"
+
+
+# ═══════════════════════════════════════════════════════════════
 #  StateMetaGenerator
 # ═══════════════════════════════════════════════════════════════
 
