@@ -55,9 +55,11 @@ bool RelayDriver::set(bool state) {
     // No change needed
     if (state == relay_on_) return true;
 
-    // Check minimum switch interval
-    if (min_switch_ms_ > 0 && since_last_switch_ms_ < min_switch_ms_) {
-        ESP_LOGD(TAG, "[%s] Switch rejected — min interval (%lu/%lu ms)",
+    // Захисне/командне вимкнення (OFF) НІКОЛИ не блокується min_switch —
+    // throttle стосується лише ввімкнення (anti-short-cycle на рестарт).
+    // Інакше lockout/protection міг би не змогти вимкнути компресор у вікні min_switch.
+    if (state && min_switch_ms_ > 0 && since_last_switch_ms_ < min_switch_ms_) {
+        ESP_LOGD(TAG, "[%s] ON rejected — min interval (%lu/%lu ms)",
                  role_.c_str(), since_last_switch_ms_, min_switch_ms_);
         return false;
     }

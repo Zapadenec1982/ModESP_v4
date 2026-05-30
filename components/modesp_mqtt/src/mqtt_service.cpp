@@ -599,14 +599,17 @@ void MqttService::publish_backfill() {
             char json[700];
             int pos = snprintf(json, sizeof(json), "{\"v\":1,\"r\":[");
             for (uint32_t i = 0; i < count; i++) {
+                if (pos >= (int)sizeof(json)) break;
                 if (i > 0) json[pos++] = ',';
+                if (pos >= (int)sizeof(json)) break;
                 pos += snprintf(json + pos, sizeof(json) - pos,
                     "{\"t\":%lu,\"a\":%d,\"e\":%d,\"c\":%d,\"s\":%d}",
                     (unsigned long)batch[i].timestamp,
                     (int)batch[i].ch[0], (int)batch[i].ch[1],
                     (int)batch[i].ch[2], (int)batch[i].ch[3]);
             }
-            pos += snprintf(json + pos, sizeof(json) - pos, "]}");
+            if (pos < (int)sizeof(json)) pos += snprintf(json + pos, sizeof(json) - pos, "]}");
+            if (pos >= (int)sizeof(json)) pos = sizeof(json) - 1;  // clamp: ніколи не публікувати поза буфером
 
             char topic[96];
             snprintf(topic, sizeof(topic), "%s/backfill", prefix_);
@@ -626,13 +629,16 @@ void MqttService::publish_backfill() {
             char json[500];
             int pos = snprintf(json, sizeof(json), "{\"v\":1,\"e\":[");
             for (uint32_t i = 0; i < count; i++) {
+                if (pos >= (int)sizeof(json)) break;
                 if (i > 0) json[pos++] = ',';
+                if (pos >= (int)sizeof(json)) break;
                 pos += snprintf(json + pos, sizeof(json) - pos,
                     "{\"t\":%lu,\"ty\":%u}",
                     (unsigned long)batch[i].timestamp,
                     (unsigned)batch[i].event_type);
             }
-            pos += snprintf(json + pos, sizeof(json) - pos, "]}");
+            if (pos < (int)sizeof(json)) pos += snprintf(json + pos, sizeof(json) - pos, "]}");
+            if (pos >= (int)sizeof(json)) pos = sizeof(json) - 1;  // clamp: ніколи не публікувати поза буфером
 
             char topic[96];
             snprintf(topic, sizeof(topic), "%s/backfill/events", prefix_);

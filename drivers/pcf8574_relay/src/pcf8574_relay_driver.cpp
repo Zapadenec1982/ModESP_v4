@@ -49,6 +49,7 @@ bool PCF8574RelayDriver::set(bool state) {
     // Встановити/очистити біт у спільному output_state expander'а
     // state=true (ON): якщо active_high → set bit; якщо active_low → clear bit
     // state=false (OFF): якщо active_high → clear bit; якщо active_low → set bit
+    const uint8_t prev_state = expander_->output_state;
     if (state == active_high_) {
         expander_->output_state |= (1 << pin_);
     } else {
@@ -56,6 +57,9 @@ bool PCF8574RelayDriver::set(bool state) {
     }
 
     if (!expander_->write_state()) {
+        // Відкат кешу: I2C-запис не вдався → тримаємо output_state у синхроні
+        // з relay_on_, інакше "провалений" біт тихо застосується наступним записом
+        expander_->output_state = prev_state;
         ESP_LOGE(TAG, "[%s] I2C write failed!", role_.c_str());
         return false;
     }

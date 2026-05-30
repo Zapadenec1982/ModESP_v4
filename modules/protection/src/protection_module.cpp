@@ -847,9 +847,16 @@ void ProtectionModule::publish_alarms() {
 
 void ProtectionModule::update_condenser_alarm(float cond_temp, bool has_cond,
                                                uint32_t dt_ms) {
-    if (!has_cond || std::isnan(cond_temp)) {
+    if (!has_cond) {
+        // Датчик конденсатора не налаштований — нема що захищати
         condenser_.active = false;
         condenser_block_.active = false;
+        return;
+    }
+    if (std::isnan(cond_temp)) {
+        // Датчик несправний: НЕ знімаємо block рівня-2 (fail-safe).
+        // Активний block тримається до ручного скидання (як Danfoss A80) —
+        // втрата сигналу під час перегріву не повинна вмикати компресор.
         return;
     }
 

@@ -11,7 +11,8 @@
  *     - Business modules publish requests: thermostat.req.compressor, defrost.req.defrost_relay
  *     - EM reads requests, applies arbitration, drives outputs
  *
- * Arbitration priority: Protection LOCKOUT > Defrost active > Thermostat
+ * Arbitration priority: Protection LOCKOUT > compressor_blocked/condenser_block > Defrost active > Thermostat
+ *   (compressor_blocked/condenser_block — безумовний override лише компресора, застосовується після defrost)
  *
  * Interlocks (hardcoded, cannot be bypassed):
  *   - Electric defrost relay and compressor NEVER simultaneously
