@@ -247,6 +247,30 @@ TEST_CASE_FIXTURE(EquipFixture, "electric defrost interlock: compressor OFF") {
     CHECK(defrost_relay.get_state() == true);
 }
 
+// ── 6b. Інтерлок використовує КЕШОВАНИЙ тип defrost (HIGH#1) ──
+
+TEST_CASE_FIXTURE(EquipFixture, "interlock uses cached defrost type, not live (HIGH#1)") {
+    // Старт type-1 defrost з both-on запитом
+    state.set("defrost.active", true);
+    state.set("defrost.req.compressor", true);
+    state.set("defrost.req.defrost_relay", true);
+    state.set("defrost.type", static_cast<int32_t>(1));  // electric heater
+    tick();
+    REQUIRE(comp.get_state() == false);          // інтерлок спрацював
+    REQUIRE(defrost_relay.get_state() == true);
+
+    // Користувач змінює тип на 2 (ГГ) ПОСЕРЕД активного defrost.
+    // Defrost фактично далі виконує type-1 (ТЕН увімкнено).
+    state.set("defrost.type", static_cast<int32_t>(2));
+    tick();
+
+    // Інтерлок має лишатись активним за кешованим типом=1 — інакше
+    // ТЕН і компресор опинились би разом.
+    CHECK_MESSAGE(comp.get_state() == false,
+                  "interlock must use cached type-1, not live defrost.type");
+    CHECK(defrost_relay.get_state() == true);
+}
+
 // ── 7. Protection lockout ──
 
 TEST_CASE_FIXTURE(EquipFixture, "protection lockout turns everything OFF") {

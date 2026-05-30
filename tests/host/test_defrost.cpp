@@ -174,6 +174,34 @@ TEST_CASE("Defrost: manual start triggers defrost immediately [defrost]") {
 }
 
 // -----------------------------------------------------------------------------
+// TEST 2b: manual_start discarded while defrost active (HIGH#2)
+// -----------------------------------------------------------------------------
+
+TEST_CASE("Defrost: manual_start discarded while active (HIGH#2) [defrost]") {
+    modesp::SharedState state;
+    DefrostModule defrost;
+    modesp::ModuleManager mgr;
+    mgr.register_module(defrost);
+    mgr.init_all(state);
+
+    df_setup_inputs(state);
+    state.set("defrost.type",         static_cast<int32_t>(0));  // natural
+    state.set("defrost.manual_start", true);
+    defrost.on_update(100u);
+    REQUIRE_MESSAGE(df_get_bool(state, "defrost.active") == true,
+                    "Pre-condition: defrost running");
+
+    // Protection (icing-trigger) / UI re-asserts manual_start MID-CYCLE
+    state.set("defrost.manual_start", true);
+    defrost.on_update(100u);
+
+    // Має бути відкинутий — інакше залатчиться і дасть back-to-back defrost
+    CHECK_MESSAGE(df_get_bool(state, "defrost.manual_start") == false,
+                  "manual_start must be discarded during active defrost (no latch)");
+    CHECK(df_get_bool(state, "defrost.active") == true);
+}
+
+// -----------------------------------------------------------------------------
 // TEST 3: Natural defrost (type=0) -- compressor and relay both OFF
 // -----------------------------------------------------------------------------
 

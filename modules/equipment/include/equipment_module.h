@@ -133,6 +133,9 @@ private:
 
     // Defrost transition tracking (логуємо тільки при зміні стану)
     bool prev_defrost_active_ = false;
+    // Тип defrost, кешований на старті циклу — для heater+compressor інтерлоку.
+    // Інакше mid-cycle зміна defrost.type вимкнула б інтерлок при ввімкненому ТЕНі.
+    int  defrost_type_cached_ = 0;
 
     // AUDIT-003: Compressor anti-short-cycle на рівні виходу (output-level).
     // Захищає компресор незалежно від джерела запиту (thermostat/defrost).

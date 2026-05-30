@@ -39,8 +39,15 @@ void DefrostModule::sync_settings() {
     // Години → мілісекунди
     interval_ms_ = static_cast<uint32_t>(read_int("defrost.interval", 8)) * 3600000;
 
-    // Хвилини → мілісекунди
-    max_duration_ms_ = static_cast<uint32_t>(read_int("defrost.max_duration", 30)) * 60000;
+    // Хвилини → мілісекунди. Clamp [1,120] (M1-fix): max_duration — єдина
+    // тверда стеля для ТЕНа. Значення в обхід UI-валідації (MQTT/NVS) могло б
+    // обнулити стелю (0) або переповнити uint32 (×60000). Маніфест: 5..120.
+    {
+        int dur_min = read_int("defrost.max_duration", 30);
+        if (dur_min < 1)   dur_min = 1;
+        if (dur_min > 120) dur_min = 120;
+        max_duration_ms_ = static_cast<uint32_t>(dur_min) * 60000;
+    }
 
     // Хвилини → мілісекунди
     drip_time_ms_   = static_cast<uint32_t>(read_int("defrost.drip_time", 2)) * 60000;
@@ -256,6 +263,14 @@ void DefrostModule::on_update(uint32_t dt_ms) {
             finish_defrost();
             return;
         }
+    }
+
+    // Скидаємо stale manual_start під час активного циклу (HIGH#2-fix):
+    // manual_start споживається лише в IDLE; якщо Protection (icing-trigger)
+    // чи UI виставить його під час defrost, без скидання він залатчиться і
+    // дасть back-to-back defrost одразу після повернення в IDLE.
+    if (phase_ != Phase::IDLE && read_bool("defrost.manual_start")) {
+        state_set("defrost.manual_start", false);
     }
 
     // Phase dispatch

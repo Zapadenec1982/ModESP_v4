@@ -284,10 +284,14 @@ void EquipmentModule::apply_arbitration() {
         out_.defrost_relay = req_.def_defrost_relay;
         out_.evap_fan      = req_.def_evap_fan;
         out_.cond_fan      = req_.def_cond_fan;
-        // Логуємо тільки при вході в defrost (не кожен цикл)
+        // Кешуємо тип defrost на старті циклу (HIGH#1-fix): інтерлок нижче
+        // має узгоджуватись із типом, який defrost ФАКТИЧНО виконує, а не з
+        // live-налаштуванням defrost.type (яке користувач може змінити mid-cycle).
         if (!prev_defrost_active_) {
-            ESP_LOGI(TAG, "DEFROST arb START: comp=%d relay=%d efan=%d cfan=%d",
-                     out_.compressor, out_.defrost_relay, out_.evap_fan, out_.cond_fan);
+            defrost_type_cached_ = read_int("defrost.type", 0);
+            ESP_LOGI(TAG, "DEFROST arb START: comp=%d relay=%d efan=%d cfan=%d type=%d",
+                     out_.compressor, out_.defrost_relay, out_.evap_fan, out_.cond_fan,
+                     defrost_type_cached_);
         }
     } else {
         // Логуємо при виході з defrost
@@ -336,7 +340,8 @@ void EquipmentModule::apply_arbitration() {
     // Гарячий газ: компресор потрібен — інтерлок НЕ застосовується.
     // Перевіряємо defrost.type щоб визначити чи реле = тен (type=1).
     if (out_.defrost_relay && out_.compressor) {
-        int defrost_type = read_int("defrost.type", 0);
+        // Кешований на старті тип (HIGH#1-fix) — не live defrost.type
+        int defrost_type = defrost_type_cached_;
         if (defrost_type == 1) {
             // Електричний тен — компресор OFF
             out_.compressor = false;
