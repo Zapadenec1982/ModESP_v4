@@ -144,6 +144,10 @@ bool DataLoggerModule::on_init() {
     prev_rapid_cyc_alarm_= read_bool("protection.rapid_cycle_alarm", false);
     prev_rate_alarm_     = read_bool("protection.rate_alarm", false);
     prev_door_alarm_     = read_bool("protection.door_alarm", false);
+    prev_lockout_        = read_bool("protection.lockout", false);
+    prev_comp_block_     = read_bool("protection.compressor_blocked", false);
+    prev_condenser_      = read_bool("protection.condenser_alarm", false);
+    prev_cond_block_     = read_bool("protection.condenser_block", false);
 
     // Логувати активні канали
     int active = 0;
@@ -308,6 +312,27 @@ void DataLoggerModule::poll_events() {
     if (da && !prev_door_alarm_) log_event(EVENT_ALARM_DOOR);
     if (!da && prev_door_alarm_) log_event(EVENT_ALARM_CLEAR);
     prev_door_alarm_ = da;
+
+    // Escalation / condenser — раніше не логувались (audit-gap fix)
+    bool lock = read_bool("protection.lockout", false);
+    if (lock && !prev_lockout_) log_event(EVENT_ALARM_LOCKOUT);
+    if (!lock && prev_lockout_) log_event(EVENT_ALARM_CLEAR);
+    prev_lockout_ = lock;
+
+    bool cblk = read_bool("protection.compressor_blocked", false);
+    if (cblk && !prev_comp_block_) log_event(EVENT_ALARM_COMP_BLOCK);
+    if (!cblk && prev_comp_block_) log_event(EVENT_ALARM_CLEAR);
+    prev_comp_block_ = cblk;
+
+    bool cond = read_bool("protection.condenser_alarm", false);
+    if (cond && !prev_condenser_) log_event(EVENT_ALARM_CONDENSER);
+    if (!cond && prev_condenser_) log_event(EVENT_ALARM_CLEAR);
+    prev_condenser_ = cond;
+
+    bool cdbl = read_bool("protection.condenser_block", false);
+    if (cdbl && !prev_cond_block_) log_event(EVENT_ALARM_COND_BLOCK);
+    if (!cdbl && prev_cond_block_) log_event(EVENT_ALARM_CLEAR);
+    prev_cond_block_ = cdbl;
 }
 
 // ── Запис події в RAM буфер ──

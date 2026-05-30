@@ -275,6 +275,10 @@ TEST_CASE_FIXTURE(DLFixture, "all protection alarms generate events") {
         {"protection.rapid_cycle_alarm",     "rapid_cyc"},
         {"protection.rate_alarm",            "rate_rise"},
         {"protection.door_alarm",            "door"},
+        {"protection.lockout",               "lockout"},
+        {"protection.compressor_blocked",    "comp_block"},
+        {"protection.condenser_alarm",       "condenser"},
+        {"protection.condenser_block",       "cond_block"},
     };
 
     for (auto& a : alarms) {

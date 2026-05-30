@@ -66,6 +66,11 @@ enum EventType : uint8_t {
     EVENT_ALARM_RAPID_CYC = 16,
     EVENT_ALARM_RATE_RISE = 17,
     EVENT_ALARM_DOOR      = 18,
+    // Escalation / condenser — закриває audit-gap (lockout/block раніше не логувались)
+    EVENT_ALARM_LOCKOUT    = 19,  ///< permanent lockout (manual reset)
+    EVENT_ALARM_COMP_BLOCK = 20,  ///< forced-off (continuous run)
+    EVENT_ALARM_CONDENSER  = 21,  ///< condenser over-temp (level 1)
+    EVENT_ALARM_COND_BLOCK = 22,  ///< condenser block (level 2, manual reset)
 };
 
 /// Запис події (8 bytes, aligned)
@@ -122,6 +127,10 @@ private:
     bool prev_rapid_cyc_alarm_= false;
     bool prev_rate_alarm_     = false;
     bool prev_door_alarm_     = false;
+    bool prev_lockout_        = false;
+    bool prev_comp_block_     = false;
+    bool prev_condenser_      = false;
+    bool prev_cond_block_     = false;
 
     // ── Таймери ──
     uint32_t sample_timer_ms_ = 0;

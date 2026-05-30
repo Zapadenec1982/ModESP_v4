@@ -115,6 +115,10 @@ export default {
   'event.16': 'Alarm: Häufiges Takten',
   'event.17': 'Alarm: Temperaturanstieg',
   'event.18': 'Alarm: Tür',
+  'event.19': 'Alarm: Sperre (Lockout)',
+  'event.20': 'Alarm: Verdichter gesperrt',
+  'event.21': 'Alarm: Verflüssiger',
+  'event.22': 'Alarm: Verflüssiger-Sperre',
 
   'bind.status': 'Gerätestatus',
   'bind.loading': 'Laden...',

@@ -115,6 +115,10 @@ export default {
   'event.16': 'Alarm: Częste cyklowanie',
   'event.17': 'Alarm: Wzrost temperatury',
   'event.18': 'Alarm: Drzwi',
+  'event.19': 'Alarm: Blokada (lockout)',
+  'event.20': 'Alarm: Sprężarka zablokowana',
+  'event.21': 'Alarm: Skraplacz',
+  'event.22': 'Alarm: Blokada skraplacza',
 
   'bind.status': 'Status urządzeń',
   'bind.loading': 'Ładowanie...',

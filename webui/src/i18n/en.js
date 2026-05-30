@@ -115,6 +115,10 @@ export default {
   'event.16': 'Alarm: Rapid cycle',
   'event.17': 'Alarm: Rate of rise',
   'event.18': 'Alarm: Door',
+  'event.19': 'Alarm: Lockout',
+  'event.20': 'Alarm: Compressor blocked',
+  'event.21': 'Alarm: Condenser',
+  'event.22': 'Alarm: Condenser block',
 
   'bind.status': 'Equipment Status',
   'bind.loading': 'Loading...',

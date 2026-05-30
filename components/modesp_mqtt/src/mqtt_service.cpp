@@ -613,10 +613,15 @@ void MqttService::publish_backfill() {
 
             char topic[96];
             snprintf(topic, sizeof(topic), "%s/backfill", prefix_);
-            esp_mqtt_client_publish(client_, topic, json, pos, 1, 0);
-            backfill_provider_->advance_temp_sync(count);
-
-            ESP_LOGD(TAG, "Backfill: sent %lu temp records", (unsigned long)count);
+            // Просуваємо sync-offset ЛИШЕ якщо publish прийнято в outbox (C1-fix):
+            // інакше при збої/повному outbox записи позначались би synced і губились.
+            int mid = esp_mqtt_client_publish(client_, topic, json, pos, 1, 0);
+            if (mid >= 0) {
+                backfill_provider_->advance_temp_sync(count);
+                ESP_LOGD(TAG, "Backfill: sent %lu temp records", (unsigned long)count);
+            } else {
+                ESP_LOGW(TAG, "Backfill temp publish failed (%d) — retry later", mid);
+            }
         } else {
             backfill_temp_done_ = true;
             ESP_LOGI(TAG, "Backfill: temp records complete");
@@ -642,10 +647,14 @@ void MqttService::publish_backfill() {
 
             char topic[96];
             snprintf(topic, sizeof(topic), "%s/backfill/events", prefix_);
-            esp_mqtt_client_publish(client_, topic, json, pos, 1, 0);
-            backfill_provider_->advance_event_sync(count);
-
-            ESP_LOGD(TAG, "Backfill: sent %lu event records", (unsigned long)count);
+            // C1-fix: просуваємо offset лише при успішному enqueue
+            int mid = esp_mqtt_client_publish(client_, topic, json, pos, 1, 0);
+            if (mid >= 0) {
+                backfill_provider_->advance_event_sync(count);
+                ESP_LOGD(TAG, "Backfill: sent %lu event records", (unsigned long)count);
+            } else {
+                ESP_LOGW(TAG, "Backfill event publish failed (%d) — retry later", mid);
+            }
         } else {
             backfill_events_done_ = true;
             ESP_LOGI(TAG, "Backfill: event records complete");
