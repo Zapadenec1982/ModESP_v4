@@ -153,6 +153,12 @@ export default {
   'alert.pass_min8': 'Hasło musi mieć co najmniej 8 znaków',
   'alert.confirm_ota': 'Zaktualizować firmware? Urządzenie zostanie zrestartowane.',
   'alert.only_bin': 'Tylko pliki .bin',
+  'alert.wifi_saved': 'Sieć WiFi zapisana',
+  'alert.restarting': 'Ponowne uruchamianie...',
+  'wifi.restart_title': 'WiFi zapisane',
+  'wifi.restart_text': 'Uruchomić ponownie urządzenie, aby połączyć się z nową siecią?',
+  'btn.restart': 'Uruchom ponownie',
+  'btn.cancel': 'Później',
 
   'ota.uploading': 'Przesyłanie...',
   'ota.done': 'Gotowe! Restart...',

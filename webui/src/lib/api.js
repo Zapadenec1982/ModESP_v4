@@ -24,7 +24,11 @@ function authHeaders() {
 }
 
 export async function apiGet(url) {
-  const r = await fetch(BASE + url);
+  const r = await fetch(BASE + url, { headers: authHeaders() });
+  if (r.status === 401) {
+    needsLogin.set(true);
+    throw new Error('Unauthorized');
+  }
   if (!r.ok) {
     const text = await r.text().catch(() => '');
     throw new Error(text || `GET ${url}: ${r.status}`);

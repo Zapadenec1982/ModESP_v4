@@ -153,6 +153,12 @@ export default {
   'alert.pass_min8': 'Passwort muss mindestens 8 Zeichen haben',
   'alert.confirm_ota': 'Firmware aktualisieren? Gerät wird neu gestartet.',
   'alert.only_bin': 'Nur .bin-Dateien',
+  'alert.wifi_saved': 'WLAN-Netzwerk gespeichert',
+  'alert.restarting': 'Neustart...',
+  'wifi.restart_title': 'WLAN gespeichert',
+  'wifi.restart_text': 'Gerät neu starten, um sich mit dem neuen Netzwerk zu verbinden?',
+  'btn.restart': 'Neu starten',
+  'btn.cancel': 'Später',
 
   'ota.uploading': 'Hochladen...',
   'ota.done': 'Fertig! Neustart...',
