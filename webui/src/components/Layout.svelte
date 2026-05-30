@@ -36,15 +36,21 @@
     moreOpen = false;
   }
 
-  // Connection overlay — показувати через 5с після disconnect (уникнути flicker)
+  // Градуйований індикатор втрати звʼязку (анти-flicker на brief-blips):
+  //  0с    — крапка ws-status стає "Offline" (миттєво, $wsConnected)
+  //  2.5с  — значення тьмяніють (staleData) — оператор бачить, що дані застигли
+  //  5с    — повний overlay (showOverlay)
   let showOverlay = false;
+  let staleData = false;
   let overlayTimer = null;
+  let staleTimer = null;
   let wasDisconnected = false;
 
   const unsub = wsConnected.subscribe((connected) => {
     if (!connected) {
       if (!overlayTimer) {
         wasDisconnected = true;
+        staleTimer = setTimeout(() => { staleData = true; }, 2500);
         overlayTimer = setTimeout(() => {
           showOverlay = true;
         }, 5000);
@@ -54,8 +60,13 @@
         clearTimeout(overlayTimer);
         overlayTimer = null;
       }
+      if (staleTimer) {
+        clearTimeout(staleTimer);
+        staleTimer = null;
+      }
       if (showOverlay) toastSuccess($t["conn.restored"]);
       showOverlay = false;
+      staleData = false;
       wasDisconnected = false;
     }
   });
@@ -63,6 +74,7 @@
   onDestroy(() => {
     unsub();
     if (overlayTimer) clearTimeout(overlayTimer);
+    if (staleTimer) clearTimeout(staleTimer);
   });
 </script>
 
@@ -155,7 +167,7 @@
         </div>
       </div>
     </header>
-    <main class="content">
+    <main class="content" class:stale={staleData}>
       <slot />
     </main>
 
@@ -586,6 +598,13 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
+  }
+  /* Звʼязок втрачено >2.5с — тьмяніємо значення, щоб застиглі дані не
+     сприймались як поточні (важливо для холодильного HMI). */
+  .content.stale {
+    opacity: 0.5;
+    filter: grayscale(0.45);
+    transition: opacity 0.4s ease, filter 0.4s ease;
   }
 
   /* === Bottom tabs Concept Layout (mobile) === */
