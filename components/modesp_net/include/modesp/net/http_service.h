@@ -107,6 +107,14 @@ private:
     static esp_err_t handle_post_auth(httpd_req_t* req);
     static esp_err_t handle_static(httpd_req_t* req);
 
+    // Captive portal (active only in SoftAP mode)
+    void register_captive_handlers();                           // probe + portal routes
+    static esp_err_t handle_get_portal(httpd_req_t* req);        // GET  /portal
+    static esp_err_t handle_post_wifi_portal(httpd_req_t* req);  // POST /api/wifi/portal
+    static esp_err_t handle_captive_probe(httpd_req_t* req);     // OS detection probes → 302
+    static esp_err_t handle_captive_404(httpd_req_t* req);       // /wpad.dat, /favicon.ico
+    static esp_err_t redirect_to_portal(httpd_req_t* req);       // 302 → /portal helper
+
     // CORS
     static esp_err_t handle_options(httpd_req_t* req);
     static void set_cors_headers(httpd_req_t* req);

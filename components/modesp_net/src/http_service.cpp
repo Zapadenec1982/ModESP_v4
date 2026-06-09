@@ -1448,6 +1448,28 @@ static const char* get_content_type(const char* path) {
 }
 
 esp_err_t HttpService::handle_static(httpd_req_t* req) {
+    // Captive portal catch-all: у AP-режимі будь-який запит із "чужим" Host
+    // (DNS hijack резолвить усі домени на нас) перенаправляємо на портал.
+    // Власний IP та .local-хости НЕ редіректимо → SPA та mDNS працюють без циклів.
+    {
+        auto* self = static_cast<HttpService*>(req->user_ctx);
+        if (self && self->wifi_ && self->wifi_->is_ap_mode()) {
+            char host[64] = {};
+            if (httpd_req_get_hdr_value_str(req, "Host", host, sizeof(host)) == ESP_OK
+                && host[0] != '\0') {
+                // Відкинути порт (host:port) для порівняння
+                char* colon = strchr(host, ':');
+                if (colon) *colon = '\0';
+                size_t hlen = strlen(host);
+                bool is_self  = (strcmp(host, "192.168.4.1") == 0);
+                bool is_local = (hlen >= 6 && strcmp(host + hlen - 6, ".local") == 0);
+                if (!is_self && !is_local) {
+                    return redirect_to_portal(req);
+                }
+            }
+        }
+    }
+
     // Copy URI to local fixed-size buffer (silences -Wformat-truncation)
     char uri[52];
     strlcpy(uri, req->uri, sizeof(uri));
@@ -1627,6 +1649,192 @@ esp_err_t HttpService::handle_post_auth(httpd_req_t* req) {
     return ESP_OK;
 }
 
+// ── Captive portal ──────────────────────────────────────────────
+//
+// Активний лише в режимі SoftAP. Працює у парі з DNS-сервером
+// (captive_dns), який резолвить усі домени на 192.168.4.1, тож OS-проби
+// виявлення captive portal доходять до цих handler-ів.
+//
+// ВАЖЛИВО (best practices, перевірено на iOS/Android/Windows):
+//   • CNA-попап ОС — урізаний браузер без JS/WebSocket, тому портал —
+//     легка статична сторінка з нативною HTML-формою (НЕ повний SPA).
+//   • На портал-сторінці НЕ вживаємо слово "Success" — новіші iOS
+//     трактують його як "інтернет є" і закривають попап.
+
+// Мінімальна портал-сторінка (без JS). AP IP завжди 192.168.4.1.
+static const char PORTAL_HTML[] =
+    "<!DOCTYPE html><html lang=\"uk\"><head><meta charset=\"utf-8\">"
+    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+    "<title>ModESP - Wi-Fi</title><style>"
+    "body{font-family:system-ui,sans-serif;margin:0;background:#0f172a;color:#e2e8f0}"
+    ".c{max-width:420px;margin:0 auto;padding:24px}"
+    "h1{font-size:20px;margin:8px 0 4px}p{color:#94a3b8;font-size:14px;margin:4px 0 16px}"
+    "label{display:block;font-size:13px;margin:12px 0 4px}"
+    "input{width:100%;box-sizing:border-box;padding:11px;border-radius:8px;border:1px solid #334155;"
+    "background:#1e293b;color:#e2e8f0;font-size:16px}"
+    "button{width:100%;margin-top:18px;padding:13px;border:0;border-radius:8px;"
+    "background:#2563eb;color:#fff;font-size:16px;font-weight:600}"
+    "a{display:block;text-align:center;margin-top:16px;color:#60a5fa;font-size:14px}"
+    "</style></head><body><div class=\"c\">"
+    "<h1>ModESP - налаштування Wi-Fi</h1>"
+    "<p>Введіть дані вашої домашньої Wi-Fi мережі, щоб контролер під'єднався до неї.</p>"
+    "<form method=\"POST\" action=\"/api/wifi/portal\">"
+    "<label for=\"s\">Назва мережі (SSID)</label>"
+    "<input id=\"s\" name=\"ssid\" maxlength=\"32\" required autocomplete=\"off\">"
+    "<label for=\"p\">Пароль</label>"
+    "<input id=\"p\" name=\"pass\" type=\"password\" maxlength=\"64\" autocomplete=\"off\">"
+    "<button type=\"submit\">Зберегти та підключитися</button></form>"
+    "<a href=\"http://192.168.4.1/\">Відкрити повний інтерфейс &rarr;</a>"
+    "</div></body></html>";
+
+// Сторінка-підтвердження після збереження (без JS).
+static const char PORTAL_SAVED_HTML[] =
+    "<!DOCTYPE html><html lang=\"uk\"><head><meta charset=\"utf-8\">"
+    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+    "<title>ModESP</title><style>body{font-family:system-ui,sans-serif;background:#0f172a;"
+    "color:#e2e8f0;text-align:center;padding:40px 24px}h1{font-size:20px}"
+    "p{color:#94a3b8}</style></head><body>"
+    "<h1>&#10003; Збережено</h1>"
+    "<p>Контролер підключається до мережі. Точка доступу ModESP зникне за кілька секунд. "
+    "Якщо підключення не вдасться, ModESP знову підійме власну точку доступу.</p>"
+    "</body></html>";
+
+esp_err_t HttpService::redirect_to_portal(httpd_req_t* req) {
+    httpd_resp_set_status(req, "302 Found");
+    httpd_resp_set_hdr(req, "Location", "http://192.168.4.1/portal");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    httpd_resp_send(req, nullptr, 0);
+    return ESP_OK;
+}
+
+esp_err_t HttpService::handle_captive_probe(httpd_req_t* req) {
+    auto* self = static_cast<HttpService*>(req->user_ctx);
+    // Поза AP-режимом проби нас не стосуються — 404, щоб не редіректити
+    // легітимний LAN-трафік у STA mode.
+    if (!self || !self->wifi_ || !self->wifi_->is_ap_mode()) {
+        httpd_resp_send_404(req);
+        return ESP_OK;
+    }
+    return redirect_to_portal(req);
+}
+
+esp_err_t HttpService::handle_captive_404(httpd_req_t* req) {
+    // /wpad.dat, /favicon.ico — явний 404 (інакше Windows спамить WPAD-запитами,
+    // а CNA намагається тягнути favicon).
+    httpd_resp_send_404(req);
+    return ESP_OK;
+}
+
+esp_err_t HttpService::handle_get_portal(httpd_req_t* req) {
+    httpd_resp_set_type(req, "text/html; charset=utf-8");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    httpd_resp_send(req, PORTAL_HTML, HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+}
+
+// URL-decode (in place) for application/x-www-form-urlencoded значень: %XX та '+'.
+static void url_decode(char* s) {
+    char* w = s;
+    for (char* r = s; *r; ++r) {
+        if (*r == '+') {
+            *w++ = ' ';
+        } else if (*r == '%' && r[1] && r[2]) {
+            auto hex = [](char c) -> int {
+                if (c >= '0' && c <= '9') return c - '0';
+                if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+                if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+                return -1;
+            };
+            int hi = hex(r[1]), lo = hex(r[2]);
+            if (hi >= 0 && lo >= 0) {
+                *w++ = static_cast<char>((hi << 4) | lo);
+                r += 2;
+            } else {
+                *w++ = *r;
+            }
+        } else {
+            *w++ = *r;
+        }
+    }
+    *w = '\0';
+}
+
+esp_err_t HttpService::handle_post_wifi_portal(httpd_req_t* req) {
+    // Без auth: у captive-сценарії користувач щойно під'єднався до AP і ще
+    // не має доступу до облікових даних. Доступно лише в AP-режимі.
+    auto* self = static_cast<HttpService*>(req->user_ctx);
+    if (!self || !self->wifi_ || !self->wifi_->is_ap_mode()) {
+        httpd_resp_send_404(req);
+        return ESP_OK;
+    }
+
+    char buf[256];
+    int len = httpd_req_recv(req, buf, sizeof(buf) - 1);
+    if (len <= 0) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Empty body");
+        return ESP_FAIL;
+    }
+    buf[len] = '\0';
+
+    // Парсимо form-urlencoded: ssid=...&pass=...
+    char ssid[33] = {};
+    char pass[65] = {};
+    for (char* tok = strtok(buf, "&"); tok; tok = strtok(nullptr, "&")) {
+        char* eq = strchr(tok, '=');
+        if (!eq) continue;
+        *eq = '\0';
+        char* val = eq + 1;
+        if (strcmp(tok, "ssid") == 0) {
+            url_decode(val);
+            strlcpy(ssid, val, sizeof(ssid));
+        } else if (strcmp(tok, "pass") == 0) {
+            url_decode(val);
+            strlcpy(pass, val, sizeof(pass));
+        }
+    }
+
+    if (ssid[0] == '\0') {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missing ssid");
+        return ESP_FAIL;
+    }
+
+    // Перевикористовуємо наявну логіку (NVS + deferred reconnect у WiFiService).
+    self->wifi_->save_credentials(ssid, pass);
+    self->wifi_->request_reconnect();
+
+    httpd_resp_set_type(req, "text/html; charset=utf-8");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    httpd_resp_send(req, PORTAL_SAVED_HTML, HTTPD_RESP_USE_STRLEN);
+    return ESP_OK;
+}
+
+void HttpService::register_captive_handlers() {
+    // Портал-сторінка + збереження з форми.
+    struct { const char* uri; httpd_method_t method; esp_err_t (*h)(httpd_req_t*); } routes[] = {
+        {"/portal",           HTTP_GET,  handle_get_portal},
+        {"/api/wifi/portal",  HTTP_POST, handle_post_wifi_portal},
+        // OS-проби виявлення → 302 на портал
+        {"/generate_204",                 HTTP_GET, handle_captive_probe}, // Android
+        {"/gen_204",                      HTTP_GET, handle_captive_probe}, // Android (старі)
+        {"/hotspot-detect.html",          HTTP_GET, handle_captive_probe}, // iOS/macOS
+        {"/library/test/success.html",    HTTP_GET, handle_captive_probe}, // iOS (варіант)
+        {"/ncsi.txt",                     HTTP_GET, handle_captive_probe}, // Windows
+        {"/connecttest.txt",              HTTP_GET, handle_captive_probe}, // Windows 10/11
+        {"/redirect",                     HTTP_GET, handle_captive_probe}, // Windows
+        {"/canonical.html",               HTTP_GET, handle_captive_probe}, // Firefox
+        // Шум, який краще явно закрити 404
+        {"/wpad.dat",                     HTTP_GET, handle_captive_404},
+        {"/favicon.ico",                  HTTP_GET, handle_captive_404},
+    };
+    for (auto& r : routes) {
+        httpd_uri_t u = {};
+        u.uri = r.uri; u.method = r.method; u.handler = r.h; u.user_ctx = this;
+        httpd_register_uri_handler(server_, &u);
+    }
+    ESP_LOGI(TAG, "Captive portal handlers registered (%d routes)",
+             (int)(sizeof(routes) / sizeof(routes[0])));
+}
+
 // ── Server setup ────────────────────────────────────────────────
 
 void HttpService::register_api_handlers() {
@@ -1720,7 +1928,7 @@ void HttpService::register_static_handler() {
 bool HttpService::start_server() {
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
-    config.max_uri_handlers = 48;
+    config.max_uri_handlers = 64;  // API + CORS OPTIONS + captive portal + static
     config.max_open_sockets = 4;   // 3 WS + 1 HTTP; lwIP 10 total (1 listener + 4 sess + 1 MQTT = 6)
     config.stack_size = 8192;
 
@@ -1742,6 +1950,7 @@ bool HttpService::start_server() {
     }
 
     register_api_handlers();
+    register_captive_handlers();  // before wildcard static handler
     // NOTE: register_static_handler() must be called from main.cpp
     // AFTER all other handlers (WS, etc.) to avoid wildcard shadowing.
 
