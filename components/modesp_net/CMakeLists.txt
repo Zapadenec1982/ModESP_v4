@@ -3,6 +3,7 @@ idf_component_register(
     SRCS "src/wifi_service.cpp"
          "src/http_service.cpp"
          "src/ws_service.cpp"
+         "src/captive_dns.cpp"
     INCLUDE_DIRS "include"
     REQUIRES modesp_core modesp_services modesp_hal
              esp_wifi esp_netif esp_http_server esp_event nvs_flash app_update espressif__mdns

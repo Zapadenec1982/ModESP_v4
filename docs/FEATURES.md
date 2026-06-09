@@ -135,6 +135,7 @@ WiFi, MQTT, HTTP, and WebSocket — all hardened for industrial environments.
 - **STA watchdog** — restarts WiFi subsystem after 10 minutes of STA disconnect
 - **RSSI reporting** — signal strength published in heartbeat for remote diagnostics
 - **mDNS** — device discoverable as `modesp-{id}.local` on LAN
+- **Captive portal** — active automatically in AP mode: a wildcard DNS server (UDP:53) plus OS-detection redirects (iOS/Android/Windows/Firefox) make phones auto-open the Wi-Fi setup page. The portal is a lightweight no-JS page that works inside the limited captive mini-browser (CNA); a link opens the full SPA in a real browser
 - **Country code** — configurable regulatory domain (default UA, channels 1–13)
 
 ### MQTT

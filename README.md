@@ -144,6 +144,7 @@ Svelte 4 SPA — 80 KB gzipped, served from ESP32 LittleFS.
 ## Connectivity
 
 - **WiFi** — STA + AP fallback, AP→STA periodic probe (30s–5min backoff), mDNS, STA watchdog
+- **Captive Portal** — in AP mode, phones/laptops auto-open the Wi-Fi setup page (DNS hijack + OS detection redirects, no-JS portal that works inside the iOS/Android captive mini-browser)
 - **MQTT** — TLS (port 8883), delta-publish, heartbeat, LWT, tenant-aware topics, Home Assistant Auto-Discovery
 - **HTTP** — 23 REST endpoints: state, settings, bindings, WiFi, OTA, logs, backup/restore
 - **WebSocket** — real-time state broadcast, delta updates, max 3 clients
@@ -337,6 +338,7 @@ This project demonstrates production-grade embedded engineering across the full 
 - 4-language i18n with lazy-loaded language packs (~8 KB each)
 - MQTT over TLS with delta-publish, heartbeat, LWT, and Home Assistant Auto-Discovery
 - WiFi STA + AP with intelligent probe (exponential backoff, heap guard)
+- Captive portal in AP mode — auto-opens the Wi-Fi setup page on iOS/Android/Windows
 
 **Hardware Abstraction**
 - board.json + bindings.json — same firmware binary on different PCBs

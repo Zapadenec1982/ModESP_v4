@@ -7,6 +7,7 @@
  */
 
 #include "modesp/net/wifi_service.h"
+#include "modesp/net/captive_dns.h"
 #include "modesp/services/nvs_helper.h"
 #include "esp_mac.h"
 #include "esp_log.h"
@@ -100,6 +101,9 @@ void WiFiService::handle_ip_event(int32_t event_id, void* event_data) {
 
             // APSTA → чистий STA (вивільнити AP ресурси)
             esp_wifi_set_mode(WIFI_MODE_STA);
+
+            // Captive portal більше не потрібен — AP знято
+            captive_dns_stop();
 
             // Перезапустити mDNS на STA інтерфейсі
             stop_mdns();
@@ -487,6 +491,11 @@ bool WiFiService::start_sta() {
     reconnect_interval_ = 2000;
     reconnect_timer_ = 0;
     reconnect_pending_ = false;
+
+    // Captive portal активний лише в AP mode — зупиняємо при переході в STA
+    // (ідемпотентно: no-op, якщо DNS не був запущений, напр. boot-STA).
+    captive_dns_stop();
+
     state_set("wifi.mode", "sta");
     return true;
 }
@@ -576,6 +585,10 @@ bool WiFiService::start_ap() {
 
     // Запускаємо mDNS в AP mode (клієнти AP можуть використовувати .local)
     start_mdns();
+
+    // Captive portal: DNS hijack (UDP:53) — усі домени резолвляться на 192.168.4.1,
+    // що змушує OS-проби виявлення відкрити портал-сторінку.
+    captive_dns_start();
     return true;
 }
 
