@@ -110,11 +110,12 @@ ModESP_v4/
 │   │   │   ├── driver_manager.h      # Створення/управління драйверами
 │   │   │   └── driver_interfaces.h   # ISensor, IActuator абстракції
 │   │   └── src/
-│   ├── modesp_net/                   # WiFi + HTTP + WebSocket
+│   ├── modesp_net/                   # WiFi + HTTP + WebSocket + Captive Portal
 │   │   ├── include/modesp/net/
 │   │   │   ├── wifi_service.h        # STA + AP fallback
 │   │   │   ├── http_service.h        # REST API (port 80)
-│   │   │   └── ws_service.h          # WebSocket real-time state
+│   │   │   ├── ws_service.h          # WebSocket real-time state
+│   │   │   └── captive_dns.h         # wildcard DNS for captive portal (AP)
 │   │   └── src/
 │   ├── modesp_mqtt/                  # MQTT client (окремий component)
 │   │   ├── include/modesp/net/

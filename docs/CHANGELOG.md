@@ -2,6 +2,24 @@
 
 > Повний changelog проекту.
 
+## 2026-06-09
+
+- **feat(net): captive portal для режиму SoftAP:**
+  - При активному fallback AP (`ModESP-XXYY`, 192.168.4.1) телефон/ноутбук
+    автоматично відкриває сторінку налаштування Wi-Fi — без ручного вводу IP
+  - `captive_dns` (новий): wildcard DNS-сервер на UDP:53 ("DNS hijack") —
+    усі домени резолвляться на IP AP; окрема FreeRTOS-задача, ідемпотентні
+    `captive_dns_start()/stop()`, активний лише в AP-режимі
+  - Lifecycle прив'язано до `ap_mode_` у `WiFiService` (start у `start_ap()`,
+    stop у `start_sta()` та на шляху успіху AP→STA probe)
+  - `HttpService`: легка портал-сторінка `/portal` без JS (працює в урізаному
+    CNA-браузері iOS/Android; без слова "Success", щоб попап не закривався),
+    `POST /api/wifi/portal` (нативна form-форма → `save_credentials` +
+    deferred reconnect), per-OS probe redirect (generate_204, hotspot-detect.html,
+    ncsi.txt, connecttest.txt, canonical.html, …) → 302, wpad.dat/favicon.ico → 404,
+    Host-based catch-all редірект у `handle_static` (пропускає власний IP і `.local`)
+  - `max_uri_handlers` 48 → 64; `main.cpp` без змін (фіча інкапсульована)
+
 ## 2026-03-16
 
 - **feat(i18n): мультимовний інтерфейс (UK/EN/DE/PL):**
