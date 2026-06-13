@@ -7,7 +7,6 @@
   import { buildSegments, tempRange as calcTempRange, computeTimeLabels, computeTempLabels } from '../../lib/chart.js';
 
   export let config;
-  export let value;
 
   let data = null;
   let loading = true;
@@ -326,6 +325,7 @@
   {:else if temp.length === 0}
     <div class="chart-status">{$t['chart.no_data']}</div>
   {:else}
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
     <svg bind:this={svgEl} viewBox="0 0 {W} {H}" class="chart-svg"
          on:mousemove={handleMove} on:touchmove|preventDefault={handleMove}
          on:mouseleave={handleLeave} on:touchend={handleLeave}>

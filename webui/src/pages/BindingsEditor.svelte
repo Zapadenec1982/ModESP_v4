@@ -167,6 +167,7 @@
   <div class="center-msg error">{error}</div>
 {:else}
   {#if needsRestart}
+    <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
     <div class="modal-overlay" on:click|self={() => needsRestart = false}>
       <div class="modal-dialog">
         <div class="modal-icon">✓</div>

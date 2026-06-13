@@ -5,7 +5,6 @@
   import { toastError } from '../../stores/toast.js';
 
   export let config;
-  export let value;
 
   $: isOn = !!$state['defrost.active'];
 

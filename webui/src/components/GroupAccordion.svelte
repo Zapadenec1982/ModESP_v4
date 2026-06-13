@@ -5,7 +5,6 @@
 
   export let title = "";
   export let icon = "";
-  export let iconColor = "";
   export let subtitle = "";
   /** @type {string[]} */
   export let summaryKeys = [];
@@ -59,6 +58,7 @@
 </script>
 
 <div class="group" class:open>
+  <!-- svelte-ignore a11y-no-noninteractive-tabindex -->
   <div
     class="grp-h"
     class:collapsible

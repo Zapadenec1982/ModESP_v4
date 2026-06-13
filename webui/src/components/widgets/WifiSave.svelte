@@ -54,7 +54,9 @@
 </div>
 
 {#if showRestartDialog}
+  <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
   <div class="dialog-overlay" on:click={dismissDialog}>
+    <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
     <div class="dialog" on:click|stopPropagation>
       <div class="dialog-icon">📶</div>
       <div class="dialog-title">{$t['wifi.restart_title'] || 'WiFi збережено'}</div>

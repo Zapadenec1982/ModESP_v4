@@ -1,5 +1,12 @@
 {
     "idf.portWin": "COM9",
     "idf.flashType": "UART",
-    "idf.currentSetup": "C:\\esp\\v5.5.3\\esp-idf"
+    "idf.currentSetup": "C:\\esp\\v5.5.3\\esp-idf",
+
+    "// ESP-IDF projects build via idf.py (Ninja), not Microsoft CMake Tools.": "",
+    "// These stop CMake Tools auto-configuring with the VS generator, which fails": "",
+    "// on the IDF_PATH-relative include() and littlefs_create_partition_image.": "",
+    "cmake.configureOnOpen": false,
+    "cmake.configureOnEdit": false,
+    "cmake.automaticReconfigure": false
 }

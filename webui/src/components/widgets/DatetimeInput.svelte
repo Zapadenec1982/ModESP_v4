@@ -1,6 +1,5 @@
 <script>
   export let config;
-  export let value;
 </script>
 
 <div class="input-widget" data-widget-key={config.key}>

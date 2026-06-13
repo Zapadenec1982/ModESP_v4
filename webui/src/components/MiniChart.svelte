@@ -110,6 +110,7 @@
 
 {#if pts.length > 0}
   <div class="tile-chart">
+    <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
     <svg bind:this={svgEl} viewBox="0 0 {W} {H}" class="mini-chart"
       on:click={handlePointer}
       on:touchstart|preventDefault={handlePointer}

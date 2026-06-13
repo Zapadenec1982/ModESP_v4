@@ -47,9 +47,16 @@
   {/if}
 
   {#if networks.length > 0}
-    <ul class="network-list">
+    <ul class="network-list" role="listbox" aria-label={$t['wifi.networks'] || 'WiFi'}>
       {#each networks as net}
-        <li class="network-item" on:click={() => selectNetwork(net)}>
+        <li
+          class="network-item"
+          role="option"
+          aria-selected="false"
+          tabindex="0"
+          on:click={() => selectNetwork(net)}
+          on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && selectNetwork(net)}
+        >
           <div class="net-info">
             {#if net.auth !== 'open'}<span class="lock">&#128274;</span>{/if}
             <span class="net-ssid">{net.ssid}</span>

@@ -4,9 +4,6 @@
   import { t } from '../../stores/i18n.js';
   import { toastSuccess, toastError, toastWarn } from '../../stores/toast.js';
 
-  export let config;
-  export let value;
-
   let loading = false;
   let enabled = true;
   let username = 'admin';

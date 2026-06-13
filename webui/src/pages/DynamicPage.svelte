@@ -259,7 +259,6 @@
         <GroupAccordion
           title={card.title}
           icon={card.icon || ""}
-          iconColor={card.icon_color || ""}
           subtitle={card.subtitle || ""}
           summaryKeys={card.summary_keys || []}
           collapsible={!isMobile ? false : (card.collapsible || false)}

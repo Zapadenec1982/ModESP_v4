@@ -2,7 +2,6 @@
   import { t } from '../../stores/i18n.js';
 
   export let config;
-  export let value;
 
   const timezones = [
     { label: 'UTC-12', tz: 'UTC12' },
